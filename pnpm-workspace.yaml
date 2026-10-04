@@ -1,0 +1,5 @@
+# pnpm 11 の設定は pnpm-workspace.yaml に記述する（package.json の pnpm フィールドは読まれない）
+# esbuild / unrs-resolver はネイティブバイナリを postinstall で取得するため、ビルドを許可する
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true

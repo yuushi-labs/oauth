@@ -1,0 +1,66 @@
+@import 'tailwindcss';
+
+:root {
+  color-scheme: light;
+
+  --bg: #ffffff;
+  --fg: #111827;
+  --card: #f9fafb;
+  --border: #d1d5db;
+  --primary: #1d4ed8;
+  --muted-fg: #4b5563;
+  --danger: #b91c1c;
+  --success: #15803d;
+  --warning: #b45309;
+  --ring: #2563eb;
+  --disabled-bg: #e5e7eb;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0b0f19;
+  --fg: #e5e7eb;
+  --card: #111827;
+  --border: #374151;
+  --primary: #60a5fa;
+  --muted-fg: #9ca3af;
+  --danger: #f87171;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --ring: #93c5fd;
+  --disabled-bg: #1f2937;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-muted-fg: var(--muted-fg);
+  --color-danger: var(--danger);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-ring: var(--ring);
+  --color-disabled-bg: var(--disabled-bg);
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--fg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
