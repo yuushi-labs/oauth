@@ -1,0 +1,170 @@
+import { and, eq, isNull } from 'drizzle-orm';
+import { getDb, type DbClient } from '@/lib/db/client';
+import { sessions, type NewSession } from '@/lib/db/schema';
+import { newId } from '@/lib/util/id';
+import { randomToken } from '@/lib/util/crypto';
+import { hashIp, maskIp } from '@/lib/util/ip';
+import { getEnv } from '@/lib/env';
+import { createHmac, randomBytes } from 'node:crypto';
+
+export type SessionData = {
+  id: string;
+  userId: string;
+  sessionHash: string;
+  csrfSecret: string;
+  userAgent: string;
+  ip: string;
+  ipMasked: string | null;
+  deviceName: string;
+  reauthVerifiedAt: string | null;
+};
+
+const SESSION_MAX_AGE = 30 * 24 * 60 * 60; // 30日
+const SESSION_ABSOLUTE_MAX_AGE = 90 * 24 * 60 * 60; // 90日
+const LAST_SEEN_THRESHOLD = 15 * 60 * 1000; // 15分
+
+function getClientIp(headers: Headers): string {
+  const forwarded = headers.get('x-forwarded-for');
+  if (forwarded) {
+    const parts = forwarded.split(',');
+    const first = parts[0];
+    if (first) return first.trim();
+  }
+  return headers.get('x-real-ip') ?? '0.0.0.0';
+}
+
+function getUserAgent(headers: Headers): string {
+  return headers.get('user-agent') ?? '';
+}
+
+async function createSessionInternal(
+  userId: string,
+  request: { headers: Headers },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+): Promise<{ token: string; session: SessionData }> {
+  const token = `sess_${randomToken(32)}`;
+  const env = getEnv();
+  const sessionHash = createHmac('sha256', env.SESSION_PEPPER).update(token).digest('hex');
+  const csrfSecret = randomBytes(32).toString('base64url');
+  const ip = getClientIp(request.headers);
+  const ipMasked = maskIp(ip);
+  const ipHash = hashIp(ip, env.IP_HASH_PEPPER);
+  const userAgent = getUserAgent(request.headers);
+  const deviceName = 'Unknown device';
+
+  const id = newId('ses');
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + SESSION_MAX_AGE * 1000);
+  const absoluteExpiresAt = new Date(now.getTime() + SESSION_ABSOLUTE_MAX_AGE * 1000);
+
+  const data: NewSession = {
+    id,
+    userId,
+    sessionHash,
+    csrfSecret,
+    userAgent,
+    ipHash,
+    ipMasked,
+    deviceName,
+    expiresAt,
+    absoluteExpiresAt,
+    lastSeenAt: now,
+    totpPending: false,
+  };
+  await db.insert(sessions).values(data);
+
+  return {
+    token,
+    session: {
+      id,
+      userId,
+      sessionHash,
+      csrfSecret,
+      userAgent,
+      ip,
+      ipMasked,
+      deviceName,
+      reauthVerifiedAt: null,
+    },
+  };
+}
+
+export async function createSession(
+  userId: string,
+  request: { headers: Headers },
+): Promise<{ token: string; session: SessionData }> {
+  const db = getDb();
+  return createSessionInternal(userId, request, db);
+}
+
+export async function getSession(token: string): Promise<SessionData | null> {
+  const env = getEnv();
+  const sessionHash = createHmac('sha256', env.SESSION_PEPPER).update(token).digest('hex');
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(sessions)
+    .where(eq(sessions.sessionHash, sessionHash))
+    .limit(1);
+  if (!row) return null;
+  if (row.revokedAt) return null;
+  if (row.expiresAt.getTime() <= Date.now()) return null;
+  if (row.absoluteExpiresAt.getTime() <= Date.now()) return null;
+
+  const now = Date.now();
+  if (now - row.lastSeenAt.getTime() > LAST_SEEN_THRESHOLD) {
+    await db.update(sessions).set({ lastSeenAt: new Date() }).where(eq(sessions.id, row.id));
+  }
+
+  return {
+    id: row.id,
+    userId: row.userId,
+    sessionHash: row.sessionHash,
+    csrfSecret: row.csrfSecret,
+    userAgent: row.userAgent,
+    ip: '',
+    ipMasked: row.ipMasked ?? '',
+    deviceName: row.deviceName ?? 'Unknown device',
+    reauthVerifiedAt: row.reauthVerifiedAt ? row.reauthVerifiedAt.toISOString() : null,
+  };
+}
+
+export async function rotateSession(
+  oldToken: string,
+  request: { headers: Headers },
+): Promise<{ token: string; session: SessionData } | null> {
+  const oldSession = await getSession(oldToken);
+  if (!oldSession) return null;
+
+  const db = getDb();
+  return db.transaction(async (tx) => {
+    const { token, session: newSession } = await createSessionInternal(oldSession.userId, request, tx);
+    await tx
+      .update(sessions)
+      .set({ revokedAt: new Date(), revokeReason: 'rotation', replacedBy: newSession.id })
+      .where(eq(sessions.id, oldSession.id));
+    return { token, session: newSession };
+  });
+}
+
+export async function revokeSession(id: string, reason: string, replacedBy?: string): Promise<void> {
+  const db = getDb();
+  await db
+    .update(sessions)
+    .set({ revokedAt: new Date(), revokeReason: reason, replacedBy })
+    .where(eq(sessions.id, id));
+}
+
+export async function revokeAllSessions(userId: string, reason: string): Promise<void> {
+  const db = getDb();
+  await db
+    .update(sessions)
+    .set({ revokedAt: new Date(), revokeReason: reason })
+    .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
+}
+
+export async function setReauthVerified(id: string): Promise<void> {
+  const db = getDb();
+  await db.update(sessions).set({ reauthVerifiedAt: new Date() }).where(eq(sessions.id, id));
+}

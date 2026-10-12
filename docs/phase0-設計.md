@@ -1,6 +1,6 @@
-# Phase 0 設計ドキュメント（プロジェクト土台）
+# Phase 0 設計ドキュメント（プロジェクト土台） v1.2
 
-> 本ドキュメントは**実装より先に**作成したものです。対象工程は `実装計画.md` v1.1 の 15章「Phase 0 — プロジェクト土台」および `実装Todo.md` の P0-01〜P0-11 に対応します。
+> 本ドキュメントは**実装より先に**作成したものです。対象工程は `実装計画.md` v1.4 の 15章「Phase 0 — プロジェクト土台」および `実装Todo.md` の P0-01〜P0-11 に対応します。
 > 作成日: 2026-10-04 / 状態: 実装済み
 
 ---
@@ -89,8 +89,8 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm db:migrate && pnpm dev  が全�
 | `.env.example` | 変数定義 | 計画17.1 に準拠。**実値は入れない** |
 | `compose.yaml` | ローカル DB | `postgres:16-alpine`、`localhost:5432`、healthcheck 付き |
 | `drizzle.config.ts` | migration | `dialect: postgresql`、`schema: src/lib/db/schema.ts`、`out: drizzle` |
-| `vitest.config.ts` | テスト | `include: src/test/**/*.test.ts`、`environment: node`、`@` alias |
-| `README.md` | ドキュメント | Phase 0 実装後に作成（§11 参照） |
+| `vitest.config.mts` | テスト | `include: src/test/**/*.test.ts`、`environment: node`、`@` alias |
+| `README.md` | ドキュメント | Phase 0 実装後に作成 |
 
 ### 3.2 `src/`
 
@@ -265,7 +265,7 @@ Phase 0 では**形式のみ**を定義する（長さ・文字種・型）。
 - `username`: 3〜32文字、使用可能文字に制限を置く。大文字小文字の一意判定は DB の partial unique index に委譲（アプリ層のチェックは参考用途）
 - `password`: **8〜128文字**（C-02）。ASCII 限定しない・スペース許可。**NGワード判定・HIBP 漏洩チェック・Argon2 は Phase 1-A で追加する**
 
-決定の理由: C-02 は「最低8文字」を上限128・文字種無制限という形で固定する。8文字より短いテストは Phase 1-A の `password.test.ts`（7文字拒否）で行う。
+決定の理由: C-02 は「**8〜128文字**」を上限128文字・文字種無制限という形で固定する。8文字より短いテストは Phase 1-A の `password.test.ts`（7文字拒否・129文字拒否）で行う。
 
 ---
 
@@ -288,17 +288,20 @@ Phase 0 では**形式のみ**を定義する（長さ・文字種・型）。
 | `src/test/security/` | 仕様48章の攻撃シナリオ | Phase 1 以降 |
 | `src/test/e2e/` | Playwright | Phase 8-B |
 
-**配置は `src/test/**` に統一する。** 計画6章のディレクトリ構成が `src/test/**`、chapters 10/16 が `test/security/...` と記述しており表記が揺れているため、6章（ディレクトリ構成）を正とした。この不一致を D-18 として記録する。
+**配置は `src/test/**` に統一する。** 計画6章のディレクトリ構成が `src/test/**`、chapters 10/16 が `test/security/...` と記述しており表記が揺れていたため、6章（ディレクトリ構成）を正とした。この不一致を D-18 として記録する。
+**適用結果**: `実装計画.md` v1.4 / `実装Todo.md` のテストパス表記はすべて `src/test/**` に統一済み（`実装計画.md` 10章・15章・16章、`実装Todo.md` 全章）。新規記述でも `test/**` は使わない。
 
-Phase 0 のテスト対象:
+Phase 0 のテスト対象（`src/test/unit/` 配下に **9ファイル**作成）:
 
-- `id.test.ts` — prefix が付く／ULID 21文字／不正 prefix で throw／一意性
-- `crypto.test.ts` — 乱数の長さ/base64url/hash の.hex 64文字/HMAC の一致と不一致/定数時間比較
+- `id.test.ts` — prefix が付く／**ULID 26文字**／不正 prefix で throw／一意性
+- `crypto.test.ts` — 乱数の長さ/base64url/hash の hex 64文字/HMAC の一致と不一致/定数時間比較
 - `ip.test.ts` — IPv4 マスクが `203.0.113.xxx`／IPv6 の扱い／`::1` と IPv4 の別挙動/hash の安定性
 - `time.test.ts` — UTC で保存される形式
 - `logger.test.ts` — secret キーが `***` になる／`token=` が伏せられる／通常キーは残る
-- `validate.test.ts` — 7文字拒否 / 8文字OK / 128+文字OK / Unicode・スペース許可 / email・username の境界
+- `validate.test.ts` — 7文字拒否 / 8文字OK / **128文字OK・129文字NG** / Unicode・スペース許可 / email・username の境界
 - `errors.test.ts` — 成功/エラー形状、code Enum、詳細を漏らさない
+- `env.test.ts` — 必須欠落・長さ不足で fail fast／任意値の既定値／遅延評価
+- `schema.test.ts` — partial unique index・CHECK 制約・role_id に DB default が無いこと
 
 ---
 
@@ -376,13 +379,14 @@ docker compose exec -T db psql -U app -d app -c "SELECT conname, pg_get_constrai
 
 | ID | 内容 | 理由 |
 |---|---|---|
-| D-18 | テスト配置を `src/test/**` に統一（計画10/16章の `test/**` は表記揺れ。6章を正とした） | ディレクトリ構成との整合 |
+| D-18 | テスト配置を `src/test/**` に統一（6章を正とした。`実装計画.md` v1.4 / `実装Todo.md` の表記も本決定へ追随済み） | ディレクトリ構成との整合 |
 | D-19 | `scripts/seed.ts` を Phase 0 に置く（`roles` の4行を upsert） | `users.role_id` の FK 整合。役割付与・判定は Phase 7 |
 | D-20 | `zod` を v3 に固定 | v4 で `z.string().email()` が非推奨となり記述が揺れるため |
 | D-21 | `env.ts` を必須／任意／遅延評価の3区分にする | Phase 0 で Resend / OAuth の実キー無しに `pnpm dev` を起動できるようにするため |
-| D-22 | ID は `prefix_` + ULID（**26文字**）。計画8.1章の「21文字」は誤記で、実装は `ulid()` の出力に合わせる | `ulid()` の実出力と一致させる |
+| D-22 | ID は `prefix_` + ULID（**26文字**）。計画8.1章の旧「21文字」表記は誤記（`実装計画.md` v1.4 で 26文字へ修正済み） | `ulid()` の実出力と一致させる |
 | D-23 | `users` に `users_status_chk`（status の値域 CHECK）を追加 | §23 の4値以外が混入しないようにするため。計画の CHECK 例には無いが Phase 0 の防御として追加 |
 | D-24 | マイグレーション 01 の生成に `roles` のみの一時 schema を `--schema` で渡す | `roles` と `users` を計画どおり別 migration に分けるため（FK 順） |
+| D-25 | トークンテーブルの `id` prefix は `tok_`（`evt_` は `security_events` 専用）。Phase 1-B で `util/id.ts` の `ID_PREFIXES` に追加する | Phase 0 の 4 prefix と衝突させず、ID の取り違えを防ぐ（計画 8.2） |
 
 ---
 
@@ -392,3 +396,4 @@ docker compose exec -T db psql -U app -d app -c "SELECT conname, pg_get_constrai
 |---|---|---|
 | v1.0 | 2026-10-04 | 初版作成。Phase 0 の実装方針（ファイル構成・DB設計・マイグレーション戦略・env 戦略・検証手順・リスク）を確定 |
 | v1.1 | 2026-10-04 | 実装着手時の差分を反映（`next-env.d.ts` の扱い、`role_id` の既定はアプリ層、`@theme inline` の採用、ULID は26文字、`users_status_chk` 追加、migration 01/02 の生成方法、検証結果の記録） |
+| v1.2 | 2026-10-04 | 他ドキュメントとの整合修正（**実装変更なし**）。`vitest.config.ts` → `vitest.config.mts`、ULID の 21/26 表記揺れを解消、Phase 0 のテスト対象を実際の 9ファイル（`env` / `schema` を含む）に更新、`README.md` の参照先を修正、`実装計画.md` の版数参照を追随、D-25（トークン `id` の `tok_` prefix）を追記、D-18/D-22 の適用結果を現状に更新 |

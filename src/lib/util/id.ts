@@ -1,6 +1,6 @@
 import { ulid } from 'ulid';
 
-export const ID_PREFIXES = ['usr', 'ses', 'acc', 'evt'] as const;
+export const ID_PREFIXES = ['usr', 'ses', 'acc', 'evt', 'tok'] as const;
 export type IdPrefix = (typeof ID_PREFIXES)[number];
 
 const ULID_LENGTH = 26;

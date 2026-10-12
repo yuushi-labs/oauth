@@ -15,6 +15,34 @@
       "when": 1791103640008,
       "tag": "0001_02_users",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791103708000,
+      "tag": "0002_04_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791103708001,
+      "tag": "0003_05_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791103709000,
+      "tag": "0004_08_security_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791103709001,
+      "tag": "0005_10_rate_limit",
+      "breakpoints": true
     }
   ]
 }

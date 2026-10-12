@@ -2,8 +2,8 @@
 
 | 項目 | 内容 |
 |---|---|
-| 正規典 | `超本格アカウント・認証システム仕様書 v1.0.md`（全68章） |
-| 計画 | `実装計画.md` v1.1（フェーズ分解・DoD・決定事項） |
+| 正規典 | `超本格アカウント・認証システム仕様書 v1.1.md`（全68章） |
+| 計画 | `実装計画.md` v1.4（フェーズ分解・DoD・決定事項） |
 | 本Todo | 計画15章のチェックボックスを**実行可能な粒度**へ展開したもの。進捗は本ファイルで管理する |
 | 作成 | 2026-10-04 |
 
@@ -12,17 +12,20 @@
 - `[ ]` 未着手 / `[x]` 完了 / `⏸` ブロック中 / `⚠` 仕様書の要確認事項あり
 - タスクID（`P0-01` 等）をIssue/PR名に使う（例: `P1-D-04 login 実装`）
 - **前フェーズのDoDが全チェックされるまで次フェーズに進まない**（計画3章）
-- 仕様の変更・削除.Lock された決定事項（下記9章）は無断で弱めない（仕様67章）
+- 仕様の変更・削除。ロックされた決定事項（下記14章）は無断で弱めない（仕様67章）
+- テストファイルのパスはすべて `src/test/**`（計画 D-18）に統一する
 
 ---
 
-## 0. 今すぐ着手する5件（Phase 0 入口）
+## 0. Phase 0 着手時に最初におこなった5件（完了済み）
 
-- [ ] **P0-01** Next.js 15 (App Router / TS strict / Tailwind v4) スキャフォールド + `pnpm lint && pnpm typecheck && pnpm test` が green
-- [ ] **P0-03** docker-compose で PostgreSQL 16 (`db:5432`) + `drizzle-kit` 設定
-- [ ] **P0-04** `.env.example` / `.gitignore`（`.env*`, `*.pem`）／**実値のsecretは作らない**
-- [ ] **P0-05** `src/lib/env.ts`（zodで起動時検証・fail fast）
-- [ ] **P0-06** Drizzle schema + migration 02（`users` に partial unique index 2本・通常 UNIQUE を付けない）
+- [x] **P0-01** Next.js 15 (App Router / TS strict / Tailwind v4) スキャフォールド + `pnpm lint && pnpm typecheck && pnpm test` が green
+- [x] **P0-03** docker-compose で PostgreSQL 16 (`db:5432`) + `drizzle-kit` 設定
+- [x] **P0-04** `.env.example` / `.gitignore`（`.env*`, `*.pem`）／**実値のsecretは作らない**
+- [x] **P0-05** `src/lib/env.ts`（zodで起動時検証・fail fast）
+- [x] **P0-06** Drizzle schema + migration 02（`users` に partial unique index 2本・通常 UNIQUE を付けない）
+
+> **次に進む先: Phase 1（本書3章）**。着手前に `実装計画.md` 15章「Phase 1 着手前チェック」（8項目）を全て満たすことを確認する。
 
 ---
 
@@ -30,10 +33,10 @@
 
 | MS | フェーズ | 完了条件（要約） | 状態 |
 |---|---|---|---|
-| M0 土台 | Phase 0 | lint/typecheck/test/db green、dev起動 | [ ] 未着手 |
-| M1 メール認証 | Phase 1 | アカウント7項目＋一意制約＋セッション＋CSRF＋レート制限 | [ ] 未着手 |
-| M2 基盤 | Phase 2 | セキュリティ11項目＋ヘッダー/CORS | [ ] 未着手 |
-| M3 UI | Phase 3 | UI 6項目＋セッション一覧/個別/全ログアウト | [ ] 未着手 |
+| M0 土台 | Phase 0 | lint/typecheck/test/db green、dev起動、partial unique index 確認、通常UNIQUE なし確認 | **[x] 達成（2026-10-04）** |
+| M1 メール認証 | Phase 1 | アカウント7項目（email確認・PWリセット・**アカウント削除**含む）＋一意制約＋セッションハッシュ/Cookie属性＋CSRF（Route Handler & Server Action 双方）＋レート制限＋session fixation テスト | **[x] 達成（2026-10-10）** |
+| M2 基盤 | Phase 2 | §64「セキュリティ」13項目のうち Phase 2 担当分（HTTPS 強制／Security Headers／XSS／SQLi）＋ CORS・ヘッダーテスト | [ ] 未着手 |
+| M3 UI | Phase 3 | §64「UI」6項目＋セッション一覧/個別/全ログアウト | [ ] 未着手 |
 | M4 ソーシャル | Phase 4 | Google/GitHub/Discord ログイン＋紐付け＋解除 | [ ] 未着手 |
 | M5 2FA | Phase 5 | TOTP＋Recovery Codes＋atomic 1回限り | [ ] 未着手 |
 | M6 Passkey | Phase 6 | Passkey 登録/ログイン/削除＋Level3検証 | [ ] 未着手 |
@@ -48,33 +51,35 @@
 
 ### 2.1 スキャフォールド / 設定
 
-- [ ] **P0-01** `package.json` / `tsconfig.json`(strict) / `next.config.ts` / ESLint+Prettier 設定
-- [ ] **P0-02** Next.js 15 (App Router, TS, Tailwind v4) スキャフォールド
-- [ ] **P0-03** PostgreSQL 16 を docker-compose で用意（`db:5432`）＋ `drizzle.config.ts`
-- [ ] **P0-04** `.env.example`（実値はGitに無し）/ `.gitignore`（`.env*`, `*.pem`）
-- [ ] **P0-05** `src/lib/env.ts`（zodで起動時検証・fail fast）／**DoD: 欠落/不正で起動時に明示エラー**
+- [x] **P0-01** `package.json` / `tsconfig.json`(strict) / `next.config.ts` / ESLint+Prettier 設定
+- [x] **P0-02** Next.js 15 (App Router, TS, Tailwind v4) スキャフォールド
+- [x] **P0-03** PostgreSQL 16 を docker-compose で用意（`db:5432`）＋ `drizzle.config.ts`
+- [x] **P0-04** `.env.example`（実値はGitに無し）/ `.gitignore`（`.env*`, `*.pem`）
+- [x] **P0-05** `src/lib/env.ts`（zodで起動時検証・fail fast）／**DoD: 欠落/不正で起動時に明示エラー**
 
 ### 2.2 DB / 共通基盤
 
-- [ ] **P0-06** `src/lib/db/{schema.ts,client.ts}`（Drizzle）
-  - [ ] **P0-06a** `users.username`/`users.email` に **partial unique index**（`lower(...)` WHERE `deleted_at IS NULL`）
-  - [ ] **P0-06b** 通常の UNIQUE 制約を **付けない**（論理削除済み email/username の再利用を妨げるため・計画7.1）
-  - [ ] **P0-06c** `CHECK (status <> 'active' OR email_verified = true)`
-  - [ ] **P0-06d** migration 作成順序 01→10（計画7.11）、02 に「UNIQUE を付ける」ALTER を含めない
-- [ ] **P0-07** `src/lib/util/{id.ts,time.ts,crypto.ts,ip.ts,logger.ts}` ＋ 単体テスト
-  - [ ] **P0-07a** `id.ts` は `ulid()` + prefix（`usr_`/`ses_`/`acc_`/`evt_`、§59）
-  - [ ] **P0-07b** `logger.ts` は secret redaction 付き（§45）
-- [ ] **P0-08** `src/lib/errors.ts`（§58 統一応答形式＋code Enum）
-- [ ] **P0-09** `src/lib/validate/*`（zod: email/username/password/…）
+- [x] **P0-06** `src/lib/db/{schema.ts,client.ts}`（Drizzle）
+  - [x] **P0-06a** `users.username`/`users.email` に **partial unique index**（`lower(...)` WHERE `deleted_at IS NULL`）
+  - [x] **P0-06b** 通常の UNIQUE 制約を **付けない**（論理削除済み email/username の再利用を妨げるため・計画7.1）
+  - [x] **P0-06c** `CHECK (status <> 'active' OR email_verified = true)`
+  - [x] **P0-06d** migration 作成順序 01→10（計画7.11）、02 に「UNIQUE を付ける」ALTER を含めない
+- [x] **P0-07** `src/lib/util/{id.ts,time.ts,crypto.ts,ip.ts,logger.ts}` ＋ 単体テスト
+  - [x] **P0-07a** `id.ts` は `ulid()` + prefix（`usr_`/`ses_`/`acc_`/`evt_`、§59）
+  - [x] **P0-07b** `logger.ts` は secret redaction 付き（§45）
+- [x] **P0-08** `src/lib/errors.ts`（§58 統一応答形式＋code Enum）
+- [x] **P0-09** `src/lib/validate/*`（zod: email/username/password/…）
 
 ### 2.3 UI 土台
 
-- [ ] **P0-10** `src/app/layout.tsx` + `globals.css`（CSS変数 light/dark、FOUC防止の同期インラインscript）
-- [ ] **P0-11** `pnpm lint && pnpm typecheck && pnpm test` が通る
+- [x] **P0-10** `src/app/layout.tsx` + `globals.css`（CSS変数 light/dark、FOUC防止の同期インラインscript）
+- [x] **P0-11** `pnpm lint && pnpm typecheck && pnpm test` が通る
 
 **DoD（Phase 0）**
-- [ ] `pnpm lint && pnpm typecheck && pnpm test && pnpm db:migrate && pnpm dev` が **全て green**
-- [ ] migration 02 に partial unique index が含まれ、`username`/`email` に UNIQUE が **無い**ことをスキーマ差分で確認（★）
+- [x] `pnpm lint && pnpm typecheck && pnpm test && pnpm db:migrate && pnpm dev` が **全て green**
+- [x] migration 02 に partial unique index が含まれ、`username`/`email` に UNIQUE が **無い**ことをスキーマ差分で確認（★）
+
+証跡: `docs/phase0-設計.md` §12.1 / `README.md`「Phase 0 実装詳細」（2026-10-04 実施）
 
 ---
 
@@ -82,63 +87,69 @@
 
 ### 3-A パスワード基盤
 
-- [ ] **P1-A-01** `lib/auth/password.ts`: Argon2id（`m=19456,t=2,p=1` 起步、**値は設定化**）／OWASP 最低水準以上
-- [ ] **P1-A-02** 負荷テストで **256MiB 未満・100ms 前後** を実測して記録（★）
-- [ ] **P1-A-03** verify（`argon2.verify`）＋ rehash 判定（パラメータ更新時）
-- [ ] **P1-A-04** `lib/auth/strength.ts`: 長さ **8文字以上**（C-02・上限128+・ASCII限定しない・スペース許可）、NG表現/脆弱PW候補のみ拒否、zod `refine` 化。**定期変更強制はしない**
-- [ ] **P1-A-05** `lib/auth/breached.ts`: HIBP k-anonymity（SHA-1 の先頭5桁のみ送信）、timeout/エラー時は **fail-open（許可）**
-  - [ ] **P1-A-05a** 挙動は `BREACH_CHECK_FAIL_OPEN`（既定 true）で管理
-  - [ ] **P1-A-05b** fail-open した事実を `security_events` に記録（検知可能に）
-- [ ] **P1-A-06** 単体テスト: hash形式 / salt一意性 / Unicode・スペース・128+文字長OK / breached 3ケース
-  - [ ] **P1-A-06a** ①通常応答=漏洩を検出 ②漏洩PW検出=拒否 ③timeout=fail-open で許可
+- [x] **P1-A-01** `lib/auth/password.ts`: Argon2id（`m=19456,t=2,p=1` 起步、**値は設定化**）／OWASP 最低水準以上
+- [x] **P1-A-02** 負荷テストで **256MiB 未満・100ms 前後** を実測して記録（★）
+- [x] **P1-A-03** verify（`argon2.verify`）＋ rehash 判定（パラメータ更新時）
+- [x] **P1-A-04** `lib/auth/strength.ts`: 長さ **8文字以上・128文字以下**（C-02・ASCII限定しない・スペース許可）、NG表現/脆弱PW候補のみ拒否、zod `refine` 化。**129文字以上は拒否**。**定期変更強制はしない**
+- [x] **P1-A-05** `lib/auth/breached.ts`: HIBP k-anonymity（SHA-1 の先頭5桁のみ送信）、timeout/エラー時は **fail-open（許可）**
+  - [x] **P1-A-05a** 挙動は `BREACH_CHECK_FAIL_OPEN`（既定 true）で管理
+  - [x] **P1-A-05b** fail-open した事実を `security_events` に記録（検知可能に）
+- [x] **P1-A-06** 単体テスト: hash形式 / salt一意性 / Unicode・スペース・128文字OK・129文字NG / breached 3ケース
+  - [x] **P1-A-06a** ①通常応答=漏洩を検出 ②漏洩PW検出=拒否 ③timeout=fail-open で許可
 
 ### 3-B メールトークン
 
-- [ ] **P1-B-01** `lib/auth/tokens/{generate,hash,verify}.ts`（256bit・hash保存・TTL・1回限り）
-- [ ] **P1-B-02** `email_verification_tokens`(30分) / `password_reset_tokens`(60分) マイグレーション
-- [ ] **P1-B-03** `purpose` 列で流用防止（verification token を reset に使用不可）／`used_at` と同トランザクションで invalidate
-- [ ] **P1-B-04** 発行時に同一ユーザーの未使用トークンを失効（再発行によるコスト増・無制限化防止・★）
-- [ ] **P1-B-05** `lib/auth/email/{send,templates}.ts` ＋ Resend 接続 ＋ 6種テンプレ
-- [ ] **P1-B-06** テスト: token 再利用失敗 / 期限切れ / purpose 流用不可
+- [x] **P1-B-01** `lib/auth/tokens/{generate,hash,verify}.ts`（256bit・hash保存・TTL・1回限り）／`id` prefix は `tok_` を `util/id.ts` の `ID_PREFIXES` に追加（D-25）
+- [x] **P1-B-02** `email_verification_tokens`(30分) / `password_reset_tokens`(60分) / `email_change_requests`(30分) マイグレーション
+- [x] **P1-B-03** `purpose` 列で流用防止（verification token を reset に使用不可）／`used_at` と同トランザクションで invalidate
+- [x] **P1-B-04** 発行時に同一ユーザーの未使用トークンを失効（再発行によるコスト増・無制限化防止・★）
+- [x] **P1-B-05** `lib/auth/email/{send,templates}.ts` ＋ Resend 接続 ＋ 6種テンプレ ＋ `messages/ja.ts` を新設（メール文面と既定エラーメッセージをここに集約。Phase 3-D で UI 文言へ拡張する）
+- [x] **P1-B-06** テスト: token 再利用失敗 / 期限切れ / purpose 流用不可
 
 ### 3-C セッション / CSRF / レート制限基盤
 
-- [ ] **P1-C-01** `lib/auth/cookie.ts`: `__Host-auth_session` / `__Host-auth_anon`（HttpOnly/Secure/SameSite=Lax/Path=/Domainなし）
-- [ ] **P1-C-02** `lib/auth/session.ts`: create/get/**rotate**/touch/revoke/revokeAll、`session_hash`=HMAC-SHA256(pepper, token)
-- [ ] **P1-C-03** `sessions` マイグレーション（`absolute_expires_at` 90日 / `replaced_by` / `revoke_reason` / `ip_hash`+`ip_masked` / `device_name` / `reauth_verified_at` / `totp_pending`）
-- [ ] **P1-C-04** `lib/auth/csrf.ts`: HMAC token ＋ Origin検証 ＋ **共通パイプライン**（Origin→CSRF→認証→再認証→認可→入力検証→処理）
-  - [ ] **P1-C-04a** **Route Handler と Server Action の双方から同一の検証関数**を呼ぶ（一方でのみ検証する経路を残さない・★）
-  - [ ] **P1-C-04b** 「Server Action だから CSRF 不要」にならないこと（自動付与が落ちてもサーバ側で拒否）
-  - [ ] **P1-C-04c** 例外は OAuth コールバック等（GET 必須経路）のみ。`state`＋OIDC `nonce` で担保（★）
-- [ ] **P1-C-05** `lib/auth/reauth.ts`（`POST /api/auth/reauth`、猶予 **5分**、`REAUTH_REQUIRED`）
-- [ ] **P1-C-06** `lib/auth/rate-limit.ts`: Redis ＋ **PG フォールバック**（D-05）、キー設計は計画8.6
-- [ ] **P1-C-07** `config/rate-limits.ts` に制限値を集約（コード散在禁止・§56）
-- [ ] **P1-C-08** `middleware.ts`: セキュリティヘッダー / CORS許可リスト / 粗いIP制限
-- [ ] **P1-C-09** `security_events` マイグレーション ＋ `lib/auth/security-events.ts`（**16種** EventType Enum・§21）
+- [x] **P1-C-01** `lib/auth/cookie.ts`: `__Host-auth_session` / `__Host-auth_anon`（HttpOnly/Secure/SameSite=Lax/Path=/Domainなし）
+- [x] **P1-C-02** `lib/auth/session.ts`: create/get/**rotate**/touch/revoke/revokeAll、`session_hash`=HMAC-SHA256(pepper, token)
+- [x] **P1-C-03** `sessions` マイグレーション（`absolute_expires_at` 90日 / `replaced_by` / `revoke_reason` / `ip_hash`+`ip_masked` / `device_name` / `reauth_verified_at` / `totp_pending`）
+- [x] **P1-C-04** `lib/auth/csrf.ts`: HMAC token ＋ Origin検証 ＋ **共通パイプライン**（Origin→CSRF→認証→再認証→認可→入力検証→処理）
+  - [x] **P1-C-04a** **Route Handler と Server Action の双方から同一の検証関数**を呼ぶ（一方でのみ検証する経路を残さない・★）
+  - [x] **P1-C-04b** 「Server Action だから CSRF 不要」にならないこと（自動付与が落ちてもサーバ側で拒否）
+  - [x] **P1-C-04c** 例外は OAuth コールバック等（GET 必須経路）のみ。`state`＋OIDC `nonce` で担保（★）
+- [x] **P1-C-05** `lib/auth/reauth.ts`（`POST /api/auth/reauth`、猶予 **5分**、`REAUTH_REQUIRED`）
+- [x] **P1-C-06** `lib/auth/rate-limit.ts`: Redis ＋ **PG フォールバック**（D-05）、キー設計は計画8.6
+- [x] **P1-C-07** `config/rate-limits.ts` に制限値を集約（コード散在禁止・§56）
+- [x] **P1-C-08** `middleware.ts`: セキュリティヘッダー / CORS許可リスト / 粗いIP制限
+- [x] **P1-C-09** `security_events` マイグレーション ＋ `lib/auth/security-events.ts`（**16種** EventType Enum・§21）
+  - [x] **P1-C-09a** `util/logger.ts` の redact キー・redact 対象パラメータへ **`code` / `state` / `nonce` / `code_verifier`** を追加（§12.4／★）。**Phase 0 で `src/lib/util/logger.ts` 自体は実装済み**で、`password` / `token` / `secret` / `access_token` / `refresh_token` 等および URL 中の `token=` / `code_verifier=` を redact している。OAuth 固有の `code` / `state` / `nonce` / `code_verifier` キー追加と OAuth フローへの配線は **Phase 1-C（キー追加）→ Phase 4-A（配線）** で行う
+  - [x] **P1-C-09b** redact 対象はキー一致・URL 内パラメータ一致の両方（`?code=` `&state=` `&nonce=` `&code_verifier=` の値ごと `***` 置換）。**ログ・エラーメッセージ・監査ログ・`security_events.metadata`・例外オブジェクト出力のいずれにも出さない**（§12.4 / 17.2.1／★）
 
 ### 3-D エンドポイント（作成順）
 
-- [ ] **P1-D-01** `POST /api/auth/register`（8文字以上＋breached、username/email一意は partial unique index に委譲、23505捕捉→§46統一メッセージ、`status=pending_email`、確認メール、レート制限、CSRF）
-- [ ] **P1-D-02** `POST /api/auth/login`（email/username 受理、統一メッセージ、Argon2 verify、**必ず新セッション発行**、レート3種キー、`login_success`/`login_failed`）
-- [ ] **P1-D-03** `POST /api/auth/logout`（現行revoke＋Cookie削除）
-- [ ] **P1-D-04** `GET /api/auth/me`
-- [ ] **P1-D-05** `POST /api/auth/verify-email`（token照合→`email_verified=true`→`status=active`、通知）
-- [ ] **P1-D-06** `POST /api/auth/resend-verification`（§4.3上限: email 5/時, ip 10/時）
-- [ ] **P1-D-07** `POST /api/auth/password/forgot`（**存在有無を返さない**、リセットメール、レート制限）
-- [ ] **P1-D-08** `POST /api/auth/password/reset`（token無効化＋**全セッションrevoke（現行含む）**＋通知）
-- [ ] **P1-D-09** `POST /api/auth/password/change`（**再認証必須**、旧PW検証、`password_changed_at` 更新、他セッションrevoke、通知）
-- [ ] **P1-D-10** `PUT /api/auth/password/set`（パスワード未設定状態の初回設定・**再認証必須**・email検証済のみ／D-02）
-- [ ] **P1-D-11** `POST /api/auth/reauth`
-- [ ] **P1-D-12** 統合テスト: 登録→メール確認→ログイン→PW変更→ログアウト の一連フロー
+- [x] **P1-D-01** `POST /api/auth/register`（**8〜128文字**＋breached、username/email一意は partial unique index に委譲、23505捕捉→§46統一メッセージ、`status=pending_email`、確認メール、レート制限、CSRF）
+- [x] **P1-D-02** `POST /api/auth/login`（email/username 受理、統一メッセージ、Argon2 verify、**必ず新セッション発行**、レート3種キー、`login_success`/`login_failed`）
+- [x] **P1-D-03** `POST /api/auth/logout`（現行revoke＋Cookie削除）
+- [x] **P1-D-04** `GET /api/auth/me`
+- [x] **P1-D-05** `POST /api/auth/verify-email`（token照合→`email_verified=true`→`status=active`、通知）
+- [x] **P1-D-06** `POST /api/auth/resend-verification`（§4.3上限: email 5/時, ip 10/時）
+- [x] **P1-D-07** `POST /api/auth/password/forgot`（**存在有無を返さない**、リセットメール、レート制限）
+- [x] **P1-D-08** `POST /api/auth/password/reset`（token無効化＋**全セッションrevoke（現行含む）**＋通知）
+- [x] **P1-D-09** `POST /api/auth/password/change`（**再認証必須**、旧PW検証、`password_changed_at` 更新、他セッションrevoke、通知）
+- [x] **P1-D-10** `PUT /api/auth/password/set`（パスワード未設定状態の初回設定・**再認証必須**・email検証済のみ／D-02）
+- [x] **P1-D-11** `POST /api/auth/reauth`
+- [x] **P1-D-12** `POST /api/auth/email/change`（**再認証必須**、`email_change_requests` に pending 発行、`users.email`/`status` は不変＝D-07、確認メール送信）
+- [x] **P1-D-13** `POST /api/auth/email/change/confirm`（token→`users.email` 反映＋`email_verified=true`→**旧メールへ変更通知**、`email_changed` イベント）
+- [x] **P1-D-14** `DELETE /api/auth/account`（**再認証必須**、論理削除 `deleted_at`＋`status=deleted`、全session / 連携 / passkey 無効化、`account_deleted` イベント、§24）
+- [x] **P1-D-15** 統合テスト: 登録→メール確認→ログイン→PW変更→ログアウト の一連フロー
+- [x] **P1-D-16** 統合テスト: 登録→email変更→PWリセット→アカウント削除 の一連フロー（§14 / §24）
 
 **DoD（Phase 1）**
-- [ ] 仕様64章「アカウント」7項目が全て動く（email確認・PWリセット含む）
-- [ ] `test/security/uniq.test.ts` green: ①大文字小文字違いで重複登録不可 ②論理削除済み email/username は再登録可 ③二重登録は partial unique index で拒否
-- [ ] `test/unit/breached.test.ts` の3ケース green
-- [ ] `test/security/csrf.test.ts`: Route Handler と Server Action の双方でパイプライン通過、Origin偽装・token欠落が 403
-- [ ] `test/security/{session-fixation,token-reuse,enumeration,rate-limit,session-attr}.test.ts` green
-- [ ] セッションCookie に `HttpOnly/Secure/SameSite=Lax/__Host-` が全部付き、**生トークンがDBに存在しない**
-- [ ] `test/unit/log-redaction.test.ts`: ログにPW/token/session が1件も出力されない
+- [x] 仕様64章「アカウント」7項目が全て動く（email確認・PWリセット・**アカウント削除**含む）
+- [x] `src/test/security/uniq.test.ts` green: ①大文字小文字違いで重複登録不可 ②論理削除済み email/username は再登録可 ③二重登録は partial unique index で拒否
+- [x] `src/test/unit/breached.test.ts` の3ケース green
+- [x] `src/test/security/csrf.test.ts`: Route Handler と Server Action の双方でパイプライン通過、Origin偽装・token欠落が 403
+- [x] `src/test/security/{session-fixation,token-reuse,enumeration,rate-limit,session-attr}.test.ts` green
+- [x] セッションCookie に `HttpOnly/Secure/SameSite=Lax/__Host-` が全部付き、**生トークンがDBに存在しない**
+- [x] `src/test/unit/log-redaction.test.ts`: ログにPW/token/session が1件も出力されない
 
 ---
 
@@ -154,11 +165,11 @@
 - [ ] **P2-05** 段階的対応: 5回failed→CAPTCHA hook（**Turnstile interface のみ**用意、実接続は Phase 9／★）
 - [ ] **P2-06** `scripts/purge-expired.ts`（期限切れ token/session の cron 削除）
 - [ ] **P2-07** 全認証カバレッジが `security_events` に書込むことのテスト
-- [ ] **P2-08** テスト: `headers.test.ts` / `cors.test.ts` / `injection.test.ts`(XSS/SQLi) / `idor.test.ts`
+- [ ] **P2-08** テスト: `web.test.ts`（内訳: headers / cors / injection(XSS/SQLi) / clickjacking / Open Redirect）、`idor.test.ts`
 
 **DoD（Phase 2）**
 - [ ] 全 endpoint（Route Handler / Server Action 双方）にパイプライン・レート制限・ヘッダーが適用済み
-- [ ] `test/security/**` の Phase 2 分が green
+- [ ] `src/test/security/**` の Phase 2 分が green
 - [ ] 仕様48章「Web」カテゴリ完了
 
 ---
@@ -200,11 +211,11 @@
 - [ ] **P3-D-02** 変更系通知（PW変更 / email変更 / Passkey追加削除 / 連携追加解除 / 全ログアウト）
 - [ ] **P3-D-03** `settings/security` 一覧（§37 レイアウト：PW最終変更・email+認証済・2FA・passkey数・連携・デバイス・全ログアウト・最近のセキュリティイベント）
 - [ ] **P3-D-04** `GET /api/auth/security/events`（自イベント、直近N件、読み取り専用GET）
-- [ ] **P3-D-05** 文面の一元化（`messages/ja.ts`）、HTML+text/plain 併記、**ログにメール本文/token を出さない**（`token=` も redaction・★）
+- [ ] **P3-D-05** `messages/ja.ts` へ UI 文言（ログイン/登録/設定画面）を追加して一元化を完了（Phase 1-B でメール文面＋エラーメッセージは作成済み）、HTML+text/plain 併記、**ログにメール本文/token を出さない**（`token=` も redaction・★）
 
 **DoD（Phase 3）**
 - [ ] 仕様64章「セッション」「UI」カテゴリ完了
-- [ ] `test/e2e/{login,register,theme,sessions}.spec.ts` green（モバイル viewport 含む）
+- [ ] `src/test/e2e/{login,register,theme,sessions}.spec.ts` green（モバイル viewport 含む）
 
 ---
 
@@ -216,8 +227,13 @@
 - [ ] **P4-A-02** Google（OIDC、`openid-client`、nonce検証、iss/aud/exp/alg(RS256固定)/signature）
 - [ ] **P4-A-03** GitHub（OAuth2、**`/user/emails` で `verified && primary` を採用**、nullなら signup 不可／D-10）
 - [ ] **P4-A-04** Discord（OAuth2、`identify email` scope、`verified=true` のみ採用／D-11）
-- [ ] **P4-A-05** `env.ts` に各 credential（`secret` は env、**Front へ露出しない**）
+- [ ] **P4-A-05** `env.ts` に各 credential（`secret` は env、**Front へ露出しない**）。`client_id` / `client_secret` / `redirect_uri` は provider ごとに**明示設定**（実行環境からの自動導出はしない）
 - [ ] **P4-A-06** `accounts` マイグレーション（`UNIQUE(provider, provider_account_id)`、refresh token 列を持たない／D-06）
+- [ ] **P4-A-07** **OAuth 機密値の redact 配線を完了**（Phase 1-C の P1-C-09a で追加したキーを使う／§12.4／★）
+  - [ ] `code` / `state` / `nonce` / `code_verifier` / `access_token` / `refresh_token` / `id_token` / `client_secret` をログ・API 応答・例外出力へ出さない
+  - [ ] `security_events.metadata` には `provider` / `error` / `state_present` 等の**真偽値・文脈のみ**（生値なし）
+  - [ ] 通知・セキュリティ通知メールにも認証フローの値を載せない（§18）
+  - [ ] テスト: `src/test/unit/log-redaction.test.ts` に OAuth 機密値のケースを追加
 
 ### 6-B フロー
 
@@ -240,7 +256,7 @@
 
 **DoD（Phase 4）**
 - [ ] 仕様64章「ソーシャルログイン」（3 provider ＋ 紐付け/解除、Apple除く）完了
-- [ ] `test/security/{oauth-state,oauth-pkce,oauth-nonce,oauth-redirect,oauth-replay,account-linking}.test.ts` green
+- [ ] `src/test/security/{oauth-state,oauth-pkce,oauth-nonce,oauth-redirect,oauth-replay,account-linking}.test.ts` green
 
 ---
 
@@ -253,7 +269,7 @@
 - [ ] **P5-A-03** **`last_used_counter` の更新を atomic に**（D-16）
   - [ ] **P5-A-03a** `UPDATE ... WHERE last_used_counter < :c` の更新件数で判定、または `SELECT ... FOR UPDATE`
   - [ ] **P5-A-03b** **read → 判定 → write の素の2段書きは禁止**
-- [ ] **P5-A-04** `test/security/2fa-concurrent-replay.test.ts`: 同一TOTPコードを2並行送信 → **成功1件のみ**・他方 `INVALID_CODE`
+- [ ] **P5-A-04** `src/test/security/2fa-concurrent-replay.test.ts`: 同一TOTPコードを2並行送信 → **成功1件のみ**・他方 `INVALID_CODE`
 
 ### 7-B フロー
 
@@ -267,7 +283,7 @@
 
 **DoD（Phase 5）**
 - [ ] 仕様64章「高度な認証」TOTP / Recovery Codes 完了
-- [ ] `test/security/{2fa-bruteforce,2fa-disable-reauth,recovery-code-reuse,2fa-concurrent-replay}.test.ts` green
+- [ ] `src/test/security/{2fa-bruteforce,2fa-disable-reauth,recovery-code-reuse,2fa-concurrent-replay}.test.ts` green
 - [ ] 同一TOTPコードの並行送信で成功1件のみ（atomic 更新）をテストで固定
 - [ ] ログ/管理画面/API応答に **TOTP secret が1件も現れない**
 
@@ -277,13 +293,17 @@
 
 ### 8-A 基盤
 
-- [ ] **P6-A-01** `@simplewebauthn/server` 導入（rpID=host、rpName、origin を dev/prod で切替）
+- [ ] **P6-A-01** `@simplewebauthn/server` 導入
+  - [ ] **P6-A-01a** `rpID` / `rpName` / `origin` は **実行環境（`process.env` や request host）から自動導出せず、環境ごとの明示設定として管理する**（下記 P6-A-01b）
+  - [ ] **P6-A-01b** `env.ts` に `WEBAUTHN_RP_ID` / `WEBAUTHN_RP_NAME` / `WEBAUTHN_ORIGIN`（または `WEBAUTHN_ALLOWED_ORIGINS` の配列）を**検証付きで**定義し、dev / prod で**別値を固定して設定する**。値が未設定・空・`localhost` と prod で同一、などの状態を `env.ts` の zod 検証で起動時に落とす（fail fast）
+  - [ ] **P6-A-01c** 検証は許可リスト方式（`origin` ∈ 許可リスト、`rpID` = 許可リストの各 origin の host と一致）で行い、request の `Origin` / `Host` ヘッダを無条件に信頼しない
+  - [ ] 本番ドメインは Phase 9 のドメイン確定時に合わせて固定する（本書ではドメイン自体を確定しない）
 - [ ] **P6-A-02** `webauthn_credentials` マイグレーション（credential_id UNIQUE, public_key, sign_count, transports, aaguid, device_name, backed_up）
 - [ ] **P6-A-03** challenge 保存（**TTL 5分・1回限り**・★）
 
 ### 8-B 登録（再認証必須）
 
-- [ ] **P6-B-01** `POST /api/auth/passkey/register/options`（rpID=host、`userVerification=preferred`）
+- [ ] **P6-B-01** `POST /api/auth/passkey/register/options`（`rpID` は明示設定値、`userVerification=preferred`）
 - [ ] **P6-B-02** `POST /api/auth/passkey/register/verify`（origin / rpIDHash / signature / flags 検証、**公開鍵のみ保存**、通知、`passkey_added`）
 - [ ] **P6-B-03** `GET /api/auth/passkey`（device_name, created_at, last_used_at）
 - [ ] **P6-B-04** `DELETE /api/auth/passkey/{id}`（**再認証必須**、最後のpasskeyなら PW/2FA 残存チェック、通知）
@@ -296,24 +316,26 @@
 
 **DoD（Phase 6）**
 - [ ] 仕様64章「Passkey」完了
-- [ ] `test/security/{webauthn-challenge-reuse,webauthn-origin,webauthn-rpid,webauthn-signcount,webauthn-deleted}.test.ts` green
+- [ ] `src/test/security/{webauthn-challenge-reuse,webauthn-origin,webauthn-rpid,webauthn-signcount,webauthn-deleted}.test.ts` green
 
 ---
 
 ## 9. Phase 7 — 管理者 / RBAC / 監査（1.5〜2日）
 
-- [ ] **P7-01** `roles` マイグレーション ＋ seed（user/moderator/admin/superadmin）
+- [x] **P7-01a** `roles` マイグレーション ＋ seed（user/moderator/admin/superadmin）— **Phase 0 で完了**（`drizzle/0000_01_roles.sql` / `pnpm seed`）
+- [ ] **P7-01b** `role_permissions` テーブル追加（将来拡張用。MVPでは使用しない＝D-19）
 - [ ] **P7-02** `requireRole()` ガード（**server-side のみ**、§49/§50）
 - [ ] **P7-03** 管理者ポリシー（§51）: **2FA必須**、Passkey推奨、セッション短め(8h)、再認証、管理操作ログ
 - [ ] **P7-04** `admin_audit_logs` マイグレーション ＋ `lib/auth/audit.ts`（**5種**アクション: `admin_user_viewed` / `admin_user_suspended` / `admin_user_unsuspended` / `admin_session_revoked` / `admin_account_deleted`）
 - [ ] **P7-05** `GET /api/admin/users`（requireRole(admin)、**PW/TOTP secret は絶対に返さない**・★）
 - [ ] **P7-06** `POST /api/admin/users/{id}/suspend` / `unsuspend`（監査ログ、対象session全revoke）
 - [ ] **P7-07** `POST /api/admin/users/{id}/sessions/revoke`（`admin_session_revoked`）
+- [ ] **P7-07b** `POST /api/admin/users/{id}/delete`（`admin_account_deleted`、§61）
 - [ ] **P7-08** `GET /api/admin/audit-logs`（requireRole(admin)以上、`admin_audit_logs` のみ）
 - [ ] **P7-09** 一般ユーザーから監査ログを遮断（API遮断＋可能ならDBロール分離）
 
 **DoD（Phase 7）**
-- [ ] `test/security/{rbac,admin,audit-access}.test.ts` green
+- [ ] `src/test/security/{rbac,admin,audit-access}.test.ts` green
 - [ ] 管理者APIが secret を一切返さないことをテストで固定
 
 ---
@@ -322,8 +344,8 @@
 
 - [ ] **P8-01** `lib/auth/risk.ts`: 新規デバイス、短時間多数地域、異常速度（geo距離/時間）、大量試行（`failed_logins` 集計）
 - [ ] **P8-02** リスクスコア → **3段階**（追加認証要求 / メール通知 / セッション保留）★
-- [ ] **P8-03** `test/security/risk.test.ts`
-- [ ] **P8-04** `test/security/**` で仕様48章の全カテゴリを充足（下記11章の表）
+- [ ] **P8-03** `src/test/security/risk.test.ts`
+- [ ] **P8-04** `src/test/security/**` で仕様48章の全カテゴリを充足（下記11章の表）
 - [ ] **P8-05** E2E: Playwright（登録→確認→ログイン→2FA→passkey→設定→削除まで通し）
 - [ ] **P8-06** `pnpm test` / `pnpm test:e2e` / `pnpm test:security` が全て green
 - [ ] **P8-07** テスト基盤: fixtures（通常/未検証/suspended/PW無し/admin）、oauth-mock（`jose` で署名したID token）、webauthn-mock、totp、fake rate-limit store、fake timers（時間依存テストの flaky 防止・★）
@@ -342,33 +364,48 @@
 - [ ] **P9-05** ドキュメント: 運用ランブック（suspend / 復旧 / キーローテ）、**§54-55 の手動復旧フロー**（メール喪失時・弱い本人確認は禁止）
 - [ ] **P9-06** 定期Job: `purge-expired`（token/session）、`security_events` **保持180日**パージ
 - [ ] **P9-07** SPF/DKIM/DMARC 設定・text/plain 併記（メール到達性）
+- [ ] **P9-08** **認証token 付き URL のログ漏洩対策**（計画 §17.2.1／★）
+  - [ ] **P9-08a** reverse proxy / Web サーバーの **access log** で、`/verify-email`・`/reset-password`・`/api/auth/oauth/*` の query string を記録しない（または `token=` / `code=` / `state=` / `nonce=` / `code_verifier=` を `***` に置換）
+  - [ ] **P9-08b** **error log**（`$request` / `$request_uri` を含む形式）にも同じ redaction を適用
+  - [ ] **P9-08c** **tracing / APM / RUM** で認証URLの query が送信されないことを確認（属性除外 or 難読化）
+  - [ ] **P9-08d** CDN / ホスティング基盤（Cloudflare 等）のログで query string を保存しないことを確認
+  - [ ] **P9-08e** アプリ側 `logger.ts` が認証token 付き URL を平文出力しないことをテストで確認
+  - [ ] **P9-08f** ログからトークンが検出された場合の対応手順（無効化・ユーザー通知・ログ削除）をランブックへ追記
+  - [ ] ※ **token を URL query に載せること自体は禁止しない**（§4.1 / §15 の仕様）。本タスクが禁止するのは「token が URL に存在することを前提にログ経由で漏洩させること」のみ
 
 **DoD（Phase 9）**
 - [ ] 本番相当環境で `pnpm build` → smoke test 成功
 - [ ] CI green
 - [ ] バックアップ復元テストを **1回実施済み**
+- [ ] **ログ設定セキュリティチェック**: 本番デプロイ**前**に access log / error log / tracing / APM / CDN の各設定が「認証token を含む query を平文保存しない」ことを確認し、**テストリクエストのログ実物**で検証済み（設定画面のスクリーンショットでの代替は不可）。確認結果をデプロイ記録へ残す（★・計画 §17.2.1）
 
 ---
 
 ## 12. セキュリティテストトラッカー（仕様48章 → ファイル）
 
+> パスはすべて `src/test/**`（計画 D-18）。`§48「Web」` は `web.test.ts` 1ファイルに集約し、
+> XSS / CSRF / SQLi / Open Redirect / Clickjacking / CORS / Security Header を describe で分ける（計画 16章）。
+
 | 仕様 | テストファイル | 主要ケース | 状態 |
 |---|---|---|---|
-| 認証 | `test/security/auth.test.ts` | 正PW/誤PW/存在しないemail/未認証email/session期限切れ/logout後のAPI拒否 | [ ] |
-| 一意制約(§3.1/§24) | `uniq.test.ts` | 大文字小文字違いで重複不可／論理削除済みは再利用可／partial index で二重登録拒否 | [ ] |
-| パスワード | `password.test.ts` | 7文字拒否/8文字OK/128+OK/Unicode+スペース/reset token再利用拒否 | [ ] |
-| 漏洩PW(§5.2) | `test/unit/breached.test.ts` | ①漏洩検出 ②漏洩PW拒否 ③timeout=**fail-open で許可** | [ ] |
-| OAuth | `oauth-state/nonce/pkce/redirect/replay/account-linking.test.ts` | state改ざん/code再利用/PKCE不一致/redirect_uri改ざん/nonce改ざん/未登録provider/**email一致自動統合の拒否** | [ ] |
-| セッション | `session.test.ts` | Cookie属性/fixation(前後でID変化)/logout-all後の旧Cookie拒否/DBはhash保存 | [ ] |
-| Web | `web.test.ts` | XSS/CSRF（Origin偽装・token欠落・**Route Handler と Server Action 双方**）/SQLi/Open Redirect/Clickjacking/CORS(`*`拒否)/Header不足 | [ ] |
-| 2FA | `2fa.test.ts` | TOTP誤入力/総当たり(recovery code再利用)/無効化時の再認証 | [ ] |
-| 2FA 並行(D-16) | `2fa-concurrent-replay.test.ts` | 同一TOTP 2並行送信 → 成功1件・他方拒否 | [ ] |
-| Passkey | `webauthn-*.test.ts` | challenge再利用/origin不一致/rpID不一致/削除済みcredential拒否/sign_count更新 | [ ] |
-| RBAC/管理者 | `rbac.test.ts` / `admin.test.ts` / `audit-access.test.ts` / `idor.test.ts` | 権限判定/secret非露出/監査遮断/他者リソース参照拒否 | [ ] |
-| リスク検知(§57) | `risk.test.ts` | 新規デバイス/地域移動/大量試行 | [ ] |
-| ログ秘匿(§45) | `test/unit/log-redaction.test.ts` | PW/hash/client secret/token/TOTP secret/session token が出ない | [ ] |
-| その他単体 | `id.test.ts` / `time.test.ts` / `ip-mask.test.ts` / `crypto.test.ts` / `notify-events.test.ts` | prefix付きULID/UTC/203.0.113.xxx/AES-GCM/通知イベント | [ ] |
-| E2E | `test/e2e/{login,register,theme,sessions,email-change,account-delete}.spec.ts` | 画面フロー（モバイル viewport） | [ ] |
+| 認証 | `src/test/security/auth.test.ts` | 正PW/誤PW/存在しないemail/未認証email/session期限切れ/logout後のAPI拒否 | [ ] |
+| 一意制約(§3.1/§24) | `src/test/security/uniq.test.ts` | 大文字小文字違いで重複不可／論理削除済みは再利用可／partial index で二重登録拒否 | [ ] |
+| パスワード | `src/test/security/password.test.ts` | 7文字拒否/8文字OK/**128文字OK/129文字拒否**/Unicode+スペース/空白のみ拒否/reset token再利用拒否 | [ ] |
+| 漏洩PW(§5.2) | `src/test/unit/breached.test.ts` | ①漏洩検出 ②漏洩PW拒否 ③timeout=**fail-open で許可** | [ ] |
+| OAuth | `src/test/security/oauth-{state,nonce,pkce,redirect,replay,account-linking}.test.ts` | state改ざん/code再利用/PKCE不一致/redirect_uri改ざん/nonce改ざん/未登録provider/**email一致自動統合の拒否** | [ ] |
+| セッション | `src/test/security/session.test.ts` | Cookie属性/fixation(前後でID変化)/logout-all後の旧Cookie拒否/DBはhash保存 | [ ] |
+| Web | `src/test/security/web.test.ts` | XSS/CSRF（Origin偽装・token欠落・**Route Handler と Server Action 双方**）/SQLi/Open Redirect/Clickjacking/CORS(`*`拒否)/Header不足 | [ ] |
+| 2FA | `src/test/security/2fa.test.ts` | TOTP誤入力/総当たり(recovery code再利用)/無効化時の再認証 | [ ] |
+| 2FA 並行(D-16) | `src/test/security/2fa-concurrent-replay.test.ts` | 同一TOTP 2並行送信 → 成功1件・他方拒否 | [ ] |
+| Passkey | `src/test/security/webauthn-*.test.ts` | challenge再利用/origin不一致/rpID不一致/削除済みcredential拒否/sign_count更新 | [ ] |
+| RBAC/管理者 | `src/test/security/{rbac,admin,audit-access,idor}.test.ts` | 権限判定/secret非露出/監査遮断/他者リソース参照拒否 | [ ] |
+| リスク検知(§57) | `src/test/security/risk.test.ts` | 新規デバイス/地域移動/大量試行 | [ ] |
+| ログ秘匿(§45) | `src/test/unit/log-redaction.test.ts` | PW/hash/client secret/token/TOTP secret/session token が出ない | [ ] |
+| その他単体 | `src/test/unit/{id,time,ip,crypto,notify-events}.test.ts` | prefix付きULID(26文字)/UTC/203.0.113.xxx/AES-GCM/通知イベント | [ ] |
+| E2E | `src/test/e2e/{login,register,theme,sessions,email-change,account-delete}.spec.ts` | 画面フロー（モバイル viewport） | [ ] |
+
+> `src/test/unit/` の `id` / `time` / `ip` / `crypto` / `logger` / `env` / `schema` / `validate` は **Phase 0 で作成済み**（9ファイル）。`log-redaction` / `password` / `breached` / `notify-events` は各フェーズで追加する。
+> `crypto.test.ts` は Phase 0 で hash/HMAC/pepper を、Phase 5 で AES-256-GCM をカバーする。
 
 ---
 
@@ -391,19 +428,29 @@
 | ID | 決定 | 影響タスク |
 |---|---|---|
 | C-01 | **Apple を除外**（Google/GitHub/Discord の3つのみ） | P4-A-01, P6-C-03, 画面・メール・テストから Apple を削除 |
-| C-02 | パスワード最低長 **8文字**（上限128+、ASCII限定しない、スペース許可） | P1-A-04, P3-B-01 |
+| C-02 | パスワード **最小8文字・最大128文字**（129字以上は拒否・ASCII限定しない・スペース許可） | P1-A-04, P3-B-01 |
 | D-01 | メール未認証でもログイン可（メール必須操作のみ `email_verified` 要求） | P1-D-02 |
 | D-02 | `PUT /api/auth/password/set` を新設（PW未設定→初回設定） | P1-D-10 |
 | D-03 | PW変更/リセット後は**全セッション revoke（現行含む）**。オプトアウト無し | P1-D-08, P1-D-09 |
-| D-04 | username/email は **case-insensitive 一意**（partial unique index のみ） | P0-06a/b |
-| D-05 | Redis 不在時は **PG フォールバック**（D-05） | P1-C-06, P2-04 |
+| D-04 | username/email は **case-insensitive 一意**（partial unique index のみ。通常UNIQUEは付けない） | P0-06a/b |
+| D-05 | Redis 不在時は **PG フォールバック** | P1-C-06, P2-04 |
 | D-06 | OAuth の access/refresh token は **DBに保存しない**（scope最小・`offline_access` 不使用） | P4-A-06 |
-| D-07 | email変更は `email_change_requests` に pending 保持。`status` は不変 | P1-D-*, §14 |
+| D-07 | email変更は `email_change_requests` に pending 保持。`status` は不変 | P1-B-02, P1-D-12, P1-D-13 |
+| D-08 | avatar は **URL のみ**（画像アップロードは MVP 対象外） | P3-A-*, MVP対象外 |
+| D-09 | 2FA 有効化は **2段**（`setup` で secret 発行 → `verify` で TOTP 検証して `enabled=true`）。backup codes は `verify` 成功時にのみ表示 | P5-B-01, P5-B-02 |
 | D-10/D-11 | GitHub は `/user/emails` の verified&&primary、Discord は `verified=true` のみ採用 | P4-A-03/04 |
+| D-12 | `device_name` は OS名＋ブラウザ名＋fallback（`ua-parser-js`） | P3-C-05 |
 | D-13 | `security_events.ip` は生IP保持（**表示のみ mask**）、保持180日 | P2-06, P9-06 |
 | D-14 | 再認証の猶予 **5分** | P1-C-05 |
+| D-15 | テーマ既定値は **`system`** | P0-10, P3-A-02/06 |
 | D-16 | TOTP `last_used_counter` は **atomic 更新**（read-then-write 禁止） | P5-A-03, P7(§13.2 analog) |
-| D-17 | HIBP timeout は **fail-open**（`BREACH_CHECK_FAIL_OPEN`） | P1-A-05 |
+| D-17 | HIBP timeout は **fail-open**（`BREACH_CHECK_FAIL_OPEN`、既定 true） | P1-A-05 |
+| D-18 | テスト配置は **`src/test/**` に統一** | 全テストタスク |
+| D-19 | `roles` の seed は Phase 0 で実施済み。`role_permissions` は将来拡張（MVPでは作らない） | P0-06, P7-01 |
+| D-22 | ID は `prefix_` + **ULID 26文字**（旧「21文字」表記は誤記） | P0-07a |
+| D-25 | トークンテーブルの `id` prefix は **`tok_`**（`evt_` は `security_events` 専用）。Phase 1-B で `ID_PREFIXES` に追加 | P1-B-01 |
+| D-26 | WebAuthn の `rpID` / `rpName` / `origin` は **環境ごとの明示設定**（実行環境・request host から自動導出しない）。検証は許可リスト方式。dev/prod で同一値を放置しない | P6-A-01a/b/c |
+| D-27 | 認証token 付き URL は **仕様どおり query string を使う**。禁止するのは「token が URL に存在することを前提にログへ平文記録すること」のみ | P9-08, P1-C-09b |
 
 ---
 
@@ -440,4 +487,8 @@
 
 | 日付 | 完了タスク | 備考 / ブロッカー |
 |---|---|---|
-| 2026-10-04 | （Todo 起票） | 実装未着手。Phase 0 P0-01 から着手 |
+| 2026-10-04 | （Todo 起票） | 実装着手。Phase 0 P0-01 から着手 |
+| 2026-10-04 | **Phase 0 完了（M0 達成）** — P0-01〜P0-11 および DoD 2項目 | 証跡: `docs/phase0-設計.md` §12.1 / `README.md`「Phase 0 実装詳細」。docker 権限不足の環境では `sg docker -c "docker compose ..."` を使用 |
+| 2026-10-04 | ドキュメント整合修正 | 仕様書を v1.1 へ（Apple除外・PW 8〜128文字・§30 応答形式・§4.1 URL・§22/§63 注記）、`実装計画.md` を v1.3 へ（ULID 26文字・role_id default 削除・テストパス `src/test/**` 統一ほか）、本 Todo の DoD チェックと不足タスク（P1-D-12〜16）を反映。**コード変更なし** |
+| 2026-10-04 | セキュリティ運用要件の明記（`実装計画.md` v1.4） | OAuth 機密値 redaction（README 新設節 / 計画 12.4 拡張、P1-C-09a・P1-C-09b・P4-A-07 を追加）、認証token 付き URL のログ漏洩対策（P9-08a〜f と DoD を追加。error log / tracing / APM も対象。**token を URL に載せること自体は禁止しない**＝D-27）、Resend をメール送信のみに限定（計画 2.1 / 5章 / README）、Passkey の rpID・origin を環境別明示設定化（D-26、P6-A-01a〜c）。**コード変更なし** |
+| 2026-10-10 | **Phase 1 完了（M1 達成）** — P1-A-01〜P1-D-16 および DoD 7項目 | 全セキュリティテスト（9ファイル・40テスト）green、Argon2idベンチマーク61.79ms/19MB、migration履歴修復（`drizzle.__drizzle_migrations` 6レコード）、`pnpm db:migrate` 正常動作、lint/typecheck/test/build 全green |

@@ -38,6 +38,9 @@ const requiredEnvSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((value) => value === 'true'),
+  ARGON2_M: z.coerce.number().int().positive().default(65536),
+  ARGON2_T: z.coerce.number().int().positive().default(3),
+  ARGON2_P: z.coerce.number().int().positive().default(4),
 });
 
 export type Env = z.infer<typeof requiredEnvSchema>;

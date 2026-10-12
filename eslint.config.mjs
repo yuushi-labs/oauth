@@ -28,6 +28,12 @@ const eslintConfig = [
       'security/detect-object-injection': 'warn',
     },
   },
+  {
+    files: ['src/test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/ban-ts-comment': 'off',
+    },
+  },
 ];
 
 export default eslintConfig;

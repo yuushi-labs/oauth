@@ -28,10 +28,14 @@ const SENSITIVE_KEYS = new Set([
   'iphashpepper',
   'encryptionkey',
   'privatekey',
+  'code',
+  'state',
+  'nonce',
+  'codeverifier',
 ]);
 
 const SENSITIVE_TEXT_PATTERNS: RegExp[] = [
-  /(token|code_verifier|password|secret|pepper|api_key|apikey)=([^&\s"'`<>]+)/gi,
+  /(token|code_verifier|code|state|nonce|password|secret|pepper|api_key|apikey)=([^&\s"'`<>]+)/gi,
 ];
 
 export function isSensitiveKey(key: string): boolean {

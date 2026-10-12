@@ -1,5 +1,15 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 
 export const USER_STATUSES = ['pending_email', 'active', 'suspended', 'deleted'] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
@@ -64,7 +74,178 @@ export const users = pgTable(
   ],
 );
 
+/** セッション無効化理由（§7.4） */
+export const REVOKE_REASONS = [
+  'logout',
+  'logout_all',
+  'password_change',
+  'password_reset',
+  'admin',
+  'account_delete',
+] as const;
+export type RevokeReason = (typeof REVOKE_REASONS)[number];
+
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    sessionHash: text('session_hash').notNull(),
+    csrfSecret: text('csrf_secret').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    absoluteExpiresAt: timestamp('absolute_expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    replacedBy: text('replaced_by'),
+    revokeReason: text('revoke_reason'),
+    ipHash: text('ip_hash'),
+    ipMasked: text('ip_masked'),
+    userAgent: text('user_agent').notNull(),
+    deviceName: text('device_name'),
+    ipCountry: text('ip_country'),
+    reauthVerifiedAt: timestamp('reauth_verified_at', { withTimezone: true }),
+    totpPending: boolean('totp_pending').notNull().default(false),
+    passkeyPending: text('passkey_pending'),
+  },
+  (table) => [
+    uniqueIndex('sessions_session_hash_uniq').on(table.sessionHash),
+    index('sessions_user_id_idx').on(table.userId),
+    index('sessions_expires_at_idx').on(table.expiresAt),
+    index('sessions_revoked_at_idx').on(table.revokedAt),
+  ],
+);
+
+export const TOKEN_PURPOSES = [
+  'email_verification',
+  'password_reset',
+  'email_change',
+] as const;
+export type TokenPurpose = (typeof TOKEN_PURPOSES)[number];
+
+export const emailVerificationTokens = pgTable(
+  'email_verification_tokens',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    purpose: text('purpose').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('email_verification_tokens_user_id_idx').on(table.userId),
+    index('email_verification_tokens_expires_at_idx').on(table.expiresAt),
+  ],
+);
+
+export const passwordResetTokens = pgTable(
+  'password_reset_tokens',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    purpose: text('purpose').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('password_reset_tokens_user_id_idx').on(table.userId),
+    index('password_reset_tokens_expires_at_idx').on(table.expiresAt),
+  ],
+);
+
+export const emailChangeRequests = pgTable(
+  'email_change_requests',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    purpose: text('purpose').notNull(),
+    newEmail: text('new_email').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    oldEmailNotifiedAt: timestamp('old_email_notified_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('email_change_requests_user_id_idx').on(table.userId),
+    index('email_change_requests_expires_at_idx').on(table.expiresAt),
+  ],
+);
+
+export const SECURITY_EVENT_TYPES = [
+  'register',
+  'login_success',
+  'login_failed',
+  'logout',
+  'password_changed',
+  'password_reset',
+  'email_changed',
+  'email_verified',
+  '2fa_enabled',
+  '2fa_disabled',
+  'passkey_added',
+  'passkey_removed',
+  'oauth_linked',
+  'oauth_unlinked',
+  'session_revoked',
+  'account_deleted',
+  'breach_check_fail_open',
+] as const;
+export type SecurityEventType = (typeof SECURITY_EVENT_TYPES)[number];
+
+export const securityEvents = pgTable(
+  'security_events',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    eventType: text('event_type').notNull(),
+    ip: text('ip'),
+    ipMasked: text('ip_masked'),
+    userAgent: text('user_agent'),
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('security_events_event_type_created_at_idx').on(table.eventType, table.createdAt),
+    index('security_events_user_id_created_at_idx').on(table.userId, table.createdAt),
+  ],
+);
+
+export const rateLimitHits = pgTable(
+  'rate_limit_hits',
+  {
+    key: text('key').primaryKey(),
+    count: integer('count').notNull(),
+    windowExpiresAt: timestamp('window_expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('rate_limit_hits_window_expires_at_idx').on(table.windowExpiresAt)],
+);
+
 export type Role = typeof roles.$inferSelect;
 export type NewRole = typeof roles.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+export type Session = typeof sessions.$inferSelect;
+export type NewSession = typeof sessions.$inferInsert;
+export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
+export type NewEmailVerificationToken = typeof emailVerificationTokens.$inferInsert;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type NewPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+export type EmailChangeRequest = typeof emailChangeRequests.$inferSelect;
+export type NewEmailChangeRequest = typeof emailChangeRequests.$inferInsert;
+export type SecurityEvent = typeof securityEvents.$inferSelect;
+export type NewSecurityEvent = typeof securityEvents.$inferInsert;
+export type RateLimitHit = typeof rateLimitHits.$inferSelect;
