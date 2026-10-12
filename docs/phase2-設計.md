@@ -1,7 +1,7 @@
-# Phase 2 設計ドキュメント（セキュリティ基盤強化） v1.8
+# Phase 2 設計ドキュメント（セキュリティ基盤強化） v1.9
 
 > 本ドキュメントは**実装より先に**作成・改訂した設計書です。対象工程は `実装計画.md` v1.4 の 16章「Phase 2 — セキュリティ基盤強化」および `実装Todo.md` の P2-01〜P2-08 に対応します。  
-> 初版作成日: 2026-10-10 / v1.1〜v1.5: 2026-10-10 / v1.6: 2026-10-10 / v1.7: 2026-10-10 / v1.7.1: 2026-10-11 / v1.7.2: 2026-10-11 / v1.7.3: 2026-10-11 / v1.7.4: 2026-10-11 / v1.7.5: 2026-10-11 / v1.7.6: 2026-10-11 / v1.8 改訂日: 2026-10-12（外部レビュー指摘反映: 決定ID再採番P2-D-01〜07・予約方式の設計バグ検証→事前INCR方式に方針変更・Redis RateLimiter IF追加・閾値を計画8.6と整合・IP/プロキシ信頼規則新設・CSP/CORS/Cache-Control/Vary/Permissions-Policy網羅・RATE_LIMIT_SECRET必須化・security_eventsパージ対象外明記・DoD/テスト計画にP2-07/08追加・未決U-xx整理） / 状態: 改訂版（実装前の設計書。未決事項U-xxあり）
+> 初版作成日: 2026-10-10 / v1.1〜v1.5: 2026-10-10 / v1.6: 2026-10-10 / v1.7: 2026-10-10 / v1.7.1: 2026-10-11 / v1.7.2: 2026-10-11 / v1.7.3: 2026-10-11 / v1.7.4: 2026-10-11 / v1.7.5: 2026-10-11 / v1.7.6: 2026-10-11 / v1.8 改訂日: 2026-10-12（外部レビュー指摘反映） / v1.9 改訂日: 2026-10-12（仕様書・実装計画との矛盾修正: 予約方式記述削除、rate_limit_hits 単一方式へ統一、環境変数要件整合、テスト/手順/リスク表同期） / 状態: 改訂版（実装前の設計書。未決事項U-xxあり）
 
 ---
 
@@ -27,10 +27,10 @@ Phase 1 で構築したメール/パスワード認証の基盤に対し、**本
   - 全 13 キーを「**全リクエスト対象キー**（処理実行前にインクリメント）」と「**失敗試行対象キー**（認証失敗後のみインクリメント、成功時にリセット）」に明確に分類し、許可回数・拒否開始回数・ログ記録タイミングの数値を 100% 整合。
   - メールアドレス識別子の HMAC-SHA256（`RATE_LIMIT_SECRET`）による辞書攻撃防衛。
   - 本番環境（`NODE_ENV === 'production'`）で実 Turnstile 未設定時に CAPTCHA 必須領域のリクエストを **`400 Bad Request` / `500 Internal Server Error` で安全に拒否するフェイルクローズ設計**（`NoopCaptchaProvider` の本番バイパス防止）。
-- **`rate_limit_hits` および 30日保持条件を含む 6 テーブル期限切れデータ削除スクリプト**:
+- **`rate_limit_hits` および 30日保持条件を含む 5 テーブル期限切れデータ削除スクリプト**:
    - PostgreSQL 適合バッチ削除クエリ (`DELETE ... WHERE id/key IN (SELECT ... LIMIT 1000 FOR UPDATE SKIP LOCKED)`) に `rate_limit_hits` (`window_expires_at < NOW()`)、`used_at` カラム、および **失効済みセッション（`revoked_at IS NOT NULL AND revoked_at < NOW() - INTERVAL '30 days'`）と未失効期限切れセッション（`revoked_at IS NULL AND (expires_at < NOW() OR absolute_expires_at < NOW())`）の完全分流条件** を適用。
 - **分散環境対応のアトミック ログ抑制（Throttled Logging）**:
-   - `RateLimiter.check()` のアトミック更新戻り値を活用し、ハード制限突破のまさに初回（全リクエストキー: `count === hard_limit + 1` / 失敗試行キー: `failed_count === hard_limit`）のみ `security_events` へ 1 回記録する判定により、マルチプロセス・マルチインスタンス環境での DB ログ溢れを防止。
+   - `RateLimiter.check()` のアトミック更新戻り値を活用し、ハード制限突破のまさに初回（全リクエストキー: `count === hard_limit + 1` / 失敗試行キー: `count === hard_limit`）のみ `security_events` へ 1 回記録する判定により、マルチプロセス・マルチインスタンス環境での DB ログ溢れを防止。
 - **本番環境での CAPTCHA 未設定時の安全拒否**:
    - `NODE_ENV === 'production'` かつ `TURNSTILE_SECRET_KEY` 未設定時に、CAPTCHA 必須領域（ソフト制限超過）のリクエストを **`500 Internal Server Error (CAPTCHA_UNCONFIGURED)`** で拒否し、クライアント入力エラー（400系）とサーバ設定不備（500系）を厳密に区別する。
 - **セキュリティテスト計画と DoD の完全整合**:
@@ -59,8 +59,8 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm test:security && pnpm build
 1. **CSP nonce**: `middleware.ts` で生成された `x-nonce` がレスポンス CSP ヘッダーおよび `<Script>` に正しく伝達され、`next.config.ts` とのヘッダー重複がないこと。
 2. **CORS & CSRF 分離**: `ALLOWED_ORIGINS` と `CSRF_TRUSTED_ORIGINS` が分離され、不正 Origin/Referer および `Origin: null` からの Cookie 伴う状態変更リクエストが 403 拒否されること。
 3. **HTTPS & プロキシ**: カンマ区切り `X-Forwarded-Proto` や偽装 Host ヘッダーに対して安全な HTTPS リダイレクトが動作すること。
-4. **レート制限 13 キー & HMAC & 本番 CAPTCHA 防御**: 13 キーの閾値が適用され、**全リクエスト対象キーは処理実行前の単一アトミック INCR で上限を厳密保証**すること。失敗試行対象キーは「事前読み取り判定→失敗時のみインクリメント→成功時 DELETE」フローで、認証処理の実行前判定により硬件上限を守ること（詳細は §6.1 参照）。HMAC-SHA256 によるメールア dress 保護、本番未設定時の CAPTCHA バイパス防止が実装されていること。
-5. **期限切り削除**: `rate_limit_hits` および 30 日保持セッションを含む全 6 テーブルの期限切りバッチ削除が正常終了すること。`security_events`（180 日保持、D-13）はパージ対象外。
+4. **レート制限 13 キー & HMAC & 本番 CAPTCHA 防御**: 13 キーの閾値が適用され、全リクエスト対象キーは処理実行前の単一アトミック INCR で判定されること。失敗試行対象キーは「事前判定→失敗時のみインクリメント→成功時 DELETE」フローで運用されること（詳細は §6.1 参照）。HMAC-SHA256 によるメールアドレス保護、本番未設定時の CAPTCHA バイパス防止が実装されていること。
+5. **期限切り削除**: `rate_limit_hits` および 30 日保持セッションを含む全 5 テーブルの期限切りバッチ削除が正常終了すること。`security_events`（180 日保持、D-13）はパージ対象外。
 6. **セキュリティイベント網羅 & Web 攻撃テスト**: 計画 P2-07（全認証カバレッジの `security_events` 記録検証）と P2-08（XSS / SQLi / clickjacking / Open Redirect / IDOR の各テスト）が存在し、`pnpm test:security` で green になること。
 
 ---
@@ -110,11 +110,10 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm test:security && pnpm build
 |---|---|
 | `src/lib/auth/rate-limit-keys.ts` | 13 キーに対する型安全なキー生成ヘルパー（HMAC-SHA256 によるメールアドレス保護含む）。 |
 | `src/lib/auth/captcha.ts` | `CaptchaProvider` interface, `NoopCaptchaProvider`, および本番環境未設定ガード処理。 |
-| `scripts/purge-expired.ts` | `rate_limit_hits` を含む **6 テーブル**（reservations / hits / 3種 token / sessions）の PostgreSQL 適合バッチ削除スクリプト。`security_events`（180 日保持）はパージ対象外。 |
+| `scripts/purge-expired.ts` | `rate_limit_hits` を含む **5 テーブル**（hits / 3種 token / sessions）の PostgreSQL 適合バッチ削除スクリプト。`security_events`（180 日保持）はパージ対象外。 |
 | `src/test/security/web.test.ts` | Vitest による Headers, CORS, CSRF, HTTPS, Injection, Open Redirect, レート制限アトミックテスト。 |
 | `src/test/security/idor.test.ts` | 現存する Phase 1/2 エンドポイント（セッション破棄・セキュリティイベント取得）の IDOR テスト。 |
 | `src/test/security/security-events-coverage.test.ts` | セキュリティイベント記録の網羅性とログサプレッションの検証（計画 P2-07）。 |
-| `src/test/security/web-attack.test.ts` | XSS / SQLi / clickjacking / Open Redirect / IDOR の各テスト（計画 P2-08）。`web.test.ts` と分離し、各攻撃を独立 describe で検証。 |
 
 ---
 
@@ -243,7 +242,7 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm test:security && pnpm build
    - Next.js 組み込み Origin チェック（`serverActions.allowedOrigins`）は Host / X-Forwarded-Host ベースであり、`CSRF_TRUSTED_ORIGINS` とは別物。プロキシ配下では両者の許可リストを環境変数で一致させること。
    - ミドルウェアでの早期拒否（第1段階のみ）と、共通パイプラインでの本検証（第1・2段階）を併用し、Edge runtime で Node crypto / PG が使えない制約を吸収する。
 
-    - **実装上の注意（U-05）**: 現行 `runCorePipeline()`（`src/lib/auth/pipeline.ts:77-79`）は `isMutation` を `request.method` 而非 `Content-Type` で判定する不具合（`getContentType()` の結果を無視して POST と固定）がある。本設計書の「GET では状態変更しない（§25）」に反し、`Content-Type: application/json` の GET リクエストが mutation 扱いされ CSRF 検証が走る。Phase 2 実装時に `request.method` で正しく判定すること。
+    - **実装上の注意（U-05）**: 現行 `runCorePipeline()`（`src/lib/auth/pipeline.ts:77-79`）は `isMutation` を `Content-Type` ベースで誤判定している不具合（`getContentType()` の結果を無視して POST と固定）がある。本設計書の「GET では状態変更しない（§25）」に反し、`Content-Type: application/json` の GET リクエストが mutation 扱いされ CSRF 検証が走る。Phase 2 実装時に `request.method` で正しく判定すること。
 
 7. **Session Cookie 属性と `__Host-` プレフィックス強化**:
    - セッション Cookie には `HttpOnly`, `SameSite=Lax`, `Path=/` を常時付与し、`NODE_ENV === 'production'`（HTTPS環境）では `Secure` 属性および **`__Host-` プレフィックス** (`__Host-auth_session`) を必須付与する。`__Host-` プレフィックス使用時は **`Domain` 属性を指定してはならない (Omit Domain)**、**`Secure` 属性必須**、**`Path=/` 必須**（Cookie Prefixes 仕様／`draft-ietf-httpbis-layered-cookies-02` §4.1.3.2 **Internet-Draft** 準拠。正式な RFC 発行前のため将来変更の可能性あり）。これによりサブドメインからの Cookie 上書き・ハイジャックを防止する。実装は `src/lib/auth/cookie.ts` の `SESSION_COOKIE = '__Host-auth_session'` に一致。
@@ -255,164 +254,22 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm test:security && pnpm build
 ### 6.1 カウント方式の明確な分類と実装上の注意
 
 1. **全リクエスト対象キー (All-request Counter Keys)**:
-   - 対象 API 呼び出し時に、認証合否にかかわらず実行前にカウントをインクリメント。
-   - カウントがハード制限に達している場合（上限回数実行済み）、次回リクエストは処理を実行せず直ちに `429 Too Many Requests` を返却。
-   - 実装: `rateLimiter.check()` の単一アトミック SQL (`INSERT ... ON CONFLICT DO UPDATE RETURNING count`) で実行前にインクリメントし、戻り値 `count > max` で拒否判定。並行実行下でも行ロックにより上限を厳密に保証。
+   - 対象 API 呼び出し時に、認証合否にかかわらず実行前にカウントをインクリメントする。
+   - `count > hard_limit` になった時点で `429 Too Many Requests` を返す。
+   - 実装は `rateLimiter.check()` の単一アトミック更新（`INSERT ... ON CONFLICT DO UPDATE RETURNING count`）を使用し、分散環境でも同一キーの上限判定を一貫させる。
 
 2. **失敗試行対象キー (Failed-attempt Counter Keys)**:
-   - **設計意図**: 認証処理の**実行前**に現在の失敗カウントを読み取り判定。
-      - 失敗カウント >= ハード制限上限（例: 5回失敗済み）: 認証処理（パスワード検証等）を実行せず `429 Too Many Requests` を返却。
-      - ソフト制限 <= 失敗カウント < ハード制限: CAPTCHA 検証を実施。失敗時は認証処理を実行せず `400 Bad Request`。
-   - **認証失敗時のみ**カウントを原子的にインクリメント。
-   - **認証成功時**は失敗カウントを即座に削除・リセット（`DELETE FROM rate_limit_hits WHERE key IN ('rl:login:acct:{email_hmac}', 'rl:login:ip+acct:{ip}:{email_hmac}')`）。
-   - **【実装ギャップ・要対応】** 現行実装 (`src/app/api/auth/login/route.ts`) では、全 3 キー (`rl:login:ip`, `rl:login:acct`, `rl:login:ip+acct`) を同一の `rateLimiter.check()` で呼び出しており、**全リクエスト対象キーと同様に実行前に無条件インクリメントしている**。失敗試行キーの「事前読み取り判定→失敗時のみインクリメント→成功時 DELETE」という設計フローは**未実装**である。
+   - 対象: `rl:login:acct`, `rl:login:ip+acct`, `rl:2fa:user`。
+   - 認証処理の実行前に現在カウントを読み取り、`count >= hard_limit` なら認証処理を実行せず `429`、`soft_limit <= count < hard_limit` なら CAPTCHA を必須化する。
+   - 認証失敗時のみ `count` を加算し、成功時は `DELETE FROM rate_limit_hits WHERE key IN (...)` で対象キーをリセットする。
 
-3. **実行枠予約方式（Reservation Pattern）の導入**:
-   - **課題**: 失敗時のみインクリメントする設計では、認証処理実行後にカウントを増やすため、ハード上限直前で複数リクエストが同時到着すると、上限を超えて認証処理が並行実行されてしまう（例: 上限 5・現在 4 で A/B 同時到着 → 両方とも認証実行 → 双方失敗でカウント 6 に到達）。
-   - **解決**: 認証処理**開始前に**実行枠を原子的に確保する「予約方式」を採用する。予約ごとに**一意の予約ID**（`reservation_id` = UUID v7 または `gen_random_uuid()`）を発行し、予約レコードとして管理する。
-   - **スキーマ設計**（専用予約テーブル `rate_limit_reservations` を新設）:
-     ```sql
-     CREATE TABLE rate_limit_reservations (
-       reservation_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-       key text NOT NULL REFERENCES rate_limit_hits(key) ON DELETE CASCADE,
-       generation bigint NOT NULL,          -- カウンター行の世代番号
-       status text NOT NULL DEFAULT 'active', -- 'active' | 'confirmed' | 'released' | 'expired'
-       created_at timestamptz NOT NULL DEFAULT NOW(),
-       expires_at timestamptz NOT NULL,     -- 予約固有の TTL（ウィンドウ期限 + 猶予）
-       confirmed_at timestamptz,
-       released_at timestamptz
-     );
-     CREATE INDEX rate_limit_reservations_key_generation_idx ON rate_limit_reservations(key, generation);
-     CREATE INDEX rate_limit_reservations_expires_at_idx ON rate_limit_reservations(expires_at);
-     ```
-     - `rate_limit_hits` に `generation`（`bigint NOT NULL DEFAULT 1`）と `failed_count`（`integer NOT NULL DEFAULT 0`）を追加。`count` 列は `failed_count` に改名し、**失敗確定数のみ**を保持する。実行中予約数は `rate_limit_reservations` で `status='active' AND generation=hits.generation` を数えて求める。
-     - ※ 既存スキーマで代替する場合は、単一カラム `count = failed_count + active_reservations` 合算運用も可能だが、予約所有権の保証には予約レコード方式が最も堅牢。本設計では専用テーブルを採用するが、実装時に列追加のみで代替する場合も設計書で方針のみ確定。実際の DB 変更は行わない。
-- **予約確保（認証実行前）**：
-      ```sql
-      -- 単一トランザクションで「上限未満なら予約レコードを作成」
-      -- 同一キーの同時予約を直列化するため、hits 行を FOR UPDATE でロック
-      BEGIN ISOLATION LEVEL REPEATABLE READ;
-      
-      -- 1. カウンター行をロックして取得（存在しなければ作成）
-      INSERT INTO rate_limit_hits (key, generation, failed_count, window_expires_at)
-      VALUES ($1, 1, 0, NOW() + $window)
-      ON CONFLICT (key) DO UPDATE SET
-        generation = rate_limit_hits.generation,
-        failed_count = rate_limit_hits.failed_count,
-        window_expires_at = CASE
-          WHEN rate_limit_hits.window_expires_at <= NOW() THEN NOW() + $window
-          ELSE rate_limit_hits.window_expires_at
-        END
-      WHERE rate_limit_hits.window_expires_at > NOW()  -- 期限切れ行は新しい世代として扱う
-      RETURNING generation, failed_count, window_expires_at;
-      
-      -- 2. アクティブ予約数をロック内でカウントし、上限判定して予約作成
-      WITH current AS (
-        SELECT generation, failed_count FROM rate_limit_hits WHERE key = $1
-      ), reserve_check AS (
-        SELECT c.generation, c.failed_count,
-               COUNT(r.reservation_id) AS active_count
-        FROM current c
-        LEFT JOIN rate_limit_reservations r
-          ON r.key = $1 AND r.generation = c.generation AND r.status = 'active'
-        GROUP BY c.generation, c.failed_count
-      )
-      INSERT INTO rate_limit_reservations (key, generation, expires_at)
-      SELECT $1, generation, NOW() + $window + INTERVAL '30 seconds'
-      FROM reserve_check
-      WHERE failed_count + active_count < $hard_limit
-      RETURNING reservation_id, generation;
-      
-      COMMIT;
-      ```
-      - **原子性の保証**: `BEGIN ... COMMIT` 単一トランザクション内で hits 行ロック（`INSERT ... ON CONFLICT` が行ロックを取得）→ アクティブ予約数カウント → 上限判定 → 予約INSERT を連続実行。`REPEATABLE READ` 分離レベルでファントムリードを防ぎ、同時リクエスト A/B は直列化される。
-      - **初回行作成との競合**: `ON CONFLICT DO UPDATE` が既存行をロックしつつ `generation` と `failed_count` を維持。期限切れ行（`window_expires_at <= NOW()`）は `WHERE` 句で除外され、新しい行として扱われる（実質的に世代交代）。
-      - **上限到達時の振る舞い**: `failed_count + active_count >= hard_limit` の場合、CTE `reserve_check` の `WHERE` 句で行が返らず、予約INSERTは実行されない。トランザクションは正常コミットされ、アプリ側は戻り値なし＝`429` と判定。
-      - **リトライ条件**: 並行トランザクションによるシリアライゼーション失敗（`SQLSTATE 40001`）はアプリ側で即時リトライ（最大 3 回、指数バックオフ）。
-   - **ソフト制限・CAPTCHA 判定**: 予約確保時点で `failed_count`（失敗確定数）を見て判定。`failed_count >= soft_limit` なら CAPTCHA 必須。CAPTCHA 検証失敗時は自分の予約だけ `status='released'` にして `400`。
-- **認証成功時**: **自分の予約だけ** `status='released'` に更新し、`rate_limit_hits` の **`failed_count` を 0 にリセット**（`generation` は **インクリメントしない**。同一ウィンドウ内の他予約を無効化しないため）。**行全体を削除しない**。
-      ```sql
-      BEGIN ISOLATION LEVEL REPEATABLE READ;
-      -- 自分の予約かつ active 状態のみ release（二重 release 防止）
-      UPDATE rate_limit_reservations
-      SET status = 'released', released_at = NOW()
-      WHERE reservation_id = $my_reservation_id
-        AND status = 'active';
-      
-      -- 対応するヒット行の failed_count を 0 にリセット
-      UPDATE rate_limit_hits
-      SET failed_count = 0
-      WHERE key = $key AND generation = $my_generation;
-      COMMIT;
-      ```
-      - **冪等性**: `status = 'active'` 条件により、同じ `reservation_id` の再実行は 0 行更新となり、カウンターを二重リセットしない。
-      - `generation` を変えないため、同じウィンドウ内の他の実行中予約（他のリクエストの認証処理）は有効なまま継続し、完了時にそれぞれ自分の予約を確定・解放する。
-    - **認証失敗時**: **自分の予約だけ** `status='confirmed'`, `confirmed_at=NOW()` に更新し、`rate_limit_hits.failed_count++`。
-      ```sql
-      BEGIN ISOLATION LEVEL REPEATABLE READ;
-      -- 自分の予約かつ active 状態のみ confirmed（二重確定防止）
-      UPDATE rate_limit_reservations
-      SET status = 'confirmed', confirmed_at = NOW()
-      WHERE reservation_id = $my_reservation_id
-        AND status = 'active';
-      
-      -- 確定した場合のみ failed_count をインクリメント
-      UPDATE rate_limit_hits
-      SET failed_count = failed_count + 1
-      WHERE key = $key AND generation = $my_generation
-        AND EXISTS (
-          SELECT 1 FROM rate_limit_reservations
-          WHERE reservation_id = $my_reservation_id
-            AND status = 'confirmed'
-        );
-      COMMIT;
-      ```
-      - **冪等性・二重確定防止**: `status = 'active'` 条件で 1 回だけ遷移可能。`EXISTS` 副問合せで「自分の予約が確定済み」の場合のみカウンター加算。
-      - 別のリクエストの予約や、別の `generation` の行は一切触れない。
-      - トランザクション途中でエラー・ロールバック時、予約は `active` のまま残る（`try...finally` で release または TTL で expired へ）。
-   - **内部エラー・プロセス停止・タイムアウト時の予約解放**:
-      - **認証実行タイムアウト**: 認証処理（パスワード検証等）に **上限 5 秒** を設定（`statement_timeout` またはアプリ側 `Promise.race`）。タイムアウト時は即座に自分の `reservation_id` を `status='released'` に更新。
-      - **プロセスクラッシュ・強制終了**: `try...finally` は正常終了・例外時に確実に release するが、OS シグナル（`SIGKILL` 等）でプロセスが即死した場合は実行されない。このケースは **予約固有の `expires_at` TTL** でカバーする。
-      - **TTL 設計**: `expires_at = NOW() + $window + INTERVAL '30 seconds'`（ウィンドウ期限 + 猶予 30 秒）。認証処理が 5 秒以内に終わる前提で、猶予はネットワーク遅延・GC 停止等を吸収。
-      - **期限切れ回収**: バッチ処理（`scripts/purge-expired.ts`）が `expires_at < NOW() AND status='active'` の予約を `status='expired'` に更新（物理削除は完了済み予約のみ）。`expired` 遷移は **状態変更のみ** で `failed_count` には影響しない。
-      - **期限切れ後の遅延処理**: 予約が `expired` になった後に元の認証処理が戻ってきても、`UPDATE ... WHERE status='active'` が 0 行更新となり、確定・release ともに無効化される。カウンターは変更されない。
-      - **延長しない**: 予約の延長は行わない。認証処理が長引く場合は設計上 5 秒で打ち切り、クライアントには `504 Gateway Timeout` または `400` を返す。延長機構を入れると、複数プロセス間での延長競合・期限切れ判定の不整合を招くため。
-      - **上限の安全側倒れ**: TTL 回収に失敗（バッチ停止等）しても、予約は `active` のまま `expires_at` 経過後も残る。これにより `total_in_use` 計算に含まれ続け、**上限が無条件に緩和されることはない**（安全側＝制限が厳しくなる方向に倒れる）。
-   - **並行制御**: 予約確保トランザクションは `rate_limit_hits` 行ロック（`SELECT ... FOR UPDATE` または `INSERT ... ON CONFLICT`）を取得し、同一キーへの同時予約を直列化。`total_in_use < hard_limit` 判定をロック内で原子的に実行。
+3. **並行リクエスト時の設計方針（Phase 2 範囲）**:
+   - 失敗時加算方式は「同時到着で最大1回分の超過失敗」が理論上起こり得るため、Phase 2 では **全リクエスト対象キー（`rl:login:ip`）のハード制限を先に適用**して高頻度試行を抑制する。
+   - 厳密な予約スロット管理（専用予約テーブル追加）は仕様書・実装計画の Phase 2 要件外とし、導入しない。
 
-4. **カウンター行の初期化・世代管理・再生成の保証**:
-   - **世代番号の生成**: `generation` は `bigint` で、**単調増加**（`DEFAULT 1`、行再作成時に `COALESCE(max(generation), 0) + 1`）。ウィンドウ期限切れで行が削除された後の新規作成時は、過去最大値 + 1 を割り当て、**再利用しない**。これにより「古い予約の `generation` が新しい行と一致する」事象を物理的に防止。
-   - **初回予約**: `rate_limit_hits` 行が存在しない場合、予約確保トランザクション内で `INSERT ... ON CONFLICT` で `generation=1, failed_count=0` の行を作成し、同一トランザクションで予約レコードを `generation=1` で作成。`reservation_id` を発行。
-   - **成功時リセット後の再予約**: 成功時は `failed_count=0` にリセットするのみで **`generation` はインクリメントしない**（同一ウィンドウ内の他予約を生かすため）。次のリクエストが予約を取る際は、同じ `generation` の行に対して予約レコードを追加する。
-   - **ウィンドウ期限切れ後の初回予約**: `rate_limit_hits.window_expires_at < NOW()` の場合、バッチ削除で行と関連予約が物理削除済み。次の予約確保トランザクションでは、`ON CONFLICT` 更新の `WHERE window_expires_at > NOW()` 条件により既存行がスキップされ、新しい行が `generation = COALESCE((SELECT max(generation) FROM rate_limit_hits WHERE key=$1), 0) + 1` で作成される。クリーンな状態から開始。
-   - **同時初回アクセス**: 複数プロセスが同時に初回予約を試みる場合、予約確保トランザクションの行ロックで直列化。1 つだけが行作成、他は既存行への予約追加として処理。最終的な `total_in_use = failed_count + active予約数` で上限判定される。
-   - **予約確保と行削除の並行**: 成功時は行を削除**しない**（`failed_count=0` リセットのみ）。したがって DELETE と予約確保の競合は発生しない。ウィンドウ期限切れによるバッチ削除は `window_expires_at < NOW()` かつ `active` 予約がない行のみ対象（`NOT EXISTS (SELECT 1 FROM rate_limit_reservations WHERE key=hits.key AND status='active')`）。
-   - **上限到達行の予期せぬ削除**: バッチ削除は `window_expires_at < NOW()` かつアクティブ予約なしの行のみ。成功時リセットも行削除しないため、実行中予約が消えることはない。
-   - **古い予約の失敗確定が新しいウィンドウを破壊しない**: 予約レコードには作成時の `generation` が紐づく。失敗確定 UPDATE は `WHERE key=$1 AND generation=$my_generation` で実行。ウィンドウ期限切れで行が再生成された場合、新しい行の `generation` は古いものより大きいため、古い予約の `generation` は一致せず、**新しい `failed_count` には一切加算されない**。古い予約が確定しようとしても `WHERE generation=$old` で 0 行更新となり、安全に無視される。
-
-5. **成功時リセットと失敗確定の競合（予約ID・世代番号方式での確定設計）**:
-   - **前提**: 成功・失敗ともに **自分の `reservation_id` のみ**を対象に更新。`generation` も一致確認。`status='active'` のときだけ遷移可能（冪等・二重実行防止）。
-   - **順序ベースの最終状態ルール**（同一 `generation` 内）:
-     - **ルール 1（成功優先クリア）**: 失敗確定が先にコミット → 成功リセットが後からコミット
-       - 失敗確定: `failed_count = N+1`
-       - 成功リセット: `failed_count = 0`
-       - **最終結果: `failed_count = 0`**（成功が優先し、失敗カウントをクリア）。
-     - **ルール 2（成功前開始の失敗は記録）**: 成功リセットが先にコミット → 失敗確定が後からコミット
-       - 成功リセット: `failed_count = 0`
-       - 失敗確定: `failed_count = 1`（自分の予約のみ確定、別予約の release には影響しない）
-       - **最終結果: `failed_count = 1`**（成功前に開始したリクエストの失敗は正しく記録）。
-     - **ルール 3（異なる予約の独立性）**: A成功 → C新規予約（同一 `generation`）→ B失敗確定
-       - A成功: `failed_count = 0`
-       - C予約: `total_in_use` 増加（`failed_count` 変更なし）
-       - B確定: `failed_count = 1`
-       - **最終結果: Bの失敗のみ記録**。Cは別 `reservation_id` なので影響なし。
-     - **ルール 4（世代分離）**: 古い予約（`generation=N`）の失敗確定が、新しいウィンドウ（`generation=N+1`）の `failed_count` を汚染しない
-       - 古い予約の UPDATE: `WHERE generation=N` → 新しい行（`generation=N+1`）は 0 行更新
-       - **最終結果: 新しいウィンドウの `failed_count` は 0 のまま**。
-   - **成功時リセットの対象**: `failed_count`（失敗確定数）のみを 0 にリセット。**全リクエスト対象キー（`rl:login:ip` 等）はリセットしない**。これらは「処理実行前インクリメント」方式であり、成功・失敗に関わらずカウントが積み上がる設計のため。
-   - **期限切れ予約の成功リセット**: 成功リセット実行時点で自分の予約が既に `expired` になっている場合、`UPDATE ... WHERE status='active'` は 0 行更新となり release しない。ただし `failed_count=0` リセットは実行される（**現在の世代の失敗履歴をクリア**するため）。これは「認証成功した事実」を優先し、期限切れで予約を失っても履歴リセットは行う設計。
-   - **設計決定**: **予約ID・世代番号・状態ガードで所有権を完全分離**。成功時は行削除せず `failed_count=0` リセットのみ。失敗確定は自分の予約のみ確定。コミット順序により「成功優先クリア（ルール 1）」または「成功前開始の失敗は記録（ルール 2）」となり、仕様を明確化。異なる世代は物理的に分離（ルール 4）。
-   - 現行実装では成功時リセットが**存在しない**ため、この競合は発生しない。現状は **「成功時リセット未実装のため競合なし」** と記述するに留める。
+4. **実装ギャップ（現状）**:
+   - 現行 `src/app/api/auth/login/route.ts` は `rl:login:acct` と `rl:login:ip+acct` も全リクエスト同様に実行前インクリメントしており、失敗時加算フローになっていない。
+   - Phase 2 で上記フローへ揃える（P2-04 / P2-05）。
 
 ### 6.2 全 13 キーの仕様一覧
 
@@ -437,8 +294,8 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm test:security && pnpm build
 1. **ハッシュ方式の改善**:
    - メールアドレスを `email.trim().toLowerCase()` で正規化した上で **HMAC-SHA256** を適用。
    - `crypto.createHmac('sha256', secret).update(normalizedEmail).digest('hex')` を使用。
-2. **秘密鍵管理とフォールバック**:
-   - 秘密鍵には `process.env.RATE_LIMIT_SECRET` を使用（未設定時は `TOKEN_PEPPER` を安全にフォールバック利用）。
+2. **秘密鍵管理**:
+   - 秘密鍵には `process.env.RATE_LIMIT_SECRET` を使用し、未設定は起動時エラーとする（本番・開発とも必須）。
 
 ### 6.4 CAPTCHA 本番安全制御（フェイルクローズ）
 
@@ -461,44 +318,17 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm test:security && pnpm build
 #### `scripts/purge-expired.ts` 実行クエリ一覧
 
 ```sql
--- 1. rate_limit_reservations: 期限切れかつ完了済みの予約を削除
-DELETE FROM rate_limit_reservations
-WHERE reservation_id IN (
-  SELECT reservation_id FROM rate_limit_reservations
-  WHERE expires_at < NOW()
-    AND status IN ('confirmed', 'released', 'expired')
-  ORDER BY expires_at ASC
-  LIMIT 1000
-  FOR UPDATE SKIP LOCKED
-);
-
--- 2. rate_limit_reservations: 期限切れでまだ active な予約を expired に更新（物理削除せず状態遷移）
-UPDATE rate_limit_reservations
-SET status = 'expired'
-WHERE reservation_id IN (
-  SELECT reservation_id FROM rate_limit_reservations
-  WHERE expires_at < NOW()
-    AND status = 'active'
-  ORDER BY expires_at ASC
-  LIMIT 1000
-  FOR UPDATE SKIP LOCKED
-);
-
--- 3. rate_limit_hits: ウィンドウ期限切れかつアクティブ予約のない行を削除
+-- 1. rate_limit_hits
 DELETE FROM rate_limit_hits
 WHERE key IN (
-  SELECT h.key FROM rate_limit_hits h
-  WHERE h.window_expires_at < NOW()
-    AND NOT EXISTS (
-      SELECT 1 FROM rate_limit_reservations r
-      WHERE r.key = h.key AND r.status = 'active'
-    )
-  ORDER BY h.window_expires_at ASC
+  SELECT key FROM rate_limit_hits
+  WHERE window_expires_at < NOW()
+  ORDER BY window_expires_at ASC
   LIMIT 1000
   FOR UPDATE SKIP LOCKED
 );
 
--- 4. email_verification_tokens (used_at 実在確認済み)
+-- 2. email_verification_tokens (used_at 実在確認済み)
 DELETE FROM email_verification_tokens
 WHERE id IN (
   SELECT id FROM email_verification_tokens
@@ -508,7 +338,7 @@ WHERE id IN (
   FOR UPDATE SKIP LOCKED
 );
 
--- 5. password_reset_tokens (used_at 実在確認済み)
+-- 3. password_reset_tokens (used_at 実在確認済み)
 DELETE FROM password_reset_tokens
 WHERE id IN (
   SELECT id FROM password_reset_tokens
@@ -518,7 +348,7 @@ WHERE id IN (
   FOR UPDATE SKIP LOCKED
 );
 
--- 6. email_change_requests (used_at 実在確認済み)
+-- 4. email_change_requests (used_at 実在確認済み)
 DELETE FROM email_change_requests
 WHERE id IN (
   SELECT id FROM email_change_requests
@@ -528,15 +358,13 @@ WHERE id IN (
   FOR UPDATE SKIP LOCKED
 );
 
--- 7. sessions (未失効期限切れ vs 失効済み30日保持の完全分流)
+-- 5. sessions (未失効期限切れ vs 失効済み30日保持の完全分流)
 DELETE FROM sessions
 WHERE id IN (
   SELECT id FROM sessions
   WHERE (
-    -- パターンA: 未失効かつ有効期限（通常または絶対）切れセッション
     (revoked_at IS NULL AND (expires_at < NOW() OR absolute_expires_at < NOW()))
     OR
-    -- パターンB: 失効済みセッション（失効日時から30日経過後に削除）
     (revoked_at IS NOT NULL AND revoked_at < NOW() - INTERVAL '30 days')
   )
   ORDER BY expires_at ASC
@@ -549,8 +377,6 @@ WHERE id IN (
 
 - 削除件数が 0 件になるまで 1000 件単位のトランザクションで繰り返し実行。
 - 複数プロセス同時実行時も `SKIP LOCKED` によりロック競合を回避。
-- **予約の期限とウィンドウ期限の分離**: `rate_limit_reservations.expires_at` は予約固有の TTL（ウィンドウ期限 + 猶予 30 秒）。`rate_limit_hits.window_expires_at` はレート制限ウィンドウの期限。バッチ処理はそれぞれ独立して実行し、アクティブ予約がある行はウィンドウ期限切れでも削除しない。
-- **プロセス停止で予約が永久に残らない**: `expires_at` 経過で `status='expired'` に遷移し、次のバッチで物理削除。`try...finally` での明示的解放も併用。
 
 ---
 
@@ -578,7 +404,7 @@ WHERE id IN (
 | `ALLOWED_ORIGINS` | カンマ区切り URL | CORS 許可 Origin | 任意 | `NEXT_PUBLIC_APP_URL` | 各値が URL | 可 |
 | `CSRF_TRUSTED_ORIGINS` | カンマ区切り URL | CSRF 信頼 Origin | 任意 | `NEXT_PUBLIC_APP_URL` | 各値が URL | 可 |
 | `ALLOWED_HOSTS` | カンマ区切り Host | HTTPS リダイレクト許可 Host | 任意 | Host from `NEXT_PUBLIC_APP_URL` | 各値が Host 名 | 可 |
-| `RATE_LIMIT_SECRET` | 文字列 (min 32文字) | レート制限 HMAC 鍵 | 任意 | (Fallback: `TOKEN_PEPPER`) | 32文字以上 | **不可 (秘匿)** |
+| `RATE_LIMIT_SECRET` | 文字列 (min 32文字) | レート制限 HMAC 鍵 | 必須 | なし | 32文字以上 | **不可 (秘匿)** |
 | `TOKEN_PEPPER` | 文字列 (min 32文字) | トークンハッシュ Pepper | 必須 | 定義値 | 32文字以上 | **不可 (秘匿)** |
 | `IP_HASH_PEPPER` | 文字列 (min 32文字) | IPアドレスハッシュ Pepper | 必須 | 定義値 | 32文字以上 | **不可 (秘匿)** |
 | `SESSION_PEPPER` | 文字列 (min 32文字) | セッションハッシュ Pepper | 必須 | 定義値 | 32文字以上 | **不可 (秘匿)** |
@@ -601,7 +427,7 @@ WHERE id IN (
 1. **CSP**: `x-nonce` リクエストヘッダー伝達、レスポンスヘッダー検証、重複ヘッダーのないこと。
 2. **CSRF**: 許可 Origin / 不許可 Origin / `Origin: null` / ヘッダー欠落時の 403 応答。Server Actions の保護。
 3. **HTTPS**: カンマ区切り `X-Forwarded-Proto` 処理、偽装 Host ヘッダー時の安全なリダイレクト。
-4. **レート制限 & CAPTCHA**: 13 キーの各閾値（ソフト/ハード）、全リクエストキーのアトミック並行クエリ検証、失敗試行キーの「実行枠予約確保→認証実行→失敗時確定/成功時 release・failed_count=0」フローの実装検証、同時到着時の上限厳守（hits 行ロック＋単一トランザクション）、予約ID所有権検証（Aの予約をBが誤操作しない）、成功リセット並行時の failed_count 結果（ルール 1: 失敗→成功で 0 / ルール 2: 成功→失敗で 1）、単調増加世代番号によるウィンドウ分離（古い予約が新しい世代に加算されない）、TTL 期限切れ予約の自動 expired 遷移・遅延処理の無効化、認証タイムアウト 5 秒・猶予 30 秒の境界、本番未設定時の 400/500 ガード拒否。
+4. **レート制限 & CAPTCHA**: 13 キーの各閾値（ソフト/ハード）、全リクエストキーのアトミック並行クエリ検証、失敗試行キーの「事前判定→失敗時加算→成功時 DELETE」フロー検証、同時到着時の境界値確認、本番未設定時の 400/500 ガード拒否。
 5. **Purge スクリプト**: 5 テーブルに対する削除、有効データの保持確認、0 件時の正常終了。
 
 ---
@@ -610,23 +436,21 @@ WHERE id IN (
 
 1. **設定・キー生成**:
    - `src/config/rate-limits.ts`（13キー閾値定義）
-   - `src/lib/auth/rate-limit-keys.ts`（HMAC-SHA256 ヘルパー、失敗試行キー用の「予約確保・確定・release・世代管理」メソッド含む）
+   - `src/lib/auth/rate-limit-keys.ts`（HMAC-SHA256 ヘルパー）
    - `src/lib/auth/captcha.ts`（本番未設定ガード付き Provider）
-2. **スキーマ拡張・アトミック レート制限 & ログ抑制**:
-   - `rate_limit_hits` に `generation`, `failed_count` 列追加、`count` を `failed_count` に改名
-   - `rate_limit_reservations` テーブル新設（予約ID・generation・status・expires_at・confirmed_at・released_at）
-   - `src/lib/auth/rate-limit.ts`（予約確保・確定・release・世代管理のアトミック SQL、ログ判定。トランザクション分離レベル REPEATABLE READ、行ロック FOR UPDATE、シリアライゼーション失敗リトライ）
+2. **レート制限・ログ抑制の実装**:
+   - `src/lib/auth/rate-limit.ts`（全リクエストキーのアトミック判定、失敗試行キーの失敗時加算、ハード制限突破時の初回ログ判定）
 3. **ログインフローへの適用**:
-   - `src/app/api/auth/login/route.ts` を修正し、失敗試行キー（`rl:login:acct`, `rl:login:ip+acct`）を予約方式フロー（予約確保 → CAPTCHA判定 → 認証実行 5 秒タイムアウト → 成功時 release+failed_count=0 / 失敗時確定 / タイムアウト・エラー時 release）で処理する
-   - 全リクエストキー（`rl:login:ip` 等）は従来通り `rateLimiter.check()` で処理し、成功時リセット**しない**
+   - `src/app/api/auth/login/route.ts` で失敗試行キーを「事前判定→失敗時加算→成功時DELETE」に変更
+   - 全リクエストキー（`rl:login:ip` 等）は従来どおり `rateLimiter.check()` を使用
 4. **ミドルウェア強化**:
    - `src/middleware.ts`（HTTPS マルチヘッダー判定, CORS / CSRF 分離, nonce 生成・伝達）
    - `next.config.ts`（CSP を除く静的ヘッダー設定）
 5. **バッチ削除スクリプト**:
-   - `scripts/purge-expired.ts`（`rate_limit_reservations` の期限切れ expired 遷移・削除、`rate_limit_hits` のアクティブ予約なし行削除）
+   - `scripts/purge-expired.ts`（`rate_limit_hits` と 3種 token・sessions の期限切れ削除）
 6. **テスト作成と検証**:
    - `src/test/security/web.test.ts`, `idor.test.ts`, `security-events-coverage.test.ts`
-   - 並行到着・上限境界・予約ID所有権・成功リセット並行（ルール 1/2）・単調増加世代番号分離・TTL回収・認証タイムアウト・シリアライゼーションリトライの専用テストケース追加
+   - 13キー境界値、本番CAPTCHA未設定、CSRF/CORS/Header 失敗系を追加
    - `pnpm test:security`
 7. **品質ゲート全パス確認**:
    - `pnpm lint && pnpm typecheck && pnpm test && pnpm test:security && pnpm build`
@@ -663,16 +487,10 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build
 | リスク | 影響 | 対処案 |
 |---|---|---|
 | レンダリング動的化によるキャッシュ失効 | nonce 使用ページが Dynamic Rendering になる | 全認証画面は保護対象であり SSR 前提設計とする。 |
-| 本番環境での CAPTCHA バイパス | Captcha 未設定時に Noop が動くと攻撃を許す | `NODE_ENV === 'production'` 時に未設定なら 400 ガード拒否する。 |
+| 本番環境での CAPTCHA バイパス | Captcha 未設定時に Noop が動くと攻撃を許す | `NODE_ENV === 'production'` 時に未設定なら `500 CAPTCHA_UNCONFIGURED` で拒否する。 |
 | 複数プロキシ経由時の HTTPS 判定誤り | カンマ区切りヘッダーでリダイレクトループ発生 | 最外郭プロキシが設定した最先頭値を評価する。 |
 | HMAC 鍵変更による一時的制限リセット | 秘密鍵変更時にキーが変わり一時的にカウントがリセットされる | 重大障害ではないため Graceful Reset として許容する。 |
-| **失敗試行レート制限の上限保証不足** | 並行リクエストでハード上限（5回）を超えて認証処理が実行される可能性 | **実行枠予約方式を導入**（認証実行前に hits 行ロック＋単一トランザクションで `failed_count + active_count < hard_limit` を原子確保）。`rate_limit_reservations` テーブル新設・予約IDによる所有権分離で実装。 |
-| 予約枠リーク（内部エラー・プロセス停止で解放されない） | 予約が永久に残り上限を誤って圧迫 | 予約固有の `expires_at` TTL で自動 `expired` 遷移、バッチ削除スクリプトの物理削除、アプリ側 `try...finally` での明示的 release。 |
-| 成功時リセットと失敗確定の競合 | 成功優先の仕様が破綻し失敗カウントが残存 | 予約ID・世代番号・状態ガードで所有権完全分離。成功時は `failed_count=0` リセットのみ（行削除不行き）。コミット順序により「成功優先クリア（失敗→成功）」または「成功前開始の失敗は記録（成功→失敗）」に収束。 |
-| 古いウィンドウの失敗確定が新しいウィンドウを破壊 | 成功リセット後に古い予約が失敗確定し、新しい failed_count を汚染 | **単調増加世代番号**でウィンドウ分離。古い予約の `generation` は新しい行と一致せず、UPDATE は 0 行更新で安全に無視。 |
-| バッチ削除がアクティブ予約を持つ行を誤削除 | 実行中の認証処理の予約が消え、上限判定が狂う | `rate_limit_hits` 削除条件に `NOT EXISTS active予約` を必須化。予約は独立した `expires_at` で管理。 |
-| 認証処理タイムアウト・強制終了での予約未解放 | 5 秒超過や SIGKILL で予約が active のまま残る | 予約固有 TTL（ウィンドウ + 30 秒）で自動 expired 遷移。延長機構は入れず、安全側（上限厳しく）に倒れる設計。 |
-| 予約取得時のシリアライゼーション失敗 | 高並行時にトランザクション競合で失敗 | `REPEATABLE READ` + 行ロックで直列化。失敗時は即時リトライ（最大 3 回、指数バックオフ）。 |
+| 失敗試行キーの同時到着 | 失敗時加算方式では境界付近で一時的に判定揺れが起こりうる | `rl:login:ip` の全リクエスト制限を先に適用し、失敗試行キーは事前判定＋失敗時加算で運用。閾値・挙動をテストで固定する。 |
 
 ---
 
@@ -713,3 +531,5 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build
 | v1.7.4 | 2026-10-11 | 予約所有権の保証・成功時リセットの分離・世代番号導入・TTL競合解決 | 予約方式を予約ID（`reservation_id`）・専用テーブル `rate_limit_reservations`・世代番号（`generation`）方式に再設計。所有権保証：A/B/C 同時並行で各予約を自分の ID のみ確定・解放。成功時リセット：行削除せず `failed_count=0` のみ、`generation` 不変で並行予約を保持。古い予約の失敗確定は同一 `generation` なら加算、分離必要なら `generation++` 選択肢を記載。TTL：予約固有 `expires_at` とウィンドウ `window_expires_at` を分離、バッチはアクティブ予約なし行のみ削除。DoD・テスト・実装手順・リスク表を全面同期。 |
 | v1.7.5 | 2026-10-11 | 予約所有権の保証・成功時リセットの分離・世代番号導入・TTL競合解決・改訂履歴同期 | v1.7.4 の内容に加え、改訂履歴の同期。 |
 | v1.7.6 | 2026-10-11 | 予約取得の原子性・状態遷移の原子性・単調増加世代番号・認証実行タイムアウト・Cookie規格確定 | 予約確保を hits 行ロック＋単一トランザクション（REPEATABLE READ）で原子化し、同時到着時の上限厳守を保証。状態遷移に `status='active'` ガードを追加し、二重確定・二重 release を防止。世代番号を単調増加（再利用なし）とし、ウィンドウ期限切れ後の再生成時に古い予約が新しいカウントを破壊しないことを保証。認証実行 5 秒タイムアウト・予約 TTL 猶予 30 秒・延長なしでプロセス強制終了も安全側に倒れる設計。Cookie Prefixes 参照を `draft-ietf-httpbis-layered-cookies-02` §4.1.3.2 に確定。DoD・テスト・実装手順・リスク表を全面同期。 |
+| v1.8 | 2026-10-12 | 外部レビュー反映 | 決定ID再採番、閾値整合、IP/プロキシ信頼規則、CSP/CORS/Cache-Control/Vary/Permissions-Policy、P2-07/08 を追記。 |
+| v1.9 | 2026-10-12 | 整合修正 | 仕様書・実装計画との矛盾を解消。予約方式/`rate_limit_reservations` 記述を削除し、`rate_limit_hits` 単一方式へ統一。`RATE_LIMIT_SECRET` 必須化、Purge 5テーブル化、テスト・手順・リスク表を同期。 |
