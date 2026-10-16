@@ -1,6 +1,6 @@
 # oauth — 超本格アカウント・認証システム
 
-メールアドレス認証 / パスワード認証 / ソーシャルログイン（Google・GitHub・Discord）/ Passkey / TOTP 2FA / セッション管理 / デバイス管理 / セキュリティログ / テーマ設定を統合した認証システムです。
+メールアドレス認証 / パスワード認証 / 自作サービス向けOAuth 2.0・OIDC Provider（実装中）/ ソーシャルログイン（Google・GitHub・Discord、Phase 4）/ Passkey / TOTP 2FA / セッション管理 / デバイス管理 / セキュリティログ / テーマ設定を統合する認証システムです。
 
 「ユーザーが操作できる便利さ」と「認証情報が漏洩・盗難された場合の被害を最小化すること」の両立を目標に、**失敗時・攻撃時・復旧時まで含めて**設計しています。
 
@@ -8,10 +8,14 @@
 
 | ドキュメント | 内容 |
 |---|---|
-| `超本格アカウント・認証システム仕様書 v1.1.md` | 仕様書の正規典（全68章） |
-| `実装計画.md` v1.4 | フェーズ分解・DoD・決定事項（C-xx / D-xx） |
+| `超本格アカウント・認証システム仕様書 v1.2.md` | 仕様書の正規典（全69章） |
+| `実装計画.md` v1.6 | フェーズ分解・DoD・決定事項（C-xx / D-xx） |
 | `実装Todo.md` | タスク一覧（進捗は同ファイルのチェックボックスで管理） |
 | `docs/phase0-設計.md` | Phase 0 の設計ドキュメント（実装前に作成） |
+| `docs/phase2.5-実装計画.md` | 自作サービス向けOAuth 2.0 / OIDC Providerの詳細計画と実装状況 |
+| `docs/phase2.5-gate-a.md` | Gate A（統合Spike・adapter評価・統合判断） |
+| `docs/phase2.5-threat-model.md` | OIDC Providerの脅威モデル |
+| `docs/phase2.5-review.md` | セキュリティレビュー・依存監査・相互運用レポート |
 | `.env.example` | 環境変数の定義 |
 
 ## 技術スタック
@@ -26,7 +30,8 @@
 | ORM | Drizzle ORM + drizzle-kit |
 | UI | Tailwind CSS v4（CSS変数 + `data-theme`） |
 | テスト | Vitest（unit / integration / security）、Playwright（e2e） |
-| レート制限キャッシュ | Redis（未設定時は PostgreSQL へフォールバック） |
+| レート制限ストア | PostgreSQL（Phase 2の正本。Redisは予約方式の同等性を実装するまで未使用） |
+| OAuth/OIDC Provider | `oidc-provider` 9.x（Node HTTP custom server、PostgreSQL adapter） |
 | セッション | 自前（サーバーサイドセッション。HttpOnly Cookie + PostgreSQL。**Resend は担当しない**） |
 | メール | Resend（送信のみ） |
 | パッケージマネージャ | pnpm |
@@ -60,6 +65,21 @@ pnpm seed
 pnpm dev            # http://localhost:3000
 ```
 
+## 自作サービスからOIDCログイン
+
+M2.5のProviderは`OIDC_ISSUER`が設定されているときだけ有効になります。開発時は次の手順で署名鍵・暗号鍵を生成し、`.env`へ設定してからマイグレーションを適用します。
+
+```bash
+pnpm oidc:keygen                 # 表示された値を安全に保管し、OIDC_*へ設定
+pnpm db:migrate
+pnpm oidc:client add --name "My Service" --operator "My Service株式会社" --type confidential --redirect-uri "https://service.example/callback" --scope openid,profile,email
+pnpm dev
+```
+
+`OIDC_ISSUER`は`NEXT_PUBLIC_APP_URL`と同じ固定originにします。登録後はclient IDとDiscovery URL (`/.well-known/openid-configuration`) をRPへ設定し、Authorization Code + PKCE `S256`で接続します。confidential secretは生成時に一度だけ表示し、RPのサーバー側secret storeへ保存してください。ブラウザpublic clientには`--type public --web-origin https://service.example`を指定します。CORSは登録したoriginだけ許可します。`--operator`（運営者名、必須）は同意画面と接続済みサービスの一覧に表示されます。client secret は平文ではなく HMAC ダイジェストのみ保存され、生成時に一度だけ表示されます。許可 scope や redirect URI の変更は `pnpm oidc:client update --client-id <id> [--scope ...] [--add-redirect-uri ...]` で行います（scope を広げても既存の同意は変わらないため、新 scope は再同意時にのみ付与されます）。
+
+Providerは`pnpm dev` / `pnpm start`のcustom Node server経由で動作します。TLSをreverse proxyで終端する本番環境では、proxyがHostと`X-Forwarded-Proto`を上書きし、信頼proxy hopを環境変数へ明示してください。署名鍵をrotationするときは新しいprivate JWKと旧public JWKを同時に`OIDC_JWKS_JSON`へ渡し、旧鍵は発行済みID Tokenの有効期限を過ぎるまで残します。`OIDC_ADAPTER_ENCRYPTION_KEY`を変更すると暗号化されたclient secretとProvider stateを復号できなくなるため、データ移行と同時に行ってください。`oidc-provider` v9 は logger 注入に非対応（`debug` のみ）のため、本番では `DEBUG` が `oidc-provider` 名前空間を有効にしていると起動時に失敗します。アカウント停止・削除時はadapter がaccess token/grantの解決を拒否し、interactionでは遮断イベントを記録します。
+
 docker へ権限が無い環境では、执行用户在 `docker` グループへ追加してください（`sudo usermod -aG docker $USER` → 再ログイン）。現在のシェルだけで済ませる場合は `sg docker -c "docker compose up -d"` のように実行できます。
 
 ## コマンド
@@ -71,14 +91,17 @@ docker へ権限が無い環境では、执行用户在 `docker` グループへ
 | `pnpm lint` | ESLint（`eslint-config-next` + `eslint-plugin-security`） | 実装済 |
 | `pnpm typecheck` | `tsc --noEmit` | 実装済 |
 | `pnpm test` / `pnpm test:unit` | Vitest（unit） | 実装済 |
-| `pnpm test:security` | セキュリティテスト（9ファイル・40テスト） | **実装済・全green** |
-| `pnpm test:integration` | 統合テスト | **実装済・全green** |
-| `pnpm test:e2e` | Playwright E2E | Phase 3 以降で追加 |
+| `pnpm test:security` | セキュリティテスト | **実装済・green** |
+| `pnpm test:integration` | PostgreSQL統合テスト | **実装済・green** |
+| `pnpm test:e2e` | OIDC の実HTTP E2E（`vitest run src/test/e2e`） | **実装済・green** |
 | `pnpm db:migrate` | マイグレーション適用 | 実装済 |
 | `pnpm db:studio` | Drizzle Studio | 実装済 |
 | `pnpm seed` | `roles` の投入（idempotent） | 実装済 |
 | `pnpm secrets:gen` | 開発用シークレット生成（`.env` へ） | 実装済 |
-| `pnpm test:integration` / `test:security` / `test:e2e` | 各テスト | Phase 1 以降で追加 |
+| `pnpm oidc:keygen` | OIDC署名鍵とadapter暗号鍵を生成（値を一度だけ表示） | 実装済 |
+| `pnpm oidc:client add ...` | 事前登録clientを追加（confidential secretは一度だけ表示） | 実装済 |
+| `pnpm oidc:client update --client-id <id> ...` | client の名称・運営者・許可scope・redirect URI・CORS origin を変更 | 実装済 |
+| `pnpm oidc:client rotate-secret ...` / `revoke ...` | confidential secretのrotation / client失効 | 実装済 |
 
 ## ディレクトリ構成
 
@@ -91,7 +114,8 @@ oauth/
 │  ├─ 0002_04_sessions.sql
 │  ├─ 0003_05_tokens.sql
 │  ├─ 0004_08_security_events.sql
-│  └─ 0005_10_rate_limit.sql
+│  ├─ 0005_10_rate_limit.sql
+│  └─ 0006_phase2_security.sql
 ├─ drizzle.config.ts
 ├─ docs/phase0-設計.md       # フェーズごとの設計ドキュメント
 ├─ messages/                 # UI文言・メール文面（Phase 1-B で追加）
@@ -102,10 +126,13 @@ oauth/
 ├─ src/
 │  ├─ app/
 │  │  ├─ layout.tsx          # テーマ初期適用（FOUC 防止）
-│  │  ├─ page.tsx            # 土台確認用（Phase 1 でログイン導線へ）
+│  │  ├─ page.tsx            # ログイン後トップ（未ログインは/loginへ）
+│  │  ├─ login/page.tsx      # ログイン
+│  │  ├─ register/page.tsx   # 登録
 │  │  ├─ globals.css         # CSS変数 light/dark
 │  │  └─ api/
 │  │     └─ auth/
+│  │        ├─ csrf/route.ts
 │  │        ├─ register/route.ts
 │  │        ├─ login/route.ts
 │  │        ├─ logout/route.ts
@@ -131,7 +158,7 @@ oauth/
 │  │  │  ├─ session.ts        # セッション生成・取得・無効化
 │  │  │  ├─ cookie.ts         # __Host-auth_session / __Host-auth_anon
 │  │  │  ├─ csrf.ts           # CSRF 共通パイプライン
-│  │  │  ├─ rate-limit.ts     # レート制限（PG フォールバック）
+│  │  │  ├─ rate-limit.ts     # PostgreSQL正本のレート制限・予約方式
 │  │  │  ├─ security-events.ts # security_events 記録
 │  │  │  ├─ reauth.ts         # 再認証（5分犹予）
 │  │  │  ├─ tokens/           # トークン生成・ハッシュ・検証
@@ -154,13 +181,23 @@ oauth/
 | `IP_HASH_PEPPER` | 必須（32文字以上） | IP の HMAC 鍵 | Phase 0（定義）/ Phase 1-C |
 | `CSRF_SECRET` | 必須（32文字以上） | CSRF token の HMAC 鍵 | Phase 0（定義）/ Phase 1-C |
 | `TOTP_ENCRYPTION_KEY` | 必須（Base64 32B） | TOTP 秘密鍵の AES-256-GCM 暗号化 | Phase 0（定義）/ Phase 5 |
+| `NEXT_PUBLIC_APP_NAME` | 任意（既定 `oauth`） | 画面タイトル、ヘッダー、メールに表示するアプリ名 | Phase 2 |
 | `NEXT_PUBLIC_APP_URL` | 必須（URL） | アプリ基準 URL | Phase 0 |
-| `REDIS_URL` | 任意 | レート制限用 Redis。未設定なら PostgreSQL へフォールバック | Phase 1-C |
+| `OIDC_ISSUER` | OIDC有効化時必須 | 固定issuer origin。`NEXT_PUBLIC_APP_URL`と同一origin | Phase 2.5 |
+| `OIDC_JWKS_JSON` | OIDC有効化時必須 | RS256 private JWK 1個 + rotation期間中に保持する旧public JWK | Phase 2.5 |
+| `OIDC_ADAPTER_ENCRYPTION_KEY` | OIDC有効化時必須（Base64 32B） | client secretとOIDC code/token/interactionをAES-256-GCM暗号化し、ID検索にHMAC | Phase 2.5 |
+| `RATE_LIMIT_SECRET` | 任意（32文字以上。未設定時は `TOKEN_PEPPER`） | レート制限キーのHMAC | Phase 2 |
+| `ALLOWED_ORIGINS` | 任意 | CORS許可Origin（既定はアプリOrigin） | Phase 2 |
+| `CSRF_TRUSTED_ORIGINS` | 任意 | 状態変更要求の信頼Origin（既定はアプリOrigin） | Phase 2 |
+| `ALLOWED_HOSTS` | 任意 | HTTPS redirectで許可するHost | Phase 2 |
+| `TRUSTED_PROXY_HOPS` | 任意（既定 `0`） | 信頼するproxy hop数。0では転送ヘッダーを信頼しない | Phase 2 / Phase 9で環境設定 |
+| `TRUSTED_PROXY_HEADER` | 任意 | 信頼proxyが設定するクライアントIP header | Phase 2 / Phase 9で環境設定 |
+| `REDIS_URL` | 任意 | Redis接続先（Phase 2の認証レート制限では未使用） | 将来拡張 |
 | `HIBP_TIMEOUT_MS` | 任意（既定 1500） | 漏洩パスワード検査のタイムアウト | Phase 1-A |
 | `BREACH_CHECK_FAIL_OPEN` | 任意（既定 true） | HIBP 障害時に登録を許可するか | Phase 1-A |
 | `RESEND_API_KEY` / `EMAIL_FROM` | 遅延評価 | メール送信 | Phase 1-B |
 | `GOOGLE_*` / `GITHUB_*` / `DISCORD_*` | 遅延評価 | OAuth 資格情報（Apple は除外: C-01） | Phase 4 |
-| `TURNSTILE_SECRET_KEY` | 遅延評価 | CAPTCHA | Phase 2（hook 用意）/ Phase 9（実接続） |
+| `TURNSTILE_SECRET_KEY` | 遅延評価 | CAPTCHA。Phase 2では未設定時500、secret設定済みでprovider未接続なら503 | Phase 2 / Phase 9（実接続） |
 | `WEBAUTHN_RP_ID` / `WEBAUTHN_RP_NAME` / `WEBAUTHN_ORIGIN` | 遅延評価 | Passkey の rpID / rpName / origin。**環境ごとに別値を明示設定**（host からの自動導出はしない） | Phase 6 |
 | `NODE_ENV` | 任意（既定 `development`） | 実行モード | Phase 0 |
 | `POSTGRES_USER` / `POSTGRES_DB` / `POSTGRES_PASSWORD` | ローカル専用 | `compose.yaml` が参照（アプリ側では参照しない） | Phase 0 |
@@ -197,7 +234,8 @@ oauth/
 |---|---|---|---|
 | M0 | Phase 0 | プロジェクト土台 | **完了** |
 | M1 | Phase 1 | メール/パスワード認証（登録・ログイン・確認・リセット・セッション・CSRF・レート制限） | **完了** |
-| M2 | Phase 2 | セキュリティヘッダー・CORS・HTTPS 強制 | 未着手 |
+| M2 | Phase 2 | Webセキュリティ・CSRF・レート制限・期限切れデータ削除 | **完了（2026-10-12）** |
+| M2.5 | Phase 2.5 | 自作サービス向けOAuth 2.0 / OIDC Provider、scope・同意管理・client registry | **実装中** |
 | M3 | Phase 3 | UI / テーマ / 通知メール / デバイス管理 | 未着手 |
 | M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | 未着手 |
 | M5 | Phase 5 | TOTP 2FA + Recovery Codes | 未着手 |
@@ -285,18 +323,14 @@ users_role_id_idx / users_deleted_at_idx
 
 ### 既知の制約・注意点
 
-- **セキュリティヘッダー / CSP nonce は未実装**（Phase 2）。現状 `layout.tsx` のテーマ script は静的文字列だが、CSP 導入時に nonce を header と紐付ける必要がある
-- `lint` の warning 9 件は、型安全な `Record` 参照などに対する静的解析の指摘。エラーではない
+- Turnstile実provider接続とproxy環境ごとの信頼設定はPhase 9で行う。Phase 2では本番で未設定/未接続を拒否し、`TRUSTED_PROXY_HOPS=0`を既定値とする。
+- `lint` はwarning 21件（既存箇所を含む）で、errorは0件。warningはビルドを止めない
 - Docker 権限が無い環境では `sg docker -c "docker compose ..."` のようにグループを明示する必要がある
 - `docker compose` の DB は `127.0.0.1:5432` にのみバインドしている。外部公開しないこと
 
-### 次のステップ（Phase 1）
+### 次のステップ（Phase 3）
 
-1. Argon2id（`@node-rs/argon2`、`m=19456,t=2,p=1` 起步で負荷テスト）、`strength.ts`、HIBP k-anonymity（timeout は fail-open）
-2. メールトークン（256bit・hash 保存・1回限り）と Resend 連携
-3. セッション Cookie（`__Host-auth_session` / `__Host-auth_anon`）、CSRF 共通パイプライン、レート制限（Redis + PostgreSQL フォールバック）、`security_events`
-4. エンドポイント: register / login / logout / me / verify-email / resend / forgot / reset / change / set / reauth
-5. テスト: `uniq` / `session-fixation` / `token-reuse` / `enumeration` / `rate-limit` / `csrf` / `session-attr`
+1. UI基盤、テーマ切替、通知、デバイス管理
 
 ---
 
@@ -310,7 +344,7 @@ users_role_id_idx / users_deleted_at_idx
 | メールトークン | `tokens/{generate,hash,verify}.ts`（256bit・SHA-256 hash・TTL・1回限り・`purpose` 流用防止）、`email/{send,templates}.ts` + Resend 6種テンプレ |
 | セッション | `cookie.ts`（`__Host-auth_session` / `__Host-auth_anon` HttpOnly/Secure/SameSite=Lax）、`session.ts`（create/get/**rotate**/touch/revoke/revokeAll・HMAC-SHA256）、マイグレーション（`absolute_expires_at` 90日・`replaced_by`・`revoke_reason`・`ip_hash`/`ip_masked`・`device_name`・`reauth_verified_at`・`totp_pending`） |
 | CSRF | 共通パイプライン（Origin→CSRF→認証→再認証→認可→入力検証）、**Route Handler と Server Action の双方から同一検証関数**、OAuth コールバックのみ `state`+`nonce` で例外 |
-| レート制限 | Redis ＋ PostgreSQL フォールバック（`rate_limit_hits`）、`config/rate-limits.ts` に全13キー集約、段階的対応（CAPTCHA hook） |
+| レート制限 | PostgreSQL正本（`rate_limit_hits`）、`config/rate-limits.ts` に全13キー、HMAC識別子、ログイン失敗枠予約、CAPTCHA hook |
 | セキュリティイベント | 16種 Enum、全認証フローで記録、`logger.ts` に OAuth 機密値（`code`/`state`/`nonce`/`code_verifier` 等）の redact キー追加 |
 | エンドポイント | register / login / logout / me / verify-email / resend / forgot / reset / change / set / reauth / email/change / email/change/confirm / account（DELETE） |
 | テスト | **セキュリティテスト 9ファイル・40テスト全 green**、単体テスト 13+8、Argon2idベンチマーク 61.79ms / 19MB |
@@ -323,7 +357,7 @@ users_role_id_idx / users_deleted_at_idx
 | email変更確認で `emailVerified: true` 未設定 / 旧メール通知なし | `emailVerified=true`・`oldEmailNotifiedAt` 設定・旧メール通知実装 | `src/app/api/auth/email/change/confirm/route.ts` |
 | アカウント削除でトークン失効なし | `invalidateAllUserTokens()` 実装（Phase 1 token テーブル対応） | `src/app/api/auth/account/route.ts` |
 | CSRF が Server Action 経路で未検証 | 共通パイプライン抽出・双方アダプタ実装 | `src/lib/auth/pipeline.ts`、`src/lib/auth/csrf.ts`、`src/lib/api/utils.ts` |
-| レート制限が本番非対応（Redisのみ） | PG フォールバック（atomic upsert）実装 | `src/lib/auth/rate-limit.ts` |
+| レート制限の保存先 | PostgreSQLを正本とし、失敗試行予約をserializable transactionで管理 | `src/lib/auth/rate-limit.ts` |
 | 列挙攻撃対策（username/email） | 23505 違反を統一メッセージに変換 | `src/app/api/auth/register/route.ts` |
 
 ### マイグレーション履歴の修復
@@ -346,13 +380,11 @@ pnpm db:migrate      → migrations applied successfully（fresh / existing 両�
 pnpm build           → ✓ Generating static pages
 ```
 
-### 次のステップ（Phase 2）
+### Phase 2 の実装と確認
 
-1. Security Headers（HSTS/CSP/X-Content-Type-Options/Referrer-Policy/Permissions-Policy）
-2. HTTPS リダイレクト強制・CORS 許可リスト（ワイルドカード禁止）
-3. レート制限キー拡張（計画8.6 表の 13 キー全実装）
-4. `scripts/purge-expired.ts`（期限切れ token/session の cron 削除）
-5. テスト: `web.test.ts`（headers/cors/injection/clickjacking/Open Redirect）、`idor.test.ts`
+- セキュリティヘッダー、CSP nonce、HTTPS/Host検証、CORS/CSRF信頼境界、13キーのPostgreSQLレート制限を実装。
+- CAPTCHA hookと期限切れデータ削除を実装し、CAPTCHA単体テストとTEMPテーブルを使うPostgreSQL統合テストを確認。
+- `実装Todo.md` のP2-01〜P2-11とPhase 2 DoDを完了。設計・検証記録は [`docs/phase2-設計.md`](docs/phase2-設計.md) を参照。
 
 ---
 

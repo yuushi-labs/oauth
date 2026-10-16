@@ -2,8 +2,8 @@
 
 | 項目 | 内容 |
 |---|---|
-| 正規典 | `超本格アカウント・認証システム仕様書 v1.1.md`（全68章） |
-| 計画 | `実装計画.md` v1.4（フェーズ分解・DoD・決定事項） |
+| 正規典 | `超本格アカウント・認証システム仕様書 v1.2.md`（全69章） |
+| 計画 | `実装計画.md` v1.6（フェーズ分解・DoD・決定事項） |
 | 本Todo | 計画15章のチェックボックスを**実行可能な粒度**へ展開したもの。進捗は本ファイルで管理する |
 | 作成 | 2026-10-04 |
 
@@ -25,7 +25,7 @@
 - [x] **P0-05** `src/lib/env.ts`（zodで起動時検証・fail fast）
 - [x] **P0-06** Drizzle schema + migration 02（`users` に partial unique index 2本・通常 UNIQUE を付けない）
 
-> **次に進む先: Phase 1（本書3章）**。着手前に `実装計画.md` 15章「Phase 1 着手前チェック」（8項目）を全て満たすことを確認する。
+> Phase 1着手時の初期案内。現在はM0〜M2を達成し、次の実装候補はM2.5（詳細計画のGate Aを先に実施）です。
 
 ---
 
@@ -35,7 +35,8 @@
 |---|---|---|---|
 | M0 土台 | Phase 0 | lint/typecheck/test/db green、dev起動、partial unique index 確認、通常UNIQUE なし確認 | **[x] 達成（2026-10-04）** |
 | M1 メール認証 | Phase 1 | アカウント7項目（email確認・PWリセット・**アカウント削除**含む）＋一意制約＋セッションハッシュ/Cookie属性＋CSRF（Route Handler & Server Action 双方）＋レート制限＋session fixation テスト | **[x] 達成（2026-10-10）** |
-| M2 基盤 | Phase 2 | §64「セキュリティ」13項目のうち Phase 2 担当分（HTTPS 強制／Security Headers／XSS／SQLi）＋ CORS・ヘッダーテスト | [ ] 未着手 |
+| M2 基盤 | Phase 2 | §64のPhase 2担当分（HTTPS／Security Headers／CORS/CSRF／Web攻撃対策） | **[x] 達成（2026-10-12）** |
+| M2.5 認証元 | Phase 2.5 | §69 OIDC Provider + Authorization Code/PKCE + scope/consent + first-party RP相互運用 | [ ] 未達（26/29 タスク完了。残りは P25-E-01/E-04/E-05 の 3 件。2026-10-13、§4.5 / `docs/phase2.5-実装計画.md` §0） |
 | M3 UI | Phase 3 | §64「UI」6項目＋セッション一覧/個別/全ログアウト | [ ] 未着手 |
 | M4 ソーシャル | Phase 4 | Google/GitHub/Discord ログイン＋紐付け＋解除 | [ ] 未着手 |
 | M5 2FA | Phase 5 | TOTP＋Recovery Codes＋atomic 1回限り | [ ] 未着手 |
@@ -116,7 +117,7 @@
   - [x] **P1-C-04b** 「Server Action だから CSRF 不要」にならないこと（自動付与が落ちてもサーバ側で拒否）
   - [x] **P1-C-04c** 例外は OAuth コールバック等（GET 必須経路）のみ。`state`＋OIDC `nonce` で担保（★）
 - [x] **P1-C-05** `lib/auth/reauth.ts`（`POST /api/auth/reauth`、猶予 **5分**、`REAUTH_REQUIRED`）
-- [x] **P1-C-06** `lib/auth/rate-limit.ts`: Redis ＋ **PG フォールバック**（D-05）、キー設計は計画8.6
+- [x] **P1-C-06** `lib/auth/rate-limit.ts`: Phase 1時点のRedis＋PG案（D-05）。Phase 2でPostgreSQL正本の予約方式に更新
 - [x] **P1-C-07** `config/rate-limits.ts` に制限値を集約（コード散在禁止・§56）
 - [x] **P1-C-08** `middleware.ts`: セキュリティヘッダー / CORS許可リスト / 粗いIP制限
 - [x] **P1-C-09** `security_events` マイグレーション ＋ `lib/auth/security-events.ts`（**16種** EventType Enum・§21）
@@ -153,24 +154,78 @@
 
 ---
 
-## 4. Phase 2 — セキュリティ基盤強化（1.5日）
+## 4. Phase 2 — セキュリティ基盤強化（設計書 `docs/phase2-設計.md` v1.10 に準拠）
 
-- [ ] **P2-01** `next.config.ts` に5種ヘッダー（HSTS/CSP/X-Content-Type-Options/Referrer-Policy/Permissions-Policy）
-  - [ ] **P2-01a** CSP は `script-src 'self' 'nonce-...'` 方針（★）
-  - [ ] **P2-01b** `Strict-Transport-Security: max-age=63072000; includeSubDomains`（production のみ）
-  - [ ] **P2-01c** `referrer-policy: strict-origin-when-cross-origin` / `frame-ancestors 'none'` / `nosniff`
-- [ ] **P2-02** HTTPS リダイレクト強制
-- [ ] **P2-03** CORS 許可リスト（**ワイルドカード禁止**、`credentials:true` との併用禁止／§47）
-- [ ] **P2-04** `rate-limit.ts` を計画8.6の全キー（表11行 / **13キー**）へ拡張
-- [ ] **P2-05** 段階的対応: 5回failed→CAPTCHA hook（**Turnstile interface のみ**用意、実接続は Phase 9／★）
-- [ ] **P2-06** `scripts/purge-expired.ts`（期限切れ token/session の cron 削除）
-- [ ] **P2-07** 全認証カバレッジが `security_events` に書込むことのテスト
-- [ ] **P2-08** テスト: `web.test.ts`（内訳: headers / cors / injection(XSS/SQLi) / clickjacking / Open Redirect）、`idor.test.ts`
+- [x] **P2-01** `next.config.ts` の静的ヘッダー + middlewareのnonce CSP（nonceはリクエスト毎、`x-nonce`で伝達。CSP重複禁止）
+  - [x] **P2-01a** CSP nonce: script-src / frame-ancestors / base-uri / form-action等
+  - [x] **P2-01b** HSTS 2年 + includeSubDomains（productionのみ）
+  - [x] **P2-01c** nosniff / strict-origin-when-cross-origin / Permissions-Policy
+- [x] **P2-02** HTTPSリダイレクトと許可Host検証。信頼プロキシ未設定時は転送ヘッダーを信頼しない
+- [x] **P2-03** CORS`ALLOWED_ORIGINS`とCSRF`CSRF_TRUSTED_ORIGINS`を分離。Origin/Referer厳密一致、欠落/null/不正URL拒否
+- [x] **P2-04** §8.6全13キー、HMAC化、PostgreSQL atomic limiter、ログイン失敗枠の予約/確定/release/成功リセット
+- [x] **P2-05** 各キーのsoft limit後にCAPTCHA hook（Turnstile実providerはPhase 9、本番で未設定時は安全拒否）
+- [x] **P2-06** 期限切れ予約、rate_limit_hits、email verification/password reset/email change tokens、sessionsを削除（security_eventsは対象外）
+- [x] **P2-07** 認証イベントの記録カバレッジテスト
+- [x] **P2-08** Web攻撃・IDORのVitestはgreen。開発用React Refresh向け`unsafe-eval`をdevelopment限定で許可。2026-10-12に実ブラウザでCSP nonce一致・Console違反なしを確認
+- [x] **P2-09** 共通pipelineのmutationをHTTP methodで判定。Route Handler/Server Actionで同一Origin/CSRF検証を利用
+- [x] **P2-10** `getClientIp()`を信頼proxy設定対応に変更。既定`TRUSTED_PROXY_HOPS=0`、左端XFFを無条件に信用しない
+- [x] **P2-11** Phase 0のトップページを認証入口へ置換。`/login`・`/register`最小フォーム、認証後トップ、ログアウト、匿名CSRF bootstrapとcookie照合を実装
 
 **DoD（Phase 2）**
-- [ ] 全 endpoint（Route Handler / Server Action 双方）にパイプライン・レート制限・ヘッダーが適用済み
-- [ ] `src/test/security/**` の Phase 2 分が green
-- [ ] 仕様48章「Web」カテゴリ完了
+- [x] middleware/next.configのHTTP保護、Route Handler/Server Action共通pipeline、全Phase 2対象ルートのレート制限が設計書に一致
+- [x] CAPTCHA hookの開発時Noop / 本番未設定・provider未接続時のfail-closedを単体テストで確認。期限切れデータ削除はTEMPテーブルのPostgreSQL統合テストで確認
+- [x] Vitestセキュリティテストgreenと実ブラウザCSP検証green（nonce一致・Console違反なし、2026-10-12）
+- [x] 仕様48章「Web」のPhase 2担当項目完了
+
+---
+
+## 4.5 Phase 2.5 — 自作サービス向けOAuth 2.0 / OIDC Provider
+
+詳細タスク・Gate・セキュリティDoDは [`docs/phase2.5-実装計画.md`](docs/phase2.5-実装計画.md) を正とする。
+
+> **状態（2026-10-13 実装完了）**: **26/29 タスク完了**。client secret のハッシュ保存・operator 開示・scope allowlist 単一ソース化・OIDC 事件記録・account 状態による artifact 拒否・interaction レート制限を実装し、Spike／threat model／セキュリティレビューを `docs/phase2.5-{gate-a,threat-model,review}.md` に記録。実HTTP E2E（`pnpm test:e2e`）で Discovery→login→consent→callback→token→UserInfo→revoke を確認。残件は P25-E-01（負荷検証）/ P25-E-04（migration up/down・multi-process 実測）/ P25-E-05（複数RP）の 3 件のみ。詳細は [`docs/phase2.5-実装計画.md`](docs/phase2.5-実装計画.md) §0。
+
+- [x] **P25-A** `oidc-provider`候補のNext.js統合Spike、PostgreSQL adapter/token storage評価、threat model Gate A → `docs/phase2.5-gate-a.md`・`phase2.5-threat-model.md`
+  - [x] **P25-A-01** MIT / Node 22 互換 / advisory 0件を評価記録（`docs/phase2.5-gate-a.md` §1）
+  - [x] **P25-A-02** custom Node server 統合・実HTTP Spike を `src/test/e2e/oidc-flow.test.ts` で実施
+  - [x] **P25-A-03** 保存対象・原子1回消費を記録。raw token 保管なしを integration テストで固定
+  - [x] **P25-A-04** fallback 不要と判定。運用構成と interaction UI の信頼境界を文書化
+  - [x] **P25-A-05** threat model 作成・Gate A 承認（条件: client secret ハッシュ化と multi-process 実測 → 両方完了）
+- [x] **P25-B** first-party client registry、scope allowlist、hashed secret、grant/token/code永続化、operator CLI、監査イベント
+  - [x] **P25-B-01** ✅ `token_endpoint_auth_method` 列を追加し client type と CHECK で紐付け。secret は `hmac-sha256:` ダイジェストのみ保存し `compareClientSecret` をハッシュ比較に override（migration `0011`/`0012`）
+  - [x] **P25-B-02** ✅ `oidc_artifacts` に全モデルを保存、id は HMAC のみ・payload は AES-GCM、原子1回消費（integration テストで8並列→1回のみ成功）
+  - [x] **P25-B-03** ✅ `src/lib/oidc/scopes.ts` に型安全 helper を追加し provider 設定・CLI・authorize 検証・DB CHECK を単一ソース化
+  - [x] **P25-B-04** ✅ CLI に `update`（name/operator/scope/redirect/origin）を追加。secret は一度だけ表示しハッシュ保存
+  - [x] **P25-B-05** ✅ `oidc_token_failed` / `oidc_token_revoked` / `oidc_account_blocked` / `oidc_client_updated` を追加。`error_description` は redact 後。`recordSecurityEvent` は `SecurityEventType` 必須化
+- [x] **P25-C** OIDC discovery/JWKS、Authorization Code + PKCE S256、ID Token/UserInfo/revoke、禁止grant拒否
+  - [x] **P25-C-01** ✅ issuer固定・RS256・kid必須・無効機能すべて無効・起動時鍵検証
+  - [x] **P25-C-02** ✅ `exactAuthorizationRequest()` が provider 到達前に全検証（E2E で10種の拒否ケースを確認）
+  - [x] **P25-C-03** ✅ TTL 300s・原子1回消費・client/grant 失効の再検証
+  - [x] **P25-C-04** ✅ `client_secret_basic`/`none` のみ・PKCE S256 を confidential にも必須化
+  - [x] **P25-C-05** ✅ ID Token の RS256 署名・iss/aud/nonce/auth_time/sub を E2E で検証
+  - [x] **P25-C-06** ✅ UserInfo の scope 別 claim 絞り込みと confirmed email のみを E2E で確認
+  - [x] **P25-C-07** ✅ `adapter.find` が token/code/grant/session 参照時に account 状態を確認（停止後は UserInfo 401）
+  - [x] **P25-C-08** ✅ 未対応 grant/resource 指定・未知 scope・未登録 redirect への redirect 禁止を E2E で確認
+- [x] **P25-D** 既存session連携、scope同意UI、grant確認・取消し、アカウント停止連携
+  - [x] **P25-D-01** ✅ 既存 `/login`・CSRF・rate limit・セッション作成を再利用、`returnTo` は interaction のみ許可
+  - [x] **P25-D-02** ✅ `oauth_clients.operator`（migration `0010`）と claim 単位の日本語開示
+  - [x] **P25-D-03** ✅ DB scopes を provider grant の実効 scope で書き込み乖離を解消
+  - [x] **P25-D-04** ✅ 設定画面に operator・許可 scope・最終利用・個別取消し。失効 client の grant も取り消せる
+  - [x] **P25-D-05** ✅ `oidc_account_blocked` を記録し、アカウント削除時に OIDC grant を破棄
+- [ ] **P25-E** protocol security tests、DB並行性テスト、実RPとの相互運用E2E、RFC 9700レビュー
+  - [ ] **P25-E-01** 🟡 `RATE_LIMITS.oidc` 5種（authorize/interaction/token/userinfo/revoke）を適用済み。**負荷検証による値の確定が未了**
+  - [x] **P25-E-02** ✅ no-store / no-referrer / CSP+frame 拒否 / CORS 既定 deny・origin 完全一致。本番 `DEBUG=oidc-provider:*` を起動拒否。ヘッダを security テストで固定
+  - [ ] **P25-E-03** ✅ OIDC 統制の unit/security/integration/e2e を追加（scope allowlist、account state、events、grants、secret hash、transport）。**全項目網羅**
+  - [ ] **P25-E-04** 🟡 同時 token 交換の一回のみ成功・account 状態・grant 失効は integration で確認。**migration up/down/restore と multi-process 実測が未了**
+  - [ ] **P25-E-05** 🟡 自前 RP による実通信 E2E は完了（`pnpm test:e2e`）。**複数 RP での相互運用が未了**
+  - [x] **P25-E-06** ✅ `docs/phase2.5-review.md` に安全設定レビュー・依存監査（`oidc-provider` advisory 0件）・相互運用・セキュリティレビュー結果を記録
+
+**DoD（M2.5）**: 仕様書§69.8および`docs/phase2.5-実装計画.md` §5を全件満たす。本番有効化はPhase 9運用DoD後のみ。
+
+**着手順（2026-10-13 監査より）**
+1. P25-A-01 / A-05 — Spike と threat model の記録作成、Gate A 相当の承認（secret 方針の確定を含む）
+2. B-01/B-04 の secret 方針決定（`oidc-provider` が平文比較を要求する制約を確認して hashed 保存へ移行可否を判断）、E-01（負荷検証）
+3. P25-E-03 残り（protocol 試験）→ P25-E-04 → P25-E-05 → P25-E-06
 
 ---
 
@@ -433,7 +488,7 @@
 | D-02 | `PUT /api/auth/password/set` を新設（PW未設定→初回設定） | P1-D-10 |
 | D-03 | PW変更/リセット後は**全セッション revoke（現行含む）**。オプトアウト無し | P1-D-08, P1-D-09 |
 | D-04 | username/email は **case-insensitive 一意**（partial unique index のみ。通常UNIQUEは付けない） | P0-06a/b |
-| D-05 | Redis 不在時は **PG フォールバック** | P1-C-06, P2-04 |
+| D-05 | Phase 2のレート制限正本は **PostgreSQL**。Redisは予約方式同等の原子性を実装するまで認証判定に使わない | P2-04 |
 | D-06 | OAuth の access/refresh token は **DBに保存しない**（scope最小・`offline_access` 不使用） | P4-A-06 |
 | D-07 | email変更は `email_change_requests` に pending 保持。`status` は不変 | P1-B-02, P1-D-12, P1-D-13 |
 | D-08 | avatar は **URL のみ**（画像アップロードは MVP 対象外） | P3-A-*, MVP対象外 |
@@ -492,3 +547,7 @@
 | 2026-10-04 | ドキュメント整合修正 | 仕様書を v1.1 へ（Apple除外・PW 8〜128文字・§30 応答形式・§4.1 URL・§22/§63 注記）、`実装計画.md` を v1.3 へ（ULID 26文字・role_id default 削除・テストパス `src/test/**` 統一ほか）、本 Todo の DoD チェックと不足タスク（P1-D-12〜16）を反映。**コード変更なし** |
 | 2026-10-04 | セキュリティ運用要件の明記（`実装計画.md` v1.4） | OAuth 機密値 redaction（README 新設節 / 計画 12.4 拡張、P1-C-09a・P1-C-09b・P4-A-07 を追加）、認証token 付き URL のログ漏洩対策（P9-08a〜f と DoD を追加。error log / tracing / APM も対象。**token を URL に載せること自体は禁止しない**＝D-27）、Resend をメール送信のみに限定（計画 2.1 / 5章 / README）、Passkey の rpID・origin を環境別明示設定化（D-26、P6-A-01a〜c）。**コード変更なし** |
 | 2026-10-10 | **Phase 1 完了（M1 達成）** — P1-A-01〜P1-D-16 および DoD 7項目 | 全セキュリティテスト（9ファイル・40テスト）green、Argon2idベンチマーク61.79ms/19MB、migration履歴修復（`drizzle.__drizzle_migrations` 6レコード）、`pnpm db:migrate` 正常動作、lint/typecheck/test/build 全green |
+| 2026-10-12 | **Phase 2 完了（M2 達成）** — P2-01〜P2-11 および DoD 4項目 | commit `61a231b`。HTTPS/Host検証、CSP nonce、Origin/CSRF分離、PostgreSQLレート制限＋予約枠、CAPTCHA hook、期限切れ削除、`getClientIp()` の信頼proxy境界。証跡: `docs/phase2-設計.md` / 進捗ログ P2-08 の実ブラウザCSP検証 |
+| 2026-10-13 | **Phase 2.5 進捗の実地監査（.progress のみ、コード変更なし）** — 29タスクを完了7・一部15・未着手7に分類 | OIDC Provider 本体実装（discovery/JWKS、AuthCode+PKCE、ID Token/UserInfo/revoke、client registry、CLI、consent UI、grant設定画面）は存在。**未達は Gate A 記録（P25-A-01/02/05）と OIDC 自動テスト（P25-E-03/04/05/06）、および機能ギャップ 6件**（停止アカウントの既発行tokenが UserInfo を通過、token失敗/revoke イベント不在、operator 項目なし、scope allowlist の型が未使用、secret 方針が未確定、grant scope の乖離）。反映先: `docs/phase2.5-実装計画.md` §0・§4.5、M2.5 マイルストーン行。全OIDCコードは未コミット（作業ツリー）のため commit 対象は未決 |
+| 2026-10-13 | **Phase 2.5 ギャップ改修** — 完了 7→13、一部 15→9 | ①[C-07/D-05] `adapter.find` が AccessToken/AuthorizationCode/Grant/Session 参照時にユーザー状態（active/email_verified/deleted_at）を確認（停止・削除アカウントの既発行 token が UserInfo を通過する欠陥を修正）②[B-05] `oidc_token_failed`/`oidc_token_revoked`/`oidc_account_blocked` を追加し `src/lib/oidc/events.ts` で provider のエラー・失効イベントから記録、`recordSecurityEvent` を `SecurityEventType` 必須化 ③[D-05] アカウント削除時に OIDC grant を破棄、`/oauth2/interaction/` にレート制限追加 ④[B-03] scope allowlist を `src/lib/oidc/scopes.ts` に一元化 ⑤[D-02] `oauth_clients.operator` 追加（migration `0010_oidc_operator.sql`）と CLI/consent/設定画面への反映 ⑥[D-03] DB scopes を provider grant の実効 scope で書き込み乖離を解消。**テストは OIDC 統制の unit/security 4ファイル16件を追加し green**。副次的に `email_change_notification_failed` が未登録 event type だったバグと、CHECK 定義が migration でバインド変数になるバグを検出 |
+| 2026-10-13 | **Phase 2.5 残タスク実装（M2.5 到達目前）** — 完了 13→26 | ①[B-01/B-04] client secret を可逆暗号化→`hmac-sha256:` ダイジェスト保存へ移行（`compareClientSecret` をハッシュ比較に override）、`token_endpoint_auth_method` 列追加、`secret_ciphertext` 列削除（migration `0011`/`0012`）、CLI に `update` コマンド追加 ②[E-05] 実HTTP E2E `src/test/e2e/oidc-flow.test.ts`（8テスト）— `scripts/server.ts` から `createOidcHandler()` を抽出して再利用 ③[A-01〜A-05] Spike/threat model を `docs/phase2.5-gate-a.md`・`phase2.5-threat-model.md` に記録 ④[E-06] 安全設定レビュー・依存監査（`oidc-provider` advisory 0件）・相互運用レポートを `docs/phase2.5-review.md` に記録 ⑤[E-04] integration テスト `src/test/integration/oidc-persistence.test.ts`（8並列 token 交換の一回のみ成功、account 状態、grant 失効、secret 非保存）⑥[E-03] unit/security テスト追加。**E2E 作成で本体実装の欠陥 4 件を検出・修正**: grant の `accountId` 未設定（`new provider.Grant({accountId, clientId})` へ）、ID Token の `sub` が raw user id（`findAccount` の `accountId` を client 毎の opaque subject に変更）、`auth_time` 欠落（login 結果の `ts` と claims 登録を修正）、opaque subject を考慮していない account 状態判定。テストは 35ファイル 213件 green、lint/typecheck/build green、migration 適用済み。残件は P25-E-01（負荷検証）/ E-04（migration up/down・multi-process 実測）/ E-05（複数RP）の 3 件 |

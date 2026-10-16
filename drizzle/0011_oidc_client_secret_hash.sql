@@ -1,0 +1,6 @@
+ALTER TABLE "oauth_clients" DROP CONSTRAINT "oauth_clients_secret_type_chk";--> statement-breakpoint
+ALTER TABLE "oauth_clients" ADD COLUMN "token_endpoint_auth_method" text NOT NULL DEFAULT 'client_secret_basic';--> statement-breakpoint
+ALTER TABLE "oauth_clients" ADD COLUMN "secret_hash" text;--> statement-breakpoint
+UPDATE "oauth_clients" SET "token_endpoint_auth_method" = 'none' WHERE "client_type" = 'public';--> statement-breakpoint
+UPDATE "oauth_clients" SET "secret_hash" = 'hmac-sha256:invalidated-rotate-required' WHERE "client_type" = 'confidential' AND "secret_hash" IS NULL;--> statement-breakpoint
+ALTER TABLE "oauth_clients" ADD CONSTRAINT "oauth_clients_secret_type_chk" CHECK (("oauth_clients"."client_type" = 'public' AND "oauth_clients"."secret_hash" IS NULL AND "oauth_clients"."token_endpoint_auth_method" = 'none') OR ("oauth_clients"."client_type" = 'confidential' AND "oauth_clients"."secret_hash" IS NOT NULL AND "oauth_clients"."token_endpoint_auth_method" = 'client_secret_basic'));

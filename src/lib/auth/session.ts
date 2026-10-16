@@ -23,14 +23,21 @@ const SESSION_MAX_AGE = 30 * 24 * 60 * 60; // 30日
 const SESSION_ABSOLUTE_MAX_AGE = 90 * 24 * 60 * 60; // 90日
 const LAST_SEEN_THRESHOLD = 15 * 60 * 1000; // 15分
 
-function getClientIp(headers: Headers): string {
-  const forwarded = headers.get('x-forwarded-for');
-  if (forwarded) {
-    const parts = forwarded.split(',');
-    const first = parts[0];
-    if (first) return first.trim();
+export function getClientIp(headers: Headers, socketIp?: string | null): string {
+  const env = getEnv();
+  const trustedHeader = env.TRUSTED_PROXY_HEADER?.toLowerCase();
+  if (env.TRUSTED_PROXY_HOPS > 0 && trustedHeader) {
+    const forwarded = headers.get(trustedHeader);
+    const values = forwarded?.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+    const index = Math.max(0, values.length - env.TRUSTED_PROXY_HOPS - 1);
+    if (values[index]) return values[index];
   }
-  return headers.get('x-real-ip') ?? '0.0.0.0';
+  // Forwarding headers are attacker controlled unless a trusted proxy is explicitly configured.
+  return socketIp?.trim() || '0.0.0.0';
+}
+
+export function getRequestClientIp(request: { headers: Headers; ip?: string | null }): string {
+  return getClientIp(request.headers, request.ip);
 }
 
 function getUserAgent(headers: Headers): string {
@@ -47,7 +54,7 @@ async function createSessionInternal(
   const env = getEnv();
   const sessionHash = createHmac('sha256', env.SESSION_PEPPER).update(token).digest('hex');
   const csrfSecret = randomBytes(32).toString('base64url');
-  const ip = getClientIp(request.headers);
+  const ip = getRequestClientIp(request);
   const ipMasked = maskIp(ip);
   const ipHash = hashIp(ip, env.IP_HASH_PEPPER);
   const userAgent = getUserAgent(request.headers);

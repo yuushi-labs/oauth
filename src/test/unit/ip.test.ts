@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hashIp, maskIp } from '@/lib/util/ip';
+import { getClientIp } from '@/lib/auth/session';
+import { resetEnvCache } from '@/lib/env';
+
+beforeEach(() => resetEnvCache());
+afterEach(() => { vi.unstubAllEnvs(); resetEnvCache(); });
 
 describe('maskIp', () => {
   it('IPv4 は末尾を xxx にマスクする（仕様20）', () => {
@@ -27,5 +32,20 @@ describe('hashIp', () => {
 
   it('pepper が異なれば hash も異なる', () => {
     expect(hashIp('203.0.113.45', 'pepper-a')).not.toBe(hashIp('203.0.113.45', 'pepper-b'));
+  });
+});
+
+describe('getClientIp trust boundary', () => {
+  it('ignores forwarding headers unless a trusted proxy is configured', () => {
+    vi.stubEnv('TRUSTED_PROXY_HOPS', '0');
+    resetEnvCache();
+    expect(getClientIp(new Headers({ 'x-forwarded-for': '198.51.100.50', 'x-real-ip': '198.51.100.51' }))).toBe('0.0.0.0');
+  });
+
+  it('extracts the client value from a configured trusted header and hop count', () => {
+    vi.stubEnv('TRUSTED_PROXY_HOPS', '2');
+    vi.stubEnv('TRUSTED_PROXY_HEADER', 'x-forwarded-for');
+    resetEnvCache();
+    expect(getClientIp(new Headers({ 'x-forwarded-for': '198.51.100.50, 10.0.0.1, 10.0.0.2' }))).toBe('198.51.100.50');
   });
 });

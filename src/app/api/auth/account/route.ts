@@ -4,7 +4,9 @@ import { softDeleteUser } from '@/lib/db/queries/users';
 import { findUserById } from '@/lib/db/queries/users';
 import { revokeAllSessions } from '@/lib/auth/session';
 import { invalidateAllUserTokens } from '@/lib/db/queries/tokens';
+import { revokeUserOidcGrants } from '@/lib/oidc/grants';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
+import { getRequestClientIp } from '@/lib/auth/session';
 import { sendAccountDeletionEmail } from '@/lib/auth/email/templates';
 
 export async function DELETE(request: NextRequest) {
@@ -19,8 +21,9 @@ export async function DELETE(request: NextRequest) {
       await softDeleteUser(user.id);
       await revokeAllSessions(user.id, 'account_delete');
       await invalidateAllUserTokens(user.id);
+      const revokedClients = await revokeUserOidcGrants(user.id);
 
-      await recordSecurityEvent('account_deleted', user.id, request.headers.get('x-forwarded-for') ?? '', request.headers.get('user-agent') ?? '');
+      await recordSecurityEvent('account_deleted', user.id, getRequestClientIp(request), request.headers.get('user-agent') ?? '', { revokedOidcClients: revokedClients.length });
 
       const fullUser = await findUserById(user.id);
       if (fullUser) {

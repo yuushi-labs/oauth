@@ -9,7 +9,7 @@
 
 ### 1.1 目的
 
-認証システム（仕様書 全68章）の土台を作り、**後続の全フェーズが迷わず拡張できる状態**にする。具体的には以下を満たす。
+認証システム（作成当時の仕様書68章。現行v1.2はM2.5を加え全69章）の土台を作り、**後続の全フェーズが迷わず拡張できる状態**にする。具体的には以下を満たす。
 
 - ローカルで `pnpm install` から `pnpm dev` まで一連で通る
 - 環境変数の検証（fail fast）、型チェック、単体テストがすべて green になる
@@ -97,7 +97,7 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm db:migrate && pnpm dev  が全�
 | パス | 責務 |
 |---|---|
 | `src/app/layout.tsx` | `<html lang="ja">`、`<head>` にテーマ初期適用の同期インライン script、`globals.css` を import |
-| `src/app/page.tsx` | 土台確認用の最小ページ（Phase 1 でログイン導線へ置換） |
+| `src/app/page.tsx` | 土台確認用の最小ページ。ログイン導線への置換はP2-11で対応 |
 | `src/app/globals.css` | CSS変数 + `[data-theme="dark"]` + Tailwind v4 の `@theme inline` |
 | `src/lib/env.ts` | 環境変数の zod 検証（必須／任意／遅延評価の3区分） |
 | `src/lib/errors.ts` | §58 の API 応答形式と error code Enum |

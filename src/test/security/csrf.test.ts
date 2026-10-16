@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { createHmac } from 'node:crypto';
 import { validateCsrfToken, deriveCsrfToken } from '@/lib/auth/pipeline';
 import type { SessionData } from '@/lib/auth/session';
 
@@ -38,6 +39,15 @@ describe('Security - CSRF Protection (validateCsrfToken)', () => {
   it('accepts valid CSRF token', () => {
     const validToken = deriveCsrfToken(mockSession);
     expect(() => validateCsrfToken(validToken, mockSession)).not.toThrow();
+  });
+
+  it('requires an anonymous CSRF token to match a signed HttpOnly cookie', () => {
+    const token = 'anonymous-csrf-token';
+    const signature = createHmac('sha256', 'c'.repeat(43)).update(token).digest('hex');
+    const cookie = `${token}.${signature}`;
+    expect(() => validateCsrfToken(token, null, cookie)).not.toThrow();
+    expect(() => validateCsrfToken('attacker-token', null, cookie)).toThrow('CSRF トークンが不一致です');
+    expect(() => validateCsrfToken(token, null, `${token}.invalid`)).toThrow('CSRF トークンが不一致です');
   });
 
   it('deriveCsrfToken produces consistent output', () => {

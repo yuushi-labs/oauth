@@ -4,13 +4,11 @@ import { ApiError } from '@/lib/errors';
 import { timingSafeEqualStr } from '@/lib/util/crypto';
 import type { SessionData } from '@/lib/auth/session';
 import type { User } from '@/lib/db/schema';
+import { isTrustedOrigin } from '@/lib/auth/origin';
+import { getAnonCsrfSecret } from '@/lib/auth/cookie';
 
-const ALLOWED_ORIGINS = [process.env.NEXT_PUBLIC_APP_URL].filter(Boolean) as string[];
-
-export function isAllowedOrigin(origin: string | null): boolean {
-  if (!origin) return true;
-  if (ALLOWED_ORIGINS.length === 0) return true;
-  return ALLOWED_ORIGINS.includes(origin);
+export function isAllowedOrigin(origin: string | null, referer?: string | null): boolean {
+  return isTrustedOrigin(origin, referer);
 }
 
 export function deriveCsrfToken(session: SessionData): string {
@@ -20,8 +18,8 @@ export function deriveCsrfToken(session: SessionData): string {
     .digest('hex');
 }
 
-export function validateOriginHeader(origin: string | null): void {
-  if (origin && !isAllowedOrigin(origin)) {
+export function validateOriginHeader(origin: string | null, referer?: string | null): void {
+  if (!isAllowedOrigin(origin, referer)) {
     throw new ApiError('CSRF_FAILED', '不正なリクエスト元です');
   }
 }
@@ -29,6 +27,7 @@ export function validateOriginHeader(origin: string | null): void {
 export function validateCsrfToken(
   csrfToken: string | null,
   session: SessionData | null,
+  anonCookieValue: string | null = null,
 ): void {
   if (!csrfToken) {
     throw new ApiError('CSRF_FAILED', 'CSRF トークンが不足しています');
@@ -38,6 +37,12 @@ export function validateCsrfToken(
     if (!timingSafeEqualStr(csrfToken, expected)) {
       throw new ApiError('CSRF_FAILED', 'CSRF トークンが不一致です');
     }
+    return;
+  }
+
+  const expected = getAnonCsrfSecret(anonCookieValue);
+  if (!expected || !timingSafeEqualStr(csrfToken, expected)) {
+    throw new ApiError('CSRF_FAILED', 'CSRF トークンが不一致です');
   }
 }
 
@@ -61,8 +66,11 @@ export type PipelineContext = {
 
 export type CorePipelineDeps = {
   getOrigin: () => string | null;
+  getReferer?: () => string | null;
+  getMethod: () => string;
   getCsrfToken: () => string | null;
   getCookieToken: () => string | null;
+  getAnonCookieToken: () => string | null;
   getContentType: () => string | null;
   parseJsonBody: () => Promise<unknown>;
   getSession: (token: string) => Promise<SessionData | null>;
@@ -74,13 +82,11 @@ export async function runCorePipeline(
   options: PipelineOptions,
   handler: (ctx: PipelineContext) => Promise<Response>,
 ): Promise<Response> {
-  const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(
-    (deps.getContentType() ?? '').toUpperCase() ? 'POST' : 'GET'
-  );
+  const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(deps.getMethod().toUpperCase());
 
   const origin = deps.getOrigin();
   if (isMutation) {
-    validateOriginHeader(origin);
+    validateOriginHeader(origin, deps.getReferer?.() ?? null);
   }
 
   const cookieToken = deps.getCookieToken();
@@ -95,7 +101,7 @@ export async function runCorePipeline(
 
   if (isMutation) {
     const csrfToken = deps.getCsrfToken();
-    validateCsrfToken(csrfToken, session);
+    validateCsrfToken(csrfToken, session, deps.getAnonCookieToken());
   }
 
   if (options.requireAuth && !session) {

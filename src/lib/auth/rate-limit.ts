@@ -1,135 +1,178 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
-import { rateLimitHits } from '@/lib/db/schema';
-import { getEnv } from '@/lib/env';
-import type Redis from 'ioredis';
+import { rateLimitHits, rateLimitReservations } from '@/lib/db/schema';
+import { protectRateLimitKey } from '@/lib/auth/rate-limit-keys';
 
-type RateLimitResult = {
+export type RateLimitResult = {
   allowed: boolean;
   remaining: number;
   resetAt: number;
+  count: number;
+  captchaRequired: boolean;
+  logRateLimited: boolean;
 };
 
-class PgRateLimiter {
-  async check(key: string, windowMs: number, max: number): Promise<RateLimitResult> {
-    const now = Date.now();
-    const windowExpiresAt = new Date(now + windowMs);
+export type FailedAttemptReservation = {
+  reservationId: string;
+  key: string;
+  generation: number;
+  captchaRequired: boolean;
+  resetAt: number;
+};
 
-    const db = getDb();
-    const result = await db
-      .insert(rateLimitHits)
-      .values({ key, count: 1, windowExpiresAt })
-      .onConflictDoUpdate({
-        target: rateLimitHits.key,
-        set: {
-          count: sql`CASE
-            WHEN ${rateLimitHits.windowExpiresAt} <= ${now} THEN 1
-            ELSE ${rateLimitHits.count} + 1
-          END`,
-          windowExpiresAt: sql`CASE
-            WHEN ${rateLimitHits.windowExpiresAt} <= ${now} THEN ${windowExpiresAt}
-            ELSE ${rateLimitHits.windowExpiresAt}
-          END`,
-        },
-      })
-      .returning({ count: rateLimitHits.count, windowExpiresAt: rateLimitHits.windowExpiresAt });
+export type ReservationResult =
+  | { allowed: true; reservation: FailedAttemptReservation }
+  | { allowed: false; count: number; resetAt: number; logRateLimited: boolean };
 
-    const row = result[0];
-    if (!row) {
-      return { allowed: true, remaining: max - 1, resetAt: now + windowMs };
-    }
-    const count = row.count;
-    const expiresAt = row.windowExpiresAt.getTime();
-
-    if (count > max) {
-      return { allowed: false, remaining: 0, resetAt: expiresAt };
-    }
-
-    return { allowed: true, remaining: max - count, resetAt: expiresAt };
-  }
+function getSqlState(error: unknown): string | null {
+  if (!error || typeof error !== 'object') return null;
+  if ('code' in error && typeof error.code === 'string') return error.code;
+  if ('cause' in error) return getSqlState(error.cause);
+  return null;
 }
 
-class RedisRateLimiter {
-  private client: Redis | null = null;
-  private connected = false;
+/** PostgreSQL is the authoritative store so backend outages fail closed, never open. */
+export class RateLimiter {
+  async check(key: string, windowMs: number, max: number, softLimit = max): Promise<RateLimitResult> {
+    const db = getDb();
+    const now = new Date();
+    const proposedExpiry = new Date(now.getTime() + windowMs);
+    const storageKey = protectRateLimitKey(key);
+    const [row] = await db.insert(rateLimitHits).values({
+      key: storageKey,
+      failedCount: 1,
+      windowExpiresAt: proposedExpiry,
+    }).onConflictDoUpdate({
+      target: rateLimitHits.key,
+      set: {
+        generation: sql`CASE WHEN ${rateLimitHits.windowExpiresAt} <= ${now} THEN ${rateLimitHits.generation} + 1 ELSE ${rateLimitHits.generation} END`,
+        failedCount: sql`CASE WHEN ${rateLimitHits.windowExpiresAt} <= ${now} THEN 1 ELSE ${rateLimitHits.failedCount} + 1 END`,
+        windowExpiresAt: sql`CASE WHEN ${rateLimitHits.windowExpiresAt} <= ${now} THEN ${proposedExpiry} ELSE ${rateLimitHits.windowExpiresAt} END`,
+      },
+    }).returning({ count: rateLimitHits.failedCount, expires: rateLimitHits.windowExpiresAt });
 
-  private async getClient() {
-    if (this.client) return this.client;
-
-    const env = getEnv();
-    const redisUrl = env.REDIS_URL;
-    if (!redisUrl) return null;
-
-    try {
-      const { Redis } = await import('ioredis');
-      this.client = new Redis(redisUrl, {
-        maxRetriesPerRequest: 1,
-        retryStrategy: () => null,
-        lazyConnect: true,
-      });
-      await this.client.connect();
-      this.connected = true;
-      return this.client;
-    } catch {
-      this.connected = false;
-      return null;
-    }
+    const count = row?.count ?? 1;
+    const resetAt = row?.expires.getTime() ?? proposedExpiry.getTime();
+    const allowed = count <= max;
+    return {
+      allowed,
+      remaining: Math.max(0, max - count),
+      resetAt,
+      count,
+      captchaRequired: count >= softLimit,
+      logRateLimited: count === max + 1,
+    };
   }
 
-  async check(key: string, windowMs: number, max: number): Promise<RateLimitResult> {
-    const client = await this.getClient();
-    if (!client) {
-      return { allowed: true, remaining: max, resetAt: Date.now() + windowMs };
-    }
+  async reserveFailedAttempt(
+    key: string,
+    windowMs: number,
+    max: number,
+    softLimit: number,
+  ): Promise<ReservationResult> {
+    const db = getDb();
+    const storageKey = protectRateLimitKey(key);
+    const now = new Date();
+    const expiry = new Date(now.getTime() + windowMs);
 
-    const now = Date.now();
-    const windowSec = Math.ceil(windowMs / 1000);
-    const redisKey = `rl:${key}`;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await db.transaction(async (tx) => {
+      await tx.insert(rateLimitHits).values({
+        key: storageKey,
+        failedCount: 0,
+        windowExpiresAt: expiry,
+      }).onConflictDoNothing();
 
-    try {
-      const count = await client.eval(
-        `local current = redis.call('INCR', KEYS[1])
-         if current == 1 then
-           redis.call('EXPIRE', KEYS[1], ARGV[1])
-         end
-         local ttl = redis.call('TTL', KEYS[1])
-         return {current, ttl}`,
-        1,
-        redisKey,
-        windowSec.toString(),
-      ) as [number, number];
-
-      const [currentCount, ttl] = count;
-      const resetAt = now + ttl * 1000;
-
-      if (currentCount > max) {
-        return { allowed: false, remaining: 0, resetAt };
+      let [hit] = await tx.select().from(rateLimitHits).where(eq(rateLimitHits.key, storageKey)).for('update').limit(1);
+      if (!hit) throw new Error('Rate limit counter could not be initialized');
+      if (hit.windowExpiresAt.getTime() <= now.getTime()) {
+        const [updated] = await tx.update(rateLimitHits).set({
+          generation: hit.generation + 1,
+          failedCount: 0,
+          windowExpiresAt: expiry,
+        }).where(eq(rateLimitHits.key, storageKey)).returning();
+        hit = updated ?? hit;
       }
 
-      return { allowed: true, remaining: max - currentCount, resetAt };
-    } catch {
-      return { allowed: true, remaining: max, resetAt: now + windowMs };
+      const [active] = await tx.select({ count: sql<number>`count(*)::int` })
+        .from(rateLimitReservations)
+        .where(and(
+          eq(rateLimitReservations.key, storageKey),
+          eq(rateLimitReservations.generation, hit.generation),
+          eq(rateLimitReservations.status, 'active'),
+        ));
+      const activeCount = Number(active?.count ?? 0);
+      const inFlightAndFailed = hit.failedCount + activeCount;
+      if (inFlightAndFailed >= max) {
+        return {
+          allowed: false as const,
+          count: inFlightAndFailed,
+          resetAt: hit.windowExpiresAt.getTime(),
+          logRateLimited: false,
+        };
+      }
+
+      const [reservation] = await tx.insert(rateLimitReservations).values({
+        key: storageKey,
+        generation: hit.generation,
+        expiresAt: new Date(hit.windowExpiresAt.getTime() + 30_000),
+      }).returning({ reservationId: rateLimitReservations.reservationId });
+      if (!reservation) throw new Error('Rate limit reservation could not be created');
+      return {
+        allowed: true as const,
+        reservation: {
+          reservationId: reservation.reservationId,
+          key: storageKey,
+          generation: hit.generation,
+          captchaRequired: hit.failedCount >= softLimit,
+          resetAt: hit.windowExpiresAt.getTime(),
+        },
+      };
+        }, { isolationLevel: 'serializable' });
+      } catch (error) {
+        if (getSqlState(error) !== '40001' || attempt === 2) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 10 * (attempt + 1)));
+      }
     }
-  }
-}
-
-export class RateLimiter {
-  private pgLimiter = new PgRateLimiter();
-  private redisLimiter = new RedisRateLimiter();
-  private useRedis = false;
-
-  constructor() {
-    const env = getEnv();
-    this.useRedis = !!env.REDIS_URL;
+    throw new Error('Rate limit reservation retry exhausted');
   }
 
-  async check(key: string, windowMs: number, max: number): Promise<RateLimitResult> {
-    if (this.useRedis) {
-      const result = await this.redisLimiter.check(key, windowMs, max);
-      if (!result.allowed) return result;
-      if (result.remaining < max) return result;
-    }
-    return this.pgLimiter.check(key, windowMs, max);
+  async releaseReservation(reservation: FailedAttemptReservation): Promise<void> {
+    const db = getDb();
+    await db.update(rateLimitReservations).set({ status: 'released', releasedAt: new Date() })
+      .where(and(
+        eq(rateLimitReservations.reservationId, reservation.reservationId),
+        eq(rateLimitReservations.status, 'active'),
+      ));
+  }
+
+  async finishFailedAttempt(reservation: FailedAttemptReservation, success: boolean): Promise<boolean> {
+    const db = getDb();
+    return db.transaction(async (tx) => {
+      const [locked] = await tx.select().from(rateLimitReservations)
+        .where(eq(rateLimitReservations.reservationId, reservation.reservationId))
+        .for('update').limit(1);
+      if (!locked || locked.status !== 'active') return false;
+      const now = new Date();
+      await tx.update(rateLimitReservations).set(success
+        ? { status: 'released', releasedAt: now }
+        : { status: 'confirmed', confirmedAt: now })
+        .where(and(
+          eq(rateLimitReservations.reservationId, reservation.reservationId),
+          eq(rateLimitReservations.status, 'active'),
+        ));
+      if (success) {
+        await tx.update(rateLimitHits).set({ failedCount: 0 })
+          .where(and(eq(rateLimitHits.key, reservation.key), eq(rateLimitHits.generation, reservation.generation)));
+      } else {
+        const [updated] = await tx.update(rateLimitHits).set({ failedCount: sql`${rateLimitHits.failedCount} + 1` })
+          .where(and(eq(rateLimitHits.key, reservation.key), eq(rateLimitHits.generation, reservation.generation)))
+          .returning({ failedCount: rateLimitHits.failedCount });
+        return updated?.failedCount === 5;
+      }
+      return false;
+    }, { isolationLevel: 'serializable' });
   }
 }
 

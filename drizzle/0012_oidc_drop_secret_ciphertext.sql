@@ -1,0 +1,1 @@
+ALTER TABLE "oauth_clients" DROP COLUMN "secret_ciphertext";

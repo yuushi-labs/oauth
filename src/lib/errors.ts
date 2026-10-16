@@ -12,6 +12,10 @@ export const ERROR_CODES = [
   'INVALID_PROVIDER',
   'INVALID_STATE',
   'INVALID_CODE',
+  'CAPTCHA_REQUIRED',
+  'CAPTCHA_INVALID',
+  'CAPTCHA_UNCONFIGURED',
+  'CAPTCHA_PROVIDER_ERROR',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -30,6 +34,10 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   INVALID_PROVIDER: 404,
   INVALID_STATE: 400,
   INVALID_CODE: 401,
+  CAPTCHA_REQUIRED: 400,
+  CAPTCHA_INVALID: 400,
+  CAPTCHA_UNCONFIGURED: 500,
+  CAPTCHA_PROVIDER_ERROR: 503,
 };
 
 const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
@@ -46,6 +54,10 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   INVALID_PROVIDER: '指定された認証プロバイダーは利用できません。',
   INVALID_STATE: '認証リクエストを検証できませんでした。もう一度お試しください。',
   INVALID_CODE: '認証コードが正しくありません。',
+  CAPTCHA_REQUIRED: '追加の確認が必要です。',
+  CAPTCHA_INVALID: '確認に失敗しました。もう一度お試しください。',
+  CAPTCHA_UNCONFIGURED: '追加確認の設定が完了していません。',
+  CAPTCHA_PROVIDER_ERROR: '追加確認サービスを利用できません。',
 };
 
 export function defaultMessage(code: ErrorCode): string {

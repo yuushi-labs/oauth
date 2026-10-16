@@ -7,6 +7,7 @@ import { updateUser } from '@/lib/db/queries/users';
 import { findUserById } from '@/lib/db/queries/users';
 import { revokeAllSessions } from '@/lib/auth/session';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
+import { getRequestClientIp } from '@/lib/auth/session';
 import { sendChangeNotificationEmail } from '@/lib/auth/email/templates';
 import { z } from 'zod';
 
@@ -35,13 +36,13 @@ export async function POST(request: NextRequest) {
         return failResponse('INVALID_CREDENTIALS', '認証情報が正しくありません', 401);
       }
 
-      const ipHash = request.headers.get('x-forwarded-for') ?? 'unknown';
+      const ip = getRequestClientIp(request);
       const breachResult = await checkBreached(new_password);
       if (breachResult.breached) {
         return failResponse('VALIDATION_ERROR', 'このパスワードは漏洩している可能性があります', 400);
       }
       if (breachResult.failOpen) {
-        await recordSecurityEvent('breach_check_fail_open', null, ipHash, request.headers.get('user-agent') ?? '');
+        await recordSecurityEvent('breach_check_fail_open', null, ip, request.headers.get('user-agent') ?? '');
       }
 
       const passwordHash = await hashPassword(new_password);
@@ -52,12 +53,12 @@ export async function POST(request: NextRequest) {
 
       await revokeAllSessions(user.id, 'password_changed');
 
-      await recordSecurityEvent('password_changed', user.id, ipHash, request.headers.get('user-agent') ?? '');
+      await recordSecurityEvent('password_changed', user.id, ip, request.headers.get('user-agent') ?? '');
 
       await sendChangeNotificationEmail(fullUser.email, {
         change: 'パスワード変更',
         time: new Date().toISOString(),
-        ip: ipHash,
+        ip,
       });
 
       return handleSuccess({ message: 'パスワードを変更しました' });

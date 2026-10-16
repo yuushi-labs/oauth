@@ -1,8 +1,9 @@
 import { getDb } from '@/lib/db/client';
-import { securityEvents } from '@/lib/db/schema';
+import { securityEvents, type SecurityEventType } from '@/lib/db/schema';
+import { maskIp } from '@/lib/util/ip';
 
 export async function recordSecurityEvent(
-  type: string,
+  type: SecurityEventType,
   userId: string | null,
   ip: string,
   userAgent: string,
@@ -14,6 +15,7 @@ export async function recordSecurityEvent(
     userId,
     eventType: type,
     ip,
+    ipMasked: ip ? maskIp(ip) : null,
     userAgent,
     metadata,
     createdAt: new Date(),

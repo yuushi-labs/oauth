@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { generateTotpEncryptionKey } from '@/lib/util/crypto';
 
 const TEST_ENV = {
@@ -11,6 +12,7 @@ const TEST_ENV = {
   NODE_ENV: 'test',
   HIBP_TIMEOUT_MS: '1000',
   BREACH_CHECK_FAIL_OPEN: 'true',
+  OIDC_ADAPTER_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
 };
 
 for (const [key, value] of Object.entries(TEST_ENV)) {

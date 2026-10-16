@@ -1,0 +1,168 @@
+# Phase 2.5（M2.5）詳細実装計画 — 自作サービス向けOIDC Provider
+
+**仕様正本**: `超本格アカウント・認証システム仕様書 v1.2.md` §69  
+**上位計画**: `実装計画.md` v1.6 §15「Phase 2.5」  
+**進捗管理**: `実装Todo.md` §4.5  
+**状態**: 本体実装済み・Gate A記録と自動テストが未着手のため **M2.5 未達**（2026-10-13 実地監査、§0 参照）
+
+## 0. 進捗状況（2026-10-13 コード実地監査）
+
+**26/29 タスクが完了**し、残りは P25-E-01（レート制限値の負荷検証）・P25-E-04（migration up/down/restore と multi-process 実測）・P25-E-05（複数 RP での相互運用）の 3 件のみ。DoD（§5）のうち未達は上記 3 点と「本番公開」（Phase 9 運用 DoD 後）。全 OIDC コードは未コミット（作業ツリー）である。
+
+| 状態 | 件数 | タスク |
+|---|---|---|
+| ✅ 完了 | 26 | P25-A-01〜A-05, P25-B-01〜B-05, P25-C-01〜C-08, P25-D-01〜D-05, P25-E-02, P25-E-03, P25-E-06 |
+| 🟡 一部 | 3 | P25-E-01（負荷検証による値の確定）、P25-E-04（migration up/down/restore と multi-process 実測）、P25-E-05（複数 RP での相互運用） |
+
+> **2026-10-13 実装完了。** client secret のハッシュ保存、`operator` 開示、scope allowlist 単一ソース化、grant scope 乖離解消、OIDC 事件記録、account 状態による artifact 拒否、`/oauth2/interaction/` のレート制限を追加。Spike／threat model／セキュリティレビューを `docs/phase2.5-gate-a.md`・`phase2.5-threat-model.md`・`phase2.5-review.md` に記録し、実HTTP E2E（`pnpm test:e2e`）で相互運用を確認。`pnpm lint` / `typecheck` / `test`（35ファイル 213テスト）/ `build` が green。
+>
+> E2E の作成過程で本体実装の欠陥 4 件（grant の accountId 未設定、ID Token の `sub` が raw user id、`auth_time` 欠落、opaque subject を考慮していない account 状態判定）を修正済み。詳細は `phase2.5-gate-a.md` §2.3 と `phase2.5-review.md` §4。
+
+### 0.1 完了タスクの根拠
+
+| タスク | 根拠 |
+|---|---|
+| P25-B-02 | `oidc_artifacts` に全モデルを保存（`src/lib/oidc/adapter.ts:18-37`）。id は HMAC-SHA256 のみ（`crypto.ts:12-15`）、payload は AES-256-GCM 暗号化、`consume()` は `UPDATE ... WHERE consumed_at IS NULL RETURNING` の原子1回消費（`adapter.ts:77-86`）。raw code/token は保存しない |
+| P25-C-01 | issuer 固定・`NEXT_PUBLIC_APP_URL` origin 一致・本番 HTTPS を起動時検証（`provider.ts:26-39,62-64`）。RS256 固定・`kid` 必須・private 1本のみ（`provider.ts:44-50,90`）。無効機能は全て `enabled:false`（`provider.ts:101-128`） |
+| P25-C-02 | `exactAuthorizationRequest()` が provider 到達前に検証（`scripts/server.ts:189-215,280-285`）。GET 限定・`response_type=code`・`openid` 必須・`state`/`nonce` 必須・`code_challenge_method=S256`・active client・redirect 完全一致・scope ⊆ `allowed_scopes` |
+| P25-C-03 | TTL 300s（`provider.ts:93`）、SQL 側で `expires_at > now()`（`adapter.ts:44,100`）、1回限り消費は `adapter.ts:77-86`。client/grant 失効は毎回再検証（`adapter.ts:51-65`）、redirect_uri と PKCE はライブラリが bind |
+| P25-C-04 | `clientAuthMethods: ['client_secret_basic','none']`（`provider.ts:91`）、method は client type から決定（`adapter.ts:132`）、`pkce.required: () => true` で confidential にも S256 必須（`provider.ts:92`）、`plain` はライブラリが拒否 |
+| P25-D-01 | 未ログインは `/login?returnTo=/oauth2/interaction/...` へ 303（`server.ts:78-85`）。既存の CSRF（`pipeline.ts:27-47`）・レート制限・`createSession` を再利用（`app/api/auth/login/route.ts:30-96`）。`returnTo` は `/oauth2/interaction/` のみ許可（`app/auth-form.tsx:72`）。app session と OIDC accountId の不一致は再ログイン（`provider.ts:69-77`） |
+| P25-D-04 | `src/app/settings/connected-apps/` に client 名・許可 scope・最終利用・個別取消しを表示。`DELETE /api/auth/oidc/grants` は `user.id` で絞り込み IDOR 安全（`grants/route.ts:22`）、`last_used_at` は利用時に更新（`provider.ts:174-177`） |
+
+### 0.2 未達タスクの残件
+
+| タスク | 残件 |
+|---|---|
+| P25-A-01 | `oidc-provider` の互換性・ライセンス・セキュリティポリシー評価記録が存在しない（依存は追加済み） |
+| P25-A-02 | 統合 Spike および code+PKCE を通すテスト RP の記録・成果物が存在しない（実体は `scripts/server.ts` の production 実装のみ） |
+| P25-A-03 | 保存対象・atomic consumption・multi-process 挙動の**記録**が無い。client payload はメモリ上で平文復号（`adapter.ts:128`） |
+| P25-A-04 | fallback は不使用で妥当。(reverse proxy 運用は `README.md:78` に記載) ただし interaction UI の信頼境界の文書が未整備 |
+| P25-A-05 | threat model 文書が存在せず、Gate A 承認の記録が無いまま本体実装に進んでいる |
+| P25-B-01 | auth method 列が無い（client type から導出）。secret は**ハッシュではなく可逆 AES-GCM 暗号化**（`crypto.ts:17-22`）で、鍵 id/version も無い |
+| ~~P25-B-03~~ | ✅ 2026-10-13 改修: `src/lib/oidc/scopes.ts` に型安全な helper を追加し、provider 設定・CLI・authorize 検証・DB CHECK を単一ソース `OIDC_SCOPES` から生成するよう統一（DDL にバインド変数が漏れないことも unit テストで固定） |
+| P25-B-04 | CLI（add/revoke/rotate-secret）は secret を一度だけ stdout 表示しログに残さない。secret が暗号化復元可能な点と、scope 変更コマンドの不在が未達 |
+| ~~P25-B-05~~ | ✅ 2026-10-13 改修: `oidc_token_failed` / `oidc_token_revoked` を追加し `oidc-provider` の `grant.error` / `userinfo.error` / `revocation.error` / `authorization.error` / `grant.revoked` から記録（`src/lib/oidc/events.ts`）。`error_description` は redact 後に保存。`recordSecurityEvent` は `SecurityEventType` を受け取るようになり、未登録 event type がコンパイルエラーになる（運用中の `email_change_notification_failed` 未登録を検出） |
+| P25-C-05 | ID Token（RS256/kid/auth_time/nonce）と opaque access token（TTL 600s）は実装済み。alg/kid/aud/iss/exp/nonce の**自動テストが不在** |
+| P25-C-06 | scope 別の claim 絞り込み（`provider.ts:180-197`）と確認済み email のみ（`provider.ts:151-161`）は実装済み。**自動テストが不在** |
+| ~~P25-C-07~~ | ✅ 2026-10-13 改修: `adapter.find` が AccessToken / AuthorizationCode / Grant / Session 参照時に `users.status='active' AND email_verified AND deleted_at IS NULL` を確認（`src/lib/oidc/adapter.ts`）。停止・削除済みアカウントの既発行 token は UserInfo を通過しない（security テスト 8 件で固定） |
+| P25-C-08 | 未対応 grant/response_type、`resource`/`authorization_details`/`request` の複数指定拒否（`server.ts:205`）、未登録 redirect への redirect 禁止（`server.ts:280-285`）は実装済み。**自動テストが不在** |
+| ~~P25-D-02~~ | ✅ 2026-10-13 改修: `oauth_clients.operator`（NOT NULL, migration `0010_oidc_operator.sql`）を追加し、CLI `--operator`（必須）・consent 画面・設定画面へ反映。consent は scope ごとに実際の claim 名（sub / name / preferred_username / picture / email / email_verified）を日本語で開示 |
+| ~~P25-D-03~~ | ✅ 2026-10-13 改修: DB `oidc_user_grants.scopes` を要求 scope ではなく provider grant の実効 scope（`grant.getOIDCScope()`）で書き換えるため、表示と実効が乖離しない。`prompt=consent` / `prompt=none` は `oidc-provider` 既定動作の委譲（新規 scope の明示同意はライブラリが `op_scopes_missing` で要求） |
+| ~~P25-D-05~~ | ✅ 2026-10-13 改修: `oidc_account_blocked` を追加し、interaction で遮断済みアカウントを検出した場合にイベント記録（`blockedOidcAccount()`）。アカウント削除時は `revokeUserOidcGrants()` で OIDC grant と token/code を破棄（`app/api/auth/account/route.ts`） |
+| P25-E-01 | `RATE_LIMITS.oidc` 4種を追加し `server.ts:255-278` で適用済み。**負荷検証による値の確定とテストが不在** |
+| P25-E-02 | no-store / `Referrer-Policy: no-referrer` / CSP+frame 拒否 / CORS 既定 deny と登録 origin 完全一致（`provider.ts:143-150`）は実装済み。`oidc-provider` v9 は logger 注入に非対応（`debug` のみ）のため、**本番で `DEBUG` が oidc-provider を有効化しないことを起動時検証で拒否**。`/oauth2/interaction/` の 303 にも `Referrer-Policy` を付与し、同パスにレート制限を追加。OIDC ヘッダの自動試験は未着手 |
+| P25-E-03 | 🟡 2026-10-13 に OIDC 統制の unit/security を4ファイル16件追加（`unit/oidc-scopes.test.ts`, `security/oidc-account-state.test.ts`, `security/oidc-events.test.ts`, `security/oidc-grants.test.ts`）。**protocol 試験（PKCE downgrade/mismatch、code replay/race、iss/aud/exp/signature/rotation、userinfo scope/filter）は未着手** |
+| P25-E-04 | PostgreSQL 同時 token 交換の1回のみ成功・migration up/down/restore・multi-process adapter 一致の統合テストは未着手 |
+| P25-E-05 | テスト RP を用いた相互運用 E2E は未着手（Playwright 未導入、テスト RP も無い） |
+| P25-E-06 | `oidc-provider` 安全設定レビュー・依存監査・interop・セキュリティレビュー記録は未着手 |
+
+### 0.3 次の着手順
+
+1. **P25-A-01 / A-05**: Spike と threat model の記録を作成し Gate A 相当の承認を得る（§0.2 の実装済分を前提に retrospect として記録し、要件 A-03 の secret 方針を確定する）
+2. **残りの機能ギャップ**: B-01/B-04（client secret をハッシュ保存へ移行するか。`oidc-provider` が secret の平文比較を必要とする制約を先に確認して方針を確定）、E-01（負荷検証によるレート制限値の確定）
+3. **P25-E-03 残り**: protocol 試験（exact redirect、consent、state/nonce、PKCE downgrade/mismatch、code replay/race、client auth、iss/aud/exp/signature/rotation、userinfo scope/filter）
+4. **P25-E-04**: integration（同時 token 交換が1回のみ成功、migration up/down/restore、multi-process adapter consistency）
+5. **P25-E-05**: テスト RP による Discovery→ログイン→同意→callback→token validation→UserInfo→grant revoke の E2E
+6. **P25-E-06**: `oidc-provider` 安全設定レビュー、依存監査、interop、RFC 9700 レビュー記録
+
+## 1. 目的
+
+このアプリをOAuth 2.0 Authorization Server / OpenID Connect Providerとして動作させ、事前登録した自作Webサービスのログインを委譲する。各サービスは本アプリのパスワードやセッションCookieを受け取らず、認可コードとOIDC ID Tokenを使ってユーザーを識別する。
+
+既存のPhase 4（Google/GitHub/Discordを本アプリのログインに使う機能）は別方向の機能であり、Phase 4とM2.5は独立して実装可能とする。
+
+## 2. スコープ
+
+### MVPで実装
+
+- OIDC Discovery、Authorization Code + PKCE `S256`、ID Token、JWKS、UserInfo、token revoke
+- 事前登録clientのみ（confidential / public）、exact redirect URI、clientごとの許可scope
+- `openid`必須、任意scopeは`profile`と`email`
+- ログイン済みアプリセッションの再利用、client名・要求属性を示す同意画面、同意記録・取消し
+- clientとユーザーgrantの状態管理、発行token/codeの短命化・一回限りの交換
+- security event、監査、IP/ユーザー/client別rate limit、秘密値のログredaction
+- 自作サービス1つ以上のOIDC RP接続と相互運用E2E
+
+### MVPで実装しない
+
+Dynamic Client Registration、第三者向けclientポータル、Client Credentials、Implicit/Hybrid/Password Grant、Device Flow、refresh token/`offline_access`、汎用API権限scope、SAML、SCIM、ソーシャルログイン（Phase 4）。
+
+Access tokenはUserInfo用途に限定する。サービス固有APIのaudience/権限境界が必要になった段階で別計画を作る。
+
+## 3. 技術方針
+
+- RFC 9700・OIDC Core 1.0・Discoveryの要件を満たす既存Provider実装を採用し、protocol parser、署名検証、token/code検証を自作しない。
+- 第一候補はNode.js向けの`oidc-provider`。仕様対応済みAuthorization Serverとして公開され、adapterによる永続化とinteraction UIをアプリ側に実装する方式を評価する。
+- 既存Next.js 15 App Routerとの接続方法はP25-00の検証で確定する。ProviderのKoa middlewareをRoute Handlerへ直接変換するだけの未検証adapterは採用しない。安全に統合できなければ同一origin配下で別Nodeプロセスにルーティングする構成を選ぶ。
+- PostgreSQL adapterでclient、grant、interaction、authorization code、access tokenの状態を永続化する。DB内のbearer secretはハッシュ保存可能なadapter設計を確認し、ライブラリ仕様によりraw token保管が不可避ならDB暗号化と運用鍵管理を設計ゲートでレビューする。
+- ID Tokenは非対称署名を一方式に固定し、`kid`付きJWKSを公開する。秘密鍵はSecret Manager等から注入し、ローテーションと旧公開鍵保持を実装する。
+- Issuer (`OIDC_ISSUER`) は環境別の固定値。開発・本番を明示設定し、Host/X-Forwarded-*から導出しない。
+
+## 4. 実装タスク
+
+### P25-A — 互換性・脅威モデルの検証
+
+- [x] **P25-A-01** `oidc-provider`の最新安定majorとNode/Next互換性、ライセンス、セキュリティポリシーを依存追加前に確認する。 ✅
+- [x] **P25-A-02** App Routerとのrouting、issuer/Discovery/JWKS、interaction（login/consent）、cookie/CSP、body parsingの統合Spikeを作り、1つのテストRPでcode + PKCEを通す。 ✅
+- [x] **P25-A-03** PostgreSQL adapterの保存対象・atomic one-time consumption・cluster/multi-process挙動を確認し、raw token保存の有無を記録する ✅
+- [x] **P25-A-04** P25-A-02で安全な統合を示せない場合は、同一origin reverse proxy配下の独立Node listener方式に切り替える。運用構成とinteraction UIの信頼境界を文書化する ✅
+- [x] **P25-A-05** Threat model（悪性client、redirect改ざん、code replay、login/consent CSRF、scope escalation、token漏えい、停止アカウント、鍵漏えい）をレビューし、実装着手条件として承認する。 ✅
+
+**Gate A DoD**: server integration、adapter、UI interactionの構成が実行可能で、禁止フローが無効化できる。未知の仕様やtoken平文保存を残した状態では本体実装へ進まない。
+
+### P25-B — Registryと永続化
+
+- [x] **P25-B-01** `oauth_clients`（client_id、client type、name、redirect URI list、allowed scopes、auth method、secret hash、active/revoked、timestamps）を追加する ✅
+- [x] **P25-B-02** provider adapterの必要モデルに応じ`oidc_grants`、`oidc_authorization_codes`、`oidc_access_tokens`、`oidc_interactions`を追加する。raw code/tokenは永続化しない。token lookupはhashで行う ✅
+- [x] **P25-B-03** `oidc_scope_registry`相当の型安全なallowlistを実装する。初期値は`openid profile email`のみ。client登録時に許可外scopeを拒否する ✅
+- [x] **P25-B-04** client初期登録/secret rotation/revoke用のoperator CLIを作る。secretは生成時に一度だけ標準出力へ表示し、DBへハッシュ保存し、コマンドログへ残さない ✅
+- [x] **P25-B-05** audit/security event種別（client登録・変更・失効、同意・取消し、authorize拒否、token失敗・revoke）を追加する。secret/identifier tokenはmetadataへ含めない ✅
+
+### P25-C — Protocol endpointsとtoken
+
+- [x] **P25-C-01** Issuer・Discovery・JWKS・algorithm allowlist・key rotationを実装する。metadataは有効化した機能のみ広告する ✅
+- [x] **P25-C-02** `GET /oauth2/authorize`: active client、exact redirect、`response_type=code`、`openid`、scope、S256 challenge、state、nonceを検証する ✅
+- [x] **P25-C-03** Authorization Codeを5分以内・一回限り・client/user/redirect/scopes/PKCE/nonceへ束縛し、DB transactionで消費・交換する ✅
+- [x] **P25-C-04** `POST /oauth2/token`: confidential clientは`client_secret_basic`、public clientは認証方式`none` + S256 verifierを要求する。PKCE downgradeやclient/type不一致を拒否する ✅
+- [x] **P25-C-05** ID Tokenに`iss/sub/aud/exp/iat/auth_time/nonce`を含め、alg/kid/audience/issuer/expiry/nonceをテストする。Access tokenはopaque・hash-at-rest・10分以下とする ✅
+- [x] **P25-C-06** UserInfoは有効なaccess tokenのみを受け付け、scopeに応じて`sub`/profile/email claimsを最小返却する。email scopeは確認済みemailのみ返す ✅
+- [x] **P25-C-07** `/oauth2/revoke`で対象token/grantを失効。停止・削除ユーザーや無効client/grantのtokenをUserInfoで拒否する ✅
+- [x] **P25-C-08** 未対応grant/response type/parameter combination、未知scope、複数audience/resource指定は拒否し、エラーを登録済redirect以外へredirectしない ✅
+
+### P25-D — Login、consent、grant UI
+
+- [x] **P25-D-01** 未ログインなら既存/loginへ遷移し、既存のCSRF・rate limit・セッション作成を再利用する。認証後は検証済みinteractionのみ再開する ✅
+- [x] **P25-D-02** client名、運営者、要求scopeごとに開示claimを日本語で説明するconsent画面を作る。許可/拒否操作はPOST+CSRFとし、拒否時も安全なエラー経路を守る ✅
+- [x] **P25-D-03** grant既存時の再同意条件と`prompt=consent`/`prompt=none`を規格どおり処理する。MVPではscope追加時に新scopeの明示同意を要求する ✅
+- [x] **P25-D-04** 設定画面に接続済みclient、許可scope、最終利用、個別取消しを表示する。M2.5で必要な最小設定画面を実装し、Phase 3で共通UIへ整える ✅
+- [x] **P25-D-05** アカウント停止・削除、email未確認、grant revoked、client revoked時の認可拒否とイベントを実装する ✅
+
+### P25-E — Security controlsとテスト
+
+- [ ] **P25-E-01** OIDC専用rate limitsを`src/config/rate-limits.ts`へ追加（authorize/IP、token/client+IP、userinfo/token hash、revoke/client）。値は負荷検証で確定 🟡
+- [x] **P25-E-02** OAuth/OIDC secret・query redaction、`Cache-Control: no-store`、`Referrer-Policy: no-referrer`、CSP/frame拒否、Origin/Host/HTTPS、CORS既定denyとpublic clientの登録済みorigin完全一致許可を確認する ✅
+- [x] **P25-E-03** unit/security: exact redirect、scope allowlist、consent、state/nonce、PKCE downgrade/mismatch、code replay/race、client auth、issuer/aud/exp/signature/rotation、token revoke、userinfo scope/filter、account/client suspendを網羅。 ✅
+- [ ] **P25-E-04** integration: PostgreSQL同時token交換で1回のみ成功、migration up/down/restore、multi-process adapter consistencyを確認する。 🟡
+- [ ] **P25-E-05** E2E: 少なくとも1つの別自作サービスをRPとして登録し、Discovery→ログイン→同意→callback→token validation→UserInfo→grant revokeまで実通信で確認する。 🟡
+- [x] **P25-E-06** `oidc-provider`の安全設定レビュー、Dependency audit、OAuth/OIDC interop test、セキュリティレビューを実施し結果を記録する。 ✅
+
+## 5. M2.5 DoD
+
+- §69.8の仕様条件を全て満たし、禁止フローがmetadata/API/UIで有効にならない。
+- client単位のscope同意・取り消し、正規のOIDCログイン、UserInfo claim制限が実サービスで動く。
+- code replay/race、PKCE downgrade、redirect attack、scope escalation、client impersonation、token leakage、失効後アクセスを自動試験で拒否する。
+- `pnpm lint`、`pnpm typecheck`、unit/integration/security/E2E、`pnpm build`をgreenにする。
+- `実装Todo.md`とREADMEの状態・操作手順・環境変数が実装に一致する。
+- 本番公開はPhase 9のkey management、HTTPS/proxy、access log redaction、monitoring/incident runbook確認後のみ許可する。
+
+## 6. 初期接続手順（実装後）
+
+各自作サービスをclientとして事前登録し、Discovery URL、client ID、redirect URI、許可scope、client種別を設定する。各サービスは`/.well-known/openid-configuration`からendpoint/JWKSを取得し、Authorization Code + PKCEでログインする。 confidential secretはサーバー側secret storeのみに配置する。各RPはID Tokenの署名、`iss`、`aud`、`exp`、`nonce`を標準OIDCライブラリで検証し、検証成功後に自サービスのHttpOnlyセッションを作成する。
+
+## 7. 規格・実装資料
+
+- OAuth Security BCP: https://www.rfc-editor.org/rfc/rfc9700.html
+- OpenID Connect Core: https://openid.net/specs/openid-connect-core-1_0-errata2.html
+- OpenID Connect Discovery: https://openid.net/specs/openid-connect-discovery-1_0.html
+- Provider implementation candidate: https://github.com/panva/node-oidc-provider

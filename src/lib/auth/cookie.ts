@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { randomBytes, createHmac } from 'node:crypto';
 import { getEnv } from '@/lib/env';
+import { timingSafeEqualStr } from '@/lib/util/crypto';
 
 const SESSION_COOKIE = '__Host-auth_session';
 const ANON_COOKIE = '__Host-auth_anon';
@@ -11,9 +12,19 @@ function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';
 }
 
+// Browsers reject __Host- cookies unless Secure is set, which makes them
+// unusable on the HTTP localhost origin used by `next dev`.
+export function getSessionCookieName(): string {
+  return isProduction() ? SESSION_COOKIE : 'auth_session';
+}
+
+export function getAnonCookieName(): string {
+  return isProduction() ? ANON_COOKIE : 'auth_anon';
+}
+
 export async function setSessionCookie(token: string): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, token, {
+  cookieStore.set(getSessionCookieName(), token, {
     httpOnly: true,
     secure: isProduction(),
     sameSite: 'lax',
@@ -26,7 +37,7 @@ export async function setAnonCookie(csrfSecret: string): Promise<void> {
   const env = getEnv();
   const signed = createHmac('sha256', env.CSRF_SECRET).update(csrfSecret).digest('hex');
   const cookieStore = await cookies();
-  cookieStore.set(ANON_COOKIE, `${csrfSecret}.${signed}`, {
+  cookieStore.set(getAnonCookieName(), `${csrfSecret}.${signed}`, {
     httpOnly: true,
     secure: isProduction(),
     sameSite: 'lax',
@@ -37,7 +48,7 @@ export async function setAnonCookie(csrfSecret: string): Promise<void> {
 
 export async function clearSessionCookie(): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, '', {
+  cookieStore.set(getSessionCookieName(), '', {
     httpOnly: true,
     secure: isProduction(),
     sameSite: 'lax',
@@ -48,7 +59,7 @@ export async function clearSessionCookie(): Promise<void> {
 
 export async function clearAnonCookie(): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.set(ANON_COOKIE, '', {
+  cookieStore.set(getAnonCookieName(), '', {
     httpOnly: true,
     secure: isProduction(),
     sameSite: 'lax',
@@ -59,19 +70,27 @@ export async function clearAnonCookie(): Promise<void> {
 
 export async function readAnonCookie(): Promise<{ csrfSecret: string; signed: string } | null> {
   const cookieStore = await cookies();
-  const value = cookieStore.get(ANON_COOKIE)?.value;
+  return parseAnonCookie(cookieStore.get(getAnonCookieName())?.value ?? null);
+}
+
+function parseAnonCookie(value: string | null): { csrfSecret: string; signed: string } | null {
   if (!value) return null;
   const dot = value.indexOf('.');
   if (dot < 0) return null;
   return { csrfSecret: value.slice(0, dot), signed: value.slice(dot + 1) };
 }
 
-export async function verifyAnonCookie(csrfSecret: string): Promise<boolean> {
+export function getAnonCsrfSecret(cookieValue: string | null): string | null {
+  const anon = parseAnonCookie(cookieValue);
+  if (!anon) return null;
   const env = getEnv();
+  const expected = createHmac('sha256', env.CSRF_SECRET).update(anon.csrfSecret).digest('hex');
+  return timingSafeEqualStr(anon.signed, expected) ? anon.csrfSecret : null;
+}
+
+export async function verifyAnonCookie(csrfSecret: string): Promise<boolean> {
   const anon = await readAnonCookie();
-  if (!anon) return false;
-  const expected = createHmac('sha256', env.CSRF_SECRET).update(csrfSecret).digest('hex');
-  return anon.signed === expected && anon.csrfSecret === csrfSecret;
+  return Boolean(anon && getAnonCsrfSecret(`${anon.csrfSecret}.${anon.signed}`) === csrfSecret);
 }
 
 export function generateAnonCsrfSecret(): string {

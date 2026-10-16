@@ -1,3 +1,6 @@
+import { APP_NAME } from '@/config/app';
+import { emailButton, emailLayout, escapeHtml } from '@/lib/auth/email/layout';
+
 export const messages = {
   errors: {
     INVALID_CREDENTIALS: '認証情報が正しくありません。',
@@ -31,40 +34,40 @@ export const messages = {
   },
   emails: {
     verification: {
-      subject: 'アカウント確認のお願い',
-      html: (url: string) => `<p>以下のボタンをクリックして確認してください。</p><p><a href="${url}">確認</a></p>`,
-      text: (url: string) => `以下のURLを確認してください。\n${url}`,
+      subject: `${APP_NAME}: メールアドレスを確認してください`,
+      html: (url: string) => emailLayout('メールアドレスの確認', `<p>${escapeHtml(APP_NAME)}へのご登録ありがとうございます。下のボタンからメールアドレスを確認してください。</p>${emailButton(url, 'メールアドレスを確認する')}<p style="color:#64748b;font-size:13px">このリンクは30分間有効です。</p>`),
+      text: (url: string) => `${APP_NAME}へのご登録ありがとうございます。以下のURLからメールアドレスを確認してください（30分間有効）。\n${url}`,
     },
     resend: {
-      subject: '確認メールの再送信',
-      html: (url: string) => `<p>以下のボタンをクリックして確認してください。</p><p><a href="${url}">確認</a></p>`,
-      text: (url: string) => `以下のURLを確認してください。\n${url}`,
+      subject: `${APP_NAME}: 確認メール`,
+      html: (url: string) => emailLayout('メールアドレスの確認', `<p>メールアドレスの確認を完了するには、下のボタンを押してください。</p>${emailButton(url, 'メールアドレスを確認する')}<p style="color:#64748b;font-size:13px">このリンクは30分間有効です。</p>`),
+      text: (url: string) => `${APP_NAME}のメールアドレス確認リンクです（30分間有効）。\n${url}`,
     },
     passwordReset: {
-      subject: 'パスワードリセットのお願い',
+      subject: `${APP_NAME}: パスワードを再設定してください`,
       html: (url: string, meta: { ip: string; time: string }) =>
-        `<p>以下のボタンをクリックしてパスワードをリセットしてください。</p><p><a href="${url}">リセット</a></p><p>参考: IP ${meta.ip}, ${meta.time}</p>`,
+        emailLayout('パスワードの再設定', `<p>パスワードを再設定するには、下のボタンを押してください。</p>${emailButton(url, 'パスワードを再設定する')}<p style="padding:12px 16px;background:#f8fafc;border-radius:8px;color:#64748b;font-size:13px">リクエスト元 IP: ${escapeHtml(meta.ip)}<br>リクエスト日時: ${escapeHtml(meta.time)}</p>`),
       text: (url: string, meta: { ip: string; time: string }) =>
-        `以下のURLを確認してください。\n${url}\n参考: IP ${meta.ip}, ${meta.time}`,
+        `パスワードを再設定するには以下のURLを開いてください。\n${url}\nリクエスト元 IP: ${meta.ip}\nリクエスト日時: ${meta.time}`,
     },
     securityNotification: {
-      subject: 'セキュリティ通知',
+      subject: `${APP_NAME}: セキュリティ通知`,
       html: (data: { device: string; ip: string; time: string }) =>
-        `<p>新しいログインがあります。</p><p>デバイス: ${data.device}, IP: ${data.ip}, ${data.time}</p>`,
+        emailLayout('新しいログインを検知しました', `<p>アカウントへの新しいログインがありました。</p><p style="padding:12px 16px;background:#f8fafc;border-radius:8px;color:#475569">デバイス: ${escapeHtml(data.device)}<br>IPアドレス: ${escapeHtml(data.ip)}<br>日時: ${escapeHtml(data.time)}</p>`),
       text: (data: { device: string; ip: string; time: string }) =>
         `新しいログインがあります。\nデバイス: ${data.device}, IP: ${data.ip}, ${data.time}`,
     },
     changeNotification: {
-      subject: 'アカウント変更通知',
+      subject: `${APP_NAME}: アカウント変更通知`,
       html: (data: { change: string; time: string; ip: string }) =>
-        `<p>アカウントが変更されました。</p><p>変更: ${data.change}, ${data.time}, IP: ${data.ip}</p>`,
+        emailLayout('アカウント情報が変更されました', `<p>次の変更が行われました。</p><p style="padding:12px 16px;background:#f8fafc;border-radius:8px;color:#475569">変更内容: ${escapeHtml(data.change)}<br>日時: ${escapeHtml(data.time)}<br>IPアドレス: ${escapeHtml(data.ip)}</p>`),
       text: (data: { change: string; time: string; ip: string }) =>
         `アカウントが変更されました。\n変更: ${data.change}, ${data.time}, IP: ${data.ip}`,
     },
     accountDeletion: {
-      subject: 'アカウント削除のお知らせ',
-      html: () => `<p>アカウントは削除されます。30日間保持後、完全に削除されます。</p>`,
-      text: () => `アカウントは削除されます。30日間保持後、完全に削除されます。`,
+      subject: `${APP_NAME}: アカウント削除のお知らせ`,
+      html: () => emailLayout('アカウント削除のお知らせ', '<p>アカウントは削除予定です。30日間の保持期間後に完全に削除されます。</p>'),
+      text: () => `${APP_NAME}のアカウントは削除予定です。30日間の保持期間後に完全に削除されます。`,
     },
   },
 } as const;

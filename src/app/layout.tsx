@@ -1,15 +1,17 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
+import { APP_DESCRIPTION, APP_NAME } from '@/config/app';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'oauth',
-  description: '超本格アカウント・認証システム',
+  title: APP_NAME,
+  description: APP_DESCRIPTION,
 };
 
 /**
  * 描画前にテーマを確定して FOUC を防ぐ（仕様39-42）。
  * 静的な既定値のみを扱い、ユーザー入力を interpolating しない。
- * CSP nonce は Phase 2（P2-01a）で導入届时き header と紐付ける。
+ * CSP nonce は middleware から受け取り、インライン script に渡す。
  */
 const themeInitScript = [
   '(function(){try{',
@@ -19,13 +21,14 @@ const themeInitScript = [
   '}catch(e){document.documentElement.dataset.theme="light";}})();',
 ].join('');
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
   return (
     <html lang="ja" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="bg-bg text-fg min-h-screen antialiased">{children}</body>
     </html>

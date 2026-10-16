@@ -9,6 +9,7 @@ import { updateUser } from '@/lib/db/queries/users';
 import { findUserById } from '@/lib/db/queries/users';
 import { revokeAllSessions } from '@/lib/auth/session';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
+import { getRequestClientIp } from '@/lib/auth/session';
 import { sendChangeNotificationEmail } from '@/lib/auth/email/templates';
 import { z } from 'zod';
 
@@ -34,13 +35,13 @@ export async function POST(request: NextRequest) {
         return failResponse('INVALID_TOKEN', 'リンクが無効か、有効期限が切れています', 400);
       }
 
-      const ipHash = request.headers.get('x-forwarded-for') ?? 'unknown';
+      const ip = getRequestClientIp(request);
       const breachResult = await checkBreached(password);
       if (breachResult.breached) {
         return failResponse('VALIDATION_ERROR', 'このパスワードは漏洩している可能性があります', 400);
       }
       if (breachResult.failOpen) {
-        await recordSecurityEvent('breach_check_fail_open', null, ipHash, request.headers.get('user-agent') ?? '');
+        await recordSecurityEvent('breach_check_fail_open', null, ip, request.headers.get('user-agent') ?? '');
       }
 
       const passwordHash = await hashPassword(password);
@@ -51,14 +52,14 @@ export async function POST(request: NextRequest) {
 
       await revokeAllSessions(result.userId, 'password_reset');
 
-      await recordSecurityEvent('password_reset', result.userId, ipHash, request.headers.get('user-agent') ?? '');
+      await recordSecurityEvent('password_reset', result.userId, ip, request.headers.get('user-agent') ?? '');
 
       const user = await findUserById(result.userId);
       if (user) {
         await sendChangeNotificationEmail(user.email, {
           change: 'パスワードリセット',
           time: new Date().toISOString(),
-          ip: ipHash,
+          ip,
         });
       }
 

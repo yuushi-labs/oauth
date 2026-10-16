@@ -5,6 +5,7 @@ import { verifyAndConsumeToken } from '@/lib/auth/tokens/verify';
 import { updateUser, findUserById } from '@/lib/db/queries/users';
 import { markEmailChangeNotified } from '@/lib/db/queries/tokens';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
+import { getRequestClientIp } from '@/lib/auth/session';
 import { sendChangeNotificationEmail } from '@/lib/auth/email/templates';
 import { getDb } from '@/lib/db/client';
 import { users } from '@/lib/db/schema';
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
       await recordSecurityEvent(
         'email_changed',
         userId,
-        request.headers.get('x-forwarded-for') ?? '',
+        getRequestClientIp(request),
         request.headers.get('user-agent') ?? '',
       );
 
@@ -53,7 +54,7 @@ export async function POST(request: NextRequest) {
           await sendChangeNotificationEmail(user.email, {
             change: 'メールアドレス変更',
             time: new Date().toISOString(),
-            ip: request.headers.get('x-forwarded-for') ?? '',
+            ip: getRequestClientIp(request),
           });
           await markEmailChangeNotified(hash);
         } catch {
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
           await recordSecurityEvent(
             'email_change_notification_failed',
             userId,
-            request.headers.get('x-forwarded-for') ?? '',
+            getRequestClientIp(request),
             request.headers.get('user-agent') ?? '',
             { oldEmail: user.email },
           );

@@ -32,7 +32,16 @@ const requiredEnvSchema = z.object({
       message: `TOTP_ENCRYPTION_KEY は Base64 エンコードされた ${TOTP_KEY_BYTES} バイトである必要があります`,
     }),
   NEXT_PUBLIC_APP_URL: z.string().url('NEXT_PUBLIC_APP_URL が不正な URL です'),
-  REDIS_URL: z.string().url('REDIS_URL が不正な URL です').optional(),
+  REDIS_URL: z.preprocess((value) => value === '' ? undefined : value, z.string().url('REDIS_URL が不正な URL です').optional()),
+  RATE_LIMIT_SECRET: z.string().min(MIN_PEPPER_LENGTH).optional(),
+  ALLOWED_ORIGINS: z.string().optional(),
+  CSRF_TRUSTED_ORIGINS: z.string().optional(),
+  ALLOWED_HOSTS: z.string().optional(),
+  TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
+  TRUSTED_PROXY_HEADER: z.string().optional(),
+  OIDC_ISSUER: z.preprocess((value) => value === '' ? undefined : value, z.string().url().optional()),
+  OIDC_JWKS_JSON: z.string().optional(),
+  OIDC_ADAPTER_ENCRYPTION_KEY: z.string().optional(),
   HIBP_TIMEOUT_MS: z.coerce.number().int().positive().default(1500),
   BREACH_CHECK_FAIL_OPEN: z
     .enum(['true', 'false'])
@@ -55,6 +64,9 @@ const LAZY_ENV_PURPOSE = {
   DISCORD_CLIENT_ID: 'Discord OAuth（Phase 4-A）',
   DISCORD_CLIENT_SECRET: 'Discord OAuth（Phase 4-A）',
   TURNSTILE_SECRET_KEY: 'CAPTCHA（Phase 9）',
+  OIDC_ISSUER: 'OIDC Provider（Phase 2.5）',
+  OIDC_JWKS_JSON: 'OIDC Provider signing keys（Phase 2.5）',
+  OIDC_ADAPTER_ENCRYPTION_KEY: 'OIDC Provider database encryption（Phase 2.5）',
 } as const;
 
 export type LazyEnvKey = keyof typeof LAZY_ENV_PURPOSE;
