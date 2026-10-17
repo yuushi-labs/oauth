@@ -25,7 +25,7 @@ export type OAuthProviderEntry = {
 };
 
 export const OAUTH_PROVIDER_REGISTRY: readonly OAuthProviderEntry[] = [
-  // Phase 4 で以下のようにエントリを追加する:
+  // Phase 4 で以下のようにエントリを追加する（client ID の取得手順は interop/README.md）:
   // {
   //   id: 'google',
   //   label: 'Google',

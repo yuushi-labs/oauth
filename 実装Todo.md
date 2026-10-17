@@ -320,6 +320,9 @@
 
 ## 6. Phase 4 — OAuth（2〜3日）: Google / GitHub / Discord（Apple 除外 C-01）
 
+> **詳細計画**: `docs/phase4-oauth-social-login-実装計画.md`（工数 30h / 3.5〜4日。決定事項 D-31-01〜D-31-14）
+> **着手の前提**: `interop/README.md` の手順で **3 provider の client ID / client secret を取得**し `.env` に記入すること（未取得では実フローの疎通確認ができない）
+
 ### 6-A プロバイダー接続
 
 - [ ] **P4-A-01** `lib/auth/oauth/registry.ts`（型: provider定義、検証関数、**1エントリ追加で有効化**／UIも registry から自動生成）

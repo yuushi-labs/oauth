@@ -277,7 +277,7 @@ oauth/
 | M2 | Phase 2 | Webセキュリティ・CSRF・レート制限・期限切れデータ削除 | **完了（2026-10-12）** |
 | M2.5 | Phase 2.5 | 自作サービス向けOAuth 2.0 / OIDC Provider、scope・同意管理・client registry | **実装中** |
 | M3 | Phase 3 | UI / テーマ / 通知メール / デバイス管理 | **完了（2026-10-17）**（共通UI・テーマ・設定画面・セッション管理・通知メール。実ブラウザ viewport 検証のみ Phase 8-B へ） |
-| M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | 未着手 |
+| M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | 未着手（計画: `docs/phase4-oauth-social-login-実装計画.md`。**着手前に `interop/README.md` で client ID を取得する**） |
 | M5 | Phase 5 | TOTP 2FA + Recovery Codes | 未着手 |
 | M6 | Phase 6 | Passkey / WebAuthn | 未着手 |
 | M7 | Phase 7 | 管理者 / RBAC / 監査ログ | 未着手 |
