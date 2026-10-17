@@ -24,6 +24,10 @@ dist/
 # typescript
 *.tsbuildinfo
 
+# go (interop RP)
+interop/rp-go/rp-go
+interop/rp-go/vendor/
+
 # misc
 .DS_Store
 *.local

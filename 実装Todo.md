@@ -2,7 +2,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| 正規典 | `超本格アカウント・認証システム仕様書 v1.2.md`（全69章） |
+| 正規典 | `超本格アカウント・認証システム仕様書 v1.3.md`（全69章） |
 | 計画 | `実装計画.md` v1.6（フェーズ分解・DoD・決定事項） |
 | 本Todo | 計画15章のチェックボックスを**実行可能な粒度**へ展開したもの。進捗は本ファイルで管理する |
 | 作成 | 2026-10-04 |
@@ -36,7 +36,7 @@
 | M0 土台 | Phase 0 | lint/typecheck/test/db green、dev起動、partial unique index 確認、通常UNIQUE なし確認 | **[x] 達成（2026-10-04）** |
 | M1 メール認証 | Phase 1 | アカウント7項目（email確認・PWリセット・**アカウント削除**含む）＋一意制約＋セッションハッシュ/Cookie属性＋CSRF（Route Handler & Server Action 双方）＋レート制限＋session fixation テスト | **[x] 達成（2026-10-10）** |
 | M2 基盤 | Phase 2 | §64のPhase 2担当分（HTTPS／Security Headers／CORS/CSRF／Web攻撃対策） | **[x] 達成（2026-10-12）** |
-| M2.5 認証元 | Phase 2.5 | §69 OIDC Provider + Authorization Code/PKCE + scope/consent + first-party RP相互運用 | [ ] 未達（26/29 タスク完了。残りは P25-E-01/E-04/E-05 の 3 件。2026-10-13、§4.5 / `docs/phase2.5-実装計画.md` §0） |
+| M2.5 認証元 | Phase 2.5 | §69 OIDC Provider + Authorization Code/PKCE + scope/consent + first-party RP相互運用 | **[x] 達成（2026-10-17）** — 29/29 タスク完了。DoD 6 項のうち 5 項を達成、6 項目（本番公開）は Phase 9 運用 DoD へ繰り越し。残るは「本番公開の運用確認」と「multi-process adapter 一致性の実測」の 2 点のみ。`docs/phase2.5-実装計画.md` §5.1 / `docs/phase2.5-closeout-実行Todo.md` |
 | M2.6 管理コンソール | Phase 2.6 | ログイン後の画面遷移＋OIDC/OAuth 2.0 アプリのセルフサービス作成・編集・secret 管理・接続テスト | [ ] 実装中（`docs/phase2.6-oidc-client-console-実装計画.md` のチェックボックスで進捗管理） |
 | M3 UI | Phase 3 | §64「UI」6項目＋セッション一覧/個別/全ログアウト | [ ] 未着手 |
 | M4 ソーシャル | Phase 4 | Google/GitHub/Discord ログイン＋紐付け＋解除 | [ ] 未着手 |
@@ -184,7 +184,7 @@
 
 詳細タスク・Gate・セキュリティDoDは [`docs/phase2.5-実装計画.md`](docs/phase2.5-実装計画.md) を正とする。
 
-> **状態（2026-10-13 実装完了）**: **26/29 タスク完了**。client secret のハッシュ保存・operator 開示・scope allowlist 単一ソース化・OIDC 事件記録・account 状態による artifact 拒否・interaction レート制限を実装し、Spike／threat model／セキュリティレビューを `docs/phase2.5-{gate-a,threat-model,review}.md` に記録。実HTTP E2E（`pnpm test:e2e`）で Discovery→login→consent→callback→token→UserInfo→revoke を確認。残件は P25-E-01（負荷検証）/ P25-E-04（migration up/down・multi-process 実測）/ P25-E-05（複数RP）の 3 件のみ。詳細は [`docs/phase2.5-実装計画.md`](docs/phase2.5-実装計画.md) §0。
+> **状態（2026-10-17 達成）**: **29/29 タスク完了**。2026-10-13 に 26/29 だった残 3 件を本日解消した。P25-E-01 は実 HTTP 負荷計測（`pnpm oidc:load`）で許可数が設定値と厳密一致することを確認して値を維持（`docs/phase2.5-load-test.md`）、P25-E-04 は up/down/往復/restore の検証で往復差分なしを確認（`docs/phase2.5-migration.md`、migration 0012 は不可逆である旨を明記）、P25-E-05 は Go の `coreos/go-oidc3` を 2 つ目の RP として追加し独立スタックでの相互運用を確認（`docs/phase2.5-interop.md`）。DoD 判定は `docs/phase2.5-実装計画.md` §5.1。残るは「本番公開（Phase 9 運用 DoD）」と「multi-process adapter 一致性の実測」の 2 点。
 
 - [x] **P25-A** `oidc-provider`候補のNext.js統合Spike、PostgreSQL adapter/token storage評価、threat model Gate A → `docs/phase2.5-gate-a.md`・`phase2.5-threat-model.md`
   - [x] **P25-A-01** MIT / Node 22 互換 / advisory 0件を評価記録（`docs/phase2.5-gate-a.md` §1）

@@ -98,3 +98,27 @@ devInteractions, dPoP, backchannelLogout, ciba, mTLS, attestClientAuth, clientId
 2. **レート制限値の負荷検証**（P25-E-01）が未実施。値は暫定。
 3. **RP 側の実装ずれ**: 本 Gate の E2E は自前 RP（Node + fetch）で実施している。複数 RP（フレームワーク別 2 種以上）での相互運用は未実施。
 4. 本番公開は Phase 9 の運用 DoD（HTTPS / proxy / access log redaction / monitoring）完了後に限る。
+
+## 7. 2026-10-17 追記 — 残 3 件の完了記録
+
+上記 1〜3 は `docs/phase2.5-closeout-実行Todo.md` の C3〜C5 で解消した。詳細は各記録を参照。
+
+| 残件 | 結果 | 記録 |
+|---|---|---|
+| P25-E-01 レート制限値の負荷検証 | ✅ 実 HTTP 負荷計測（`pnpm oidc:load`）。許可数が全シナリオで設定値と厳密一致（authorize 30 / interaction 60 / token 30 / userinfo 90 / revoke 10）、5xx 0 件。**値は維持** | `docs/phase2.5-load-test.md` |
+| P25-E-04 migration 可逆性と restore | ✅ `pnpm db:verify-migrations` で up → down → 往復 → restore を検証。往復でスキーマ差分なし、pg_dump/pg_restore で FK 関係ごと復元可。migration 0012 は不可逆でありロールバック時は全 confidential client の secret ローテーションが必要 | `docs/phase2.5-migration.md` |
+| P25-E-05 複数 RP での相互運用 | ✅ Go の `coreos/go-oidc3` を 2 つ目の RP として追加（`interop/rp-go`）。Node とは独立したスタックで Discovery・JWKS 署名検証・audience・nonce・scope 別 claim・拒否系（誤 secret / 使い切り code）がすべて一致 | `docs/phase2.5-interop.md` |
+
+残る未達は「multi-process 実測」と「本番公開（Phase 9 運用 DoD）」の 2 点のみ。
+
+### 7.1 追加で検出した欠陥
+
+| 欠陥 | 影響 | 対応 |
+|---|---|---|
+| `RateLimiter.finishFailedAttempt` が SERIALIZABLE の一時競合（SQLSTATE 40001）を再試行せず、`POST /api/auth/login` が 500 を返していた | ログイン不能（管理画面を含む全機能が使用不可） | 分離レベルを `repeatable read` へ変更し、予約・確定の双方に再試行（40001/40P01、5 回・指数バックオフ）を実装。回帰テストを追加 |
+| API の想定外エラーが `normalizeError` に落ち、原因がどこにも残らない | 障害調査不能 | `handleApiError` で `ApiError` 以外のみ `logger.error` に記録（クライアントへは返さない） |
+| zod の `.parse()` が投げる `ZodError` が 500 `INTERNAL_ERROR` として返っていた | 入力エラーが 500 として扱われ監視ノイズになる | `normalizeError` に `ZodError` → 400 `VALIDATION_ERROR` のマッピングを追加（PR #2） |
+
+### 7.2 仕様書の更新（v1.3）
+
+M2.6 で実装したセルフサービス client 登録を正典に反映し、§69.9 の「一般向けのセルフサービス client 登録は対象外」を、公開の動的クライアント登録・第三者開発者のマルチテナント運用と区別したうえで対象外の外へ移した。詳細は `docs/phase2.6-oidc-client-console-実装計画.md`。

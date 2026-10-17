@@ -8,7 +8,7 @@
 
 | ドキュメント | 内容 |
 |---|---|
-| `超本格アカウント・認証システム仕様書 v1.2.md` | 仕様書の正規典（全69章） |
+| `超本格アカウント・認証システム仕様書 v1.3.md` | 仕様書の正規典（全69章） |
 | `実装計画.md` v1.6 | フェーズ分解・DoD・決定事項（C-xx / D-xx） |
 | `実装Todo.md` | タスク一覧（進捗は同ファイルのチェックボックスで管理） |
 | `docs/phase0-設計.md` | Phase 0 の設計ドキュメント（実装前に作成） |
@@ -16,6 +16,11 @@
 | `docs/phase2.5-gate-a.md` | Gate A（統合Spike・adapter評価・統合判断） |
 | `docs/phase2.5-threat-model.md` | OIDC Providerの脅威モデル |
 | `docs/phase2.5-review.md` | セキュリティレビュー・依存監査・相互運用レポート |
+| `docs/phase2.5-closeout-実行Todo.md` | M2.5 達成完了のための実行Todo（残3件の消化とDoD判定） |
+| `docs/phase2.5-load-test.md` | レート制限値の負荷検証結果（P25-E-01） |
+| `docs/phase2.5-migration.md` | migrationの可逆性とrestoreの検証結果（P25-E-04） |
+| `docs/phase2.5-interop.md` | Go `coreos/go-oidc3` との相互運用結果（P25-E-05） |
+| `docs/phase2.6-oidc-client-console-実装計画.md` | ログイン後の設定画面とOIDC/OAuth 2.0 アプリ管理コンソール（M2.6） |
 | `.env.example` | 環境変数の定義 |
 
 ## 技術スタック
@@ -135,6 +140,8 @@ docker へ権限が無い環境では、执行用户在 `docker` グループへ
 | `pnpm oidc:client add ...` | 事前登録clientを追加（confidential secretは一度だけ表示） | 実装済 |
 | `pnpm oidc:client update --client-id <id> ...` | client の名称・運営者・許可scope・redirect URI・CORS origin を変更 | 実装済 |
 | `pnpm oidc:client rotate-secret ...` / `revoke ...` | confidential secretのrotation / client失効 | 実装済 |
+| `pnpm oidc:load --scenario all` | OIDCレート制限値の負荷検証（一時サーバを起動し実HTTPで計測。結果は `docs/phase2.5-load-test.md`） | 実装済 |
+| `pnpm db:verify-migrations` | migrationのup/down/往復/restoreを検証（一時DBを作成し終了時に削除） | 実装済 |
 
 ## ディレクトリ構成
 
