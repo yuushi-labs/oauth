@@ -383,7 +383,9 @@ users_role_id_idx / users_deleted_at_idx
 
 **DoD**: §64「セッション」6項目・「UI」6項目すべて green。未ブラウザでのみ**実ブラウザ viewport / スクリーンリーダー実機検証**が残存し、Phase 8-B（Playwright 導入時）に引継ぐ。
 
-**テスト**: 57 files / 359 tests green（Phase 3 で +8 files / +62 tests）
+**実ブラウザ検証で判明した欠陥の是正**: `nonce` の hydration mismatch（warning のみ。DOM/CSP は正しく `suppressHydrationWarning` で解消）／`favicon.ico` 404（`src/app/favicon.ico` を追加）／RootLayout の不要な DB 往復（`findUserById` を削除）
+
+**テスト**: 58 files / 365 tests green（Phase 3 で +9 files / +68 tests）
 
 ---
 

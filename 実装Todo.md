@@ -297,6 +297,15 @@
 - [x] `pnpm lint`(0 errors) / `typecheck` / `test`(57 files / 359 tests) / `build` が green
 - [ ] **実ブラウザ viewport / スクリーンリーダー実機検証** — Phase 8-B（Playwright 導入時）に引継ぎ
 
+**実ブラウザ検証で報告された欠陥の是正（2026-10-17）**
+
+- [x] **BUG-8** テーマ初期化 script の `nonce` で hydration mismatch 警告（**Phase 0/2 由来の潜在バグ**。ブラウザが nonce を `getAttribute()` で隠すため React が「server値 vs 空文字」を比較して誤検出する。DOM と CSP は正しく、警告のみ問題）
+  → `script` 要素に `suppressHydrationWarning` を付与。併せて **CSP ヘッダと script の nonce が一致すること**を e2e で固定（一致しないとインライン script が実行されない）
+- [x] **BUG-9** `/favicon.ico` が 404（コンソールエラー）
+  → `src/app/favicon.ico` を追加。Next が `/favicon.ico` に 200 + icon link を配信
+- [x] **BUG-10（副次）** RootLayout が毎リクエストで `findUserById` を実行していた（theme 取得のためだけに 3 回の DB 往復）
+  → `sessions.user_id` が `ON DELETE CASCADE` なので有効なセッション = user 存在が保証される。`findUserById` を削除し 2 往復に削減
+
 **Phase 3 着手前に完了した欠陥是正（2026-10-17 / `docs/bugfix-BUG1-7-修正計画.md`）**
 - [x] BUG-1 パスワードリセットのメール内 URL（`/password/reset` → `/reset-password`）＋画面
 - [x] BUG-2 email 変更確認のメール内 URL（GET 303 ＋画面）
