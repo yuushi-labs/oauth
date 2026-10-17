@@ -18,6 +18,7 @@ import { rateLimitKeys } from '@/lib/auth/rate-limit-keys';
 import { getRequestClientIp } from '@/lib/auth/session';
 import { verifyCaptchaIfRequired } from '@/lib/auth/captcha';
 import { ApiError } from '@/lib/errors';
+import { deliverEmailSafely } from '@/lib/auth/email/deliver';
 
 const registerSchema = z.object({
   email: emailSchema,
@@ -87,7 +88,15 @@ export async function POST(request: NextRequest) {
       });
 
       const url = `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/auth/verify-email?token=${raw}`;
-      await sendVerificationEmail(email, url);
+      // Best-effort: a mail failure must not turn this into a 500, and the response message
+      // must stay identical to the success path so account enumeration stays impossible (§46).
+      await deliverEmailSafely({
+        kind: 'register_verification',
+        userId,
+        ip,
+        userAgent: request.headers.get('user-agent') ?? '',
+        send: () => sendVerificationEmail(email, url),
+      });
 
       await recordSecurityEvent('register', userId, ip, request.headers.get('user-agent') ?? '');
 

@@ -60,7 +60,7 @@ export function ConnectedApps({ grants }: { grants: Grant[] }) {
                 <p className="mt-1 text-xs text-muted-fg">最終利用: {grant.lastUsedAt ? new Date(grant.lastUsedAt).toLocaleString('ja-JP') : '記録なし'}</p>
                 {!grant.clientActive && <p className="mt-1 text-xs text-danger">このサービスは提供元によって利用できなくなりました。</p>}
               </div>
-              <button className="rounded-md border border-border px-3 py-2 text-sm disabled:opacity-60" type="button" disabled={!csrfToken || busyId === grant.id} onClick={() => void revoke(grant.id)}>
+              <button className="rounded-md border border-border-strong px-3 py-2 text-sm disabled:opacity-60" type="button" disabled={!csrfToken || busyId === grant.id} onClick={() => void revoke(grant.id)}>
                 {busyId === grant.id ? '処理中…' : '連携を取り消す'}
               </button>
             </li>

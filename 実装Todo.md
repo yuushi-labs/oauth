@@ -38,7 +38,7 @@
 | M2 基盤 | Phase 2 | §64のPhase 2担当分（HTTPS／Security Headers／CORS/CSRF／Web攻撃対策） | **[x] 達成（2026-10-12）** |
 | M2.5 認証元 | Phase 2.5 | §69 OIDC Provider + Authorization Code/PKCE + scope/consent + first-party RP相互運用 | **[x] 達成（2026-10-17）** — 29/29 タスク完了。DoD 6 項のうち 5 項を達成、6 項目（本番公開）は Phase 9 運用 DoD へ繰り越し。残るは「本番公開の運用確認」と「multi-process adapter 一致性の実測」の 2 点のみ。`docs/phase2.5-実装計画.md` §5.1 / `docs/phase2.5-closeout-実行Todo.md` |
 | M2.6 管理コンソール | Phase 2.6 | ログイン後の画面遷移＋OIDC/OAuth 2.0 アプリのセルフサービス作成・編集・secret 管理・接続テスト | **[x] 達成（2026-10-17）** — P26-A-01〜G-02 の全 33 タスク完了（PR #4 → `c82cd1c`）。DoD 4 項すべて達成。仕様書 v1.3 の §69.4-2 と整合。`docs/phase2.6-oidc-client-console-実装計画.md` |
-| M3 UI | Phase 3 | §64「UI」6項目＋セッション一覧/個別/全ログアウト | [ ] 未着手 |
+| M3 UI | Phase 3 | §64「UI」6項目＋セッション一覧/個別/全ログアウト | [ ] 未着手（計画は `docs/phase3-ui-theme-notification-実装計画.md`）。**着手前に既存バグ 7 件を是正済み**（`docs/bugfix-BUG1-7-修正計画.md`） |
 | M4 ソーシャル | Phase 4 | Google/GitHub/Discord ログイン＋紐付け＋解除 | [ ] 未着手 |
 | M5 2FA | Phase 5 | TOTP＋Recovery Codes＋atomic 1回限り | [ ] 未着手 |
 | M6 Passkey | Phase 6 | Passkey 登録/ログイン/削除＋Level3検証 | [ ] 未着手 |
@@ -232,11 +232,14 @@
 
 ## 5. Phase 3 — UI / テーマ / 通知 / デバイス管理（3〜4日）
 
+> **詳細計画**: `docs/phase3-ui-theme-notification-実装計画.md`（工数 35.5h / 4〜5日。§2.3 の既存バグ 7 件は 2026-10-17 に是正済み）
+> **DoD の `*.spec.ts` は `*.test.ts` に読み替える**（Playwright 未導入・D-30-01）
+
 ### 5-A 共通UI + テーマ（§39-42）
 
 - [ ] **P3-A-01** shadcn/ui 導入（button, input, label, card, dialog, toast, tabs, alert）
 - [ ] **P3-A-02** `components/theme/*`: ThemeProvider / ThemeToggle / **system 購読（§41）** / FOUC防止
-- [ ] **P3-A-03** `globals.css` CSS変数（`--bg --fg --card --border --primary --muted-fg --danger --success --warning --ring --disabled-bg`）
+- [x] **P3-A-03** `globals.css` CSS変数（`--bg --fg --card --border --primary --muted-fg --danger --success --warning --ring --disabled-bg` ＋ **`--primary-fg` / `--border-strong`**）。★2026-10-17 は BUG-3/4 の是正分のみ実施（Phase 3-A の完成ではない）
 - [ ] **P3-A-04** コントラスト検証（dark でも 4.5:1 以上）／状態は **色＋アイコン＋テキスト**（§42）
 - [ ] **P3-A-05** `settings/appearance`（system/light/dark の3択）＋ `PATCH /api/auth/preferences`
 - [ ] **P3-A-06** テーマ同期: 未ログイン=localStorage、ログイン済=`user_preferences.theme` 優先、**既定 `system`**（§40）
@@ -249,9 +252,10 @@
 - [ ] **P3-B-01** `/register`（PW meter、**8文字**表記、breached エラー表示）
 - [ ] **P3-B-02** `/login`（email/username 切替、社会ログインボタンは **registry から自動生成**、passkey ボタン、2FA入力UI、メッセージ統一）
 - [ ] **P3-B-03** `/verify-email`（GETで状態変更しない＝UI表示→auto POST／§25）
-- [ ] **P3-B-04** `/forgot-password`（常に同一メッセージ）
-- [ ] **P3-B-05** `/reset-password`（token＋新PW＋PW meter）
+- [ ] **P3-B-04** `/forgot-password`（常に同一メッセージ）★2026-10-17 最小画面を追加済み（BUG-1）。PW meter・文言一元化は未着手
+- [ ] **P3-B-05** `/reset-password`（token＋新PW＋PW meter）★2026-10-17 最小画面を追加済み（BUG-1）。PW meter は未着手
 - [ ] **P3-B-06** 未ログイン時の `settings/*` はサーバ側ガードで `/login` へ（§49）
+- [x] **P3-B-11★** `/email-change/confirm` 画面 ＋ `GET` 303 リダイレクト（BUG-2・2026-10-17 完了。UI の見た目の整えは Phase 3-A に任せる）
 
 ### 5-C セッション/デバイス管理（§19, 38）
 
@@ -271,7 +275,17 @@
 
 **DoD（Phase 3）**
 - [ ] 仕様64章「セッション」「UI」カテゴリ完了
-- [ ] `src/test/e2e/{login,register,theme,sessions}.spec.ts` green（モバイル viewport 含む）
+- [ ] `src/test/e2e/{login,register,theme,sessions}.test.ts` green（※`実装Todo.md` の旧表記 `.spec.ts` は D-30-01 により `.test.ts` に読み替え。モバイル viewport の実ブラウザ検証は Phase 8-B へ引継ぎ）
+
+**Phase 3 着手前に完了した欠陥是正（2026-10-17 / `docs/bugfix-BUG1-7-修正計画.md`）**
+- [x] BUG-1 パスワードリセットのメール内 URL（`/password/reset` → `/reset-password`）＋画面
+- [x] BUG-2 email 変更確認のメール内 URL（GET 303 ＋画面）
+- [x] BUG-3 `--primary-fg` 追加で dark のボタン対比を AA 準拠に（`text-white` 全廃）
+- [x] BUG-4 `--border-strong` 追加で入力欄・ボタンの境界を 3:1 以上に
+- [x] BUG-5 OIDC 同意画面の dark 対応（CSP は style-src のみ緩和）
+- [x] BUG-6 メール送信の best-effort 化 ＋ `security_notification_failed` ＋ テスト用 transport seam
+- [x] BUG-7 実 HTTP で Next を起動するテスト基盤（`src/test/helpers/app-server.ts`）
+- [x] 検証: `pnpm lint`(0 errors) / `typecheck` / `test`(49 files / 297 tests) / `build` すべて green
 
 ---
 

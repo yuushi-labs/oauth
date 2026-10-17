@@ -6,6 +6,7 @@ import { findUserByLowerEmail } from '@/lib/db/queries/users';
 import { rateLimiter } from '@/lib/auth/rate-limit';
 import { RATE_LIMITS } from '@/config/rate-limits';
 import { sendPasswordResetEmail } from '@/lib/auth/email/templates';
+import { deliverEmailSafely } from '@/lib/auth/email/deliver';
 import { z } from 'zod';
 import { emailSchema } from '@/lib/validate/email';
 import { rateLimitKeys } from '@/lib/auth/rate-limit-keys';
@@ -70,13 +71,25 @@ export async function POST(request: NextRequest) {
           expiresAt: new Date(Date.now() + tokenTTL),
         });
 
-        const url = `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/password/reset?token=${raw}`;
-        await sendPasswordResetEmail(user.email, url, {
+        // BUG-1: the emailed link used to point at /password/reset, which has never existed
+        // (the screen is /reset-password). Every reset link returned 404.
+        const url = `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/reset-password?token=${raw}`;
+        // Best-effort delivery: a mail failure must not become a 500 (BUG-6).
+        await deliverEmailSafely({
+          kind: 'password_reset',
+          userId: user.id,
           ip,
-          time: new Date().toISOString(),
+          userAgent: request.headers.get('user-agent') ?? '',
+          send: () =>
+            sendPasswordResetEmail(user.email, url, {
+              ip,
+              time: new Date().toISOString(),
+            }),
         });
       }
 
+      // The message is identical whether or not the address exists (and even if the
+      // delivery failed), so this endpoint cannot be used for account enumeration (§46).
       return handleSuccess({ message: 'リセット-email を送信しました（存在する場合）' });
     },
   );

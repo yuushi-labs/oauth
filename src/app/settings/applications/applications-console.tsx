@@ -130,26 +130,26 @@ export function ApplicationCreateForm({ csrfToken, onCreated }: { csrfToken: str
       <form className="mt-4 grid gap-4" onSubmit={submit}>
         <label className="grid gap-1 text-sm">
           <span>アプリ名</span>
-          <input className="rounded-md border border-border px-3 py-2" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
+          <input className="rounded-md border border-border-strong px-3 py-2" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="grid gap-1 text-sm">
           <span>運営者名（同意画面に表示されます）</span>
-          <input className="rounded-md border border-border px-3 py-2" required maxLength={100} value={operator} onChange={(e) => setOperator(e.target.value)} />
+          <input className="rounded-md border border-border-strong px-3 py-2" required maxLength={100} value={operator} onChange={(e) => setOperator(e.target.value)} />
         </label>
         <label className="grid gap-1 text-sm">
           <span>種別（作成後は変更できません）</span>
-          <select className="rounded-md border border-border px-3 py-2" value={clientType} onChange={(e) => setClientType(e.target.value as 'public' | 'confidential')}>
+          <select className="rounded-md border border-border-strong px-3 py-2" value={clientType} onChange={(e) => setClientType(e.target.value as 'public' | 'confidential')}>
             <option value="confidential">confidential（サーバーサイド。client secret を使用）</option>
             <option value="public">public（ブラウザ・ネイティブ。secret なし）</option>
           </select>
         </label>
         <label className="grid gap-1 text-sm">
           <span>リダイレクト URI（1行に 1 つ。https 必須。loopback のみ http 可）</span>
-          <textarea className="rounded-md border border-border px-3 py-2" rows={3} required value={redirectUris} onChange={(e) => setRedirectUris(e.target.value)} />
+          <textarea className="rounded-md border border-border-strong px-3 py-2" rows={3} required value={redirectUris} onChange={(e) => setRedirectUris(e.target.value)} />
         </label>
         <label className="grid gap-1 text-sm">
           <span>Web origin（public のみ。1行に 1 つ）</span>
-          <textarea className="rounded-md border border-border px-3 py-2" rows={2} value={webOrigins} onChange={(e) => setWebOrigins(e.target.value)} />
+          <textarea className="rounded-md border border-border-strong px-3 py-2" rows={2} value={webOrigins} onChange={(e) => setWebOrigins(e.target.value)} />
         </label>
         <fieldset className="grid gap-1 text-sm">
           <legend>許可する scope</legend>
@@ -166,7 +166,7 @@ export function ApplicationCreateForm({ csrfToken, onCreated }: { csrfToken: str
           ))}
         </fieldset>
         {error && <p className="text-sm text-danger" role="alert">{error}</p>}
-        <button className="rounded-md border border-border px-4 py-2 text-sm disabled:opacity-60" type="submit" disabled={busy || !csrfToken}>
+        <button className="rounded-md border border-border-strong px-4 py-2 text-sm disabled:opacity-60" type="submit" disabled={busy || !csrfToken}>
           {busy ? '作成中…' : 'アプリを作成する'}
         </button>
       </form>
@@ -196,7 +196,7 @@ export function SecretNotice({ secret, onClose }: { secret: string; onClose?: ()
         <CopyButton value={secret} label="secret" />
       </p>
       <p className="mt-2 text-muted-fg">保存後は再表示できません。 잃った場合は再生成してください。</p>
-      {onClose && <button className="mt-2 rounded-md border border-border px-3 py-1 text-xs" type="button" onClick={onClose}>閉じる</button>}
+      {onClose && <button className="mt-2 rounded-md border border-border-strong px-3 py-1 text-xs" type="button" onClick={onClose}>閉じる</button>}
     </div>
   );
 }
@@ -239,7 +239,7 @@ export function ApplicationsConsole({
                     <p className="mt-1 text-xs text-muted-fg">登録者: {client.ownerUsername}</p>
                   )}
                 </div>
-                <Link className="rounded-md border border-border px-3 py-2 text-sm" href={`/settings/applications/${encodeURIComponent(client.clientId)}`}>
+                <Link className="rounded-md border border-border-strong px-3 py-2 text-sm" href={`/settings/applications/${encodeURIComponent(client.clientId)}`}>
                   設定する
                 </Link>
               </li>

@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withAuthPipeline, failResponse, handleSuccess } from '@/lib/api/utils';
 import { hashToken } from '@/lib/auth/tokens/generate';
 import { verifyAndConsumeToken } from '@/lib/auth/tokens/verify';
@@ -15,6 +15,19 @@ import { z } from 'zod';
 const confirmSchema = z.object({
   token: z.string().min(1),
 });
+
+/**
+ * BUG-2: the confirmation mail points at this endpoint, and mail clients open links with
+ * GET. Previously only POST existed, so every confirmation link returned 405. This GET
+ * stays non-mutating (§25) and forwards the user to the screen that performs the POST,
+ * exactly like /api/auth/verify-email does.
+ */
+export async function GET(request: NextRequest) {
+  const token = request.nextUrl.searchParams.get('token');
+  const destination = new URL('/email-change/confirm', request.url);
+  if (token) destination.searchParams.set('token', token);
+  return NextResponse.redirect(destination, 303);
+}
 
 export async function POST(request: NextRequest) {
   return withAuthPipeline(

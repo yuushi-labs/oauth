@@ -11,6 +11,7 @@ import { getRequestClientIp } from '@/lib/auth/session';
 import { verifyCaptchaIfRequired } from '@/lib/auth/captcha';
 import { ApiError } from '@/lib/errors';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
+import { deliverEmailSafely } from '@/lib/auth/email/deliver';
 
 export async function POST(request: NextRequest) {
   return withAuthPipeline(
@@ -74,7 +75,14 @@ export async function POST(request: NextRequest) {
       });
 
       const url = `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/auth/verify-email?token=${raw}`;
-      await sendVerificationEmail(fullUser.email, url);
+      // Best-effort delivery: a mail failure must not become a 500 (BUG-6).
+      await deliverEmailSafely({
+        kind: 'resend_verification',
+        userId: user.id,
+        ip,
+        userAgent: request.headers.get('user-agent') ?? '',
+        send: () => sendVerificationEmail(fullUser.email, url),
+      });
 
       return handleSuccess({ message: '確認-email を再送信しました' });
     },

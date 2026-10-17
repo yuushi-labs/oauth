@@ -65,14 +65,14 @@ export function ReauthDialog({ action, title, description, onClose, csrfToken }:
       <p className="mt-1 text-muted-fg">{description}</p>
       <label className="mt-3 grid gap-1">
         <span>パスワードで本人確認</span>
-        <input autoComplete="current-password" className="rounded-md border border-border px-3 py-2" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
+        <input autoComplete="current-password" className="rounded-md border border-border-strong px-3 py-2" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
       </label>
       {error && <p className="mt-2 text-danger" role="alert">{error}</p>}
       <div className="mt-3 flex gap-2">
-        <button className="rounded-md border border-border px-3 py-2 disabled:opacity-60" type="button" disabled={busy || !password} onClick={() => void confirm()}>
+        <button className="rounded-md border border-border-strong px-3 py-2 disabled:opacity-60" type="button" disabled={busy || !password} onClick={() => void confirm()}>
           {busy ? '処理中…' : '実行する'}
         </button>
-        <button className="rounded-md border border-border px-3 py-2" type="button" onClick={onClose}>キャンセル</button>
+        <button className="rounded-md border border-border-strong px-3 py-2" type="button" onClick={onClose}>キャンセル</button>
       </div>
     </div>
   );
@@ -186,19 +186,19 @@ export function ApplicationDetail({ client }: { client: ApplicationDetailData })
         <div className="mt-4 grid gap-4">
           <label className="grid gap-1 text-sm">
             <span>アプリ名</span>
-            <input className="rounded-md border border-border px-3 py-2" maxLength={100} required value={name} onChange={(event) => setName(event.target.value)} />
+            <input className="rounded-md border border-border-strong px-3 py-2" maxLength={100} required value={name} onChange={(event) => setName(event.target.value)} />
           </label>
           <label className="grid gap-1 text-sm">
             <span>運営者名</span>
-            <input className="rounded-md border border-border px-3 py-2" maxLength={100} required value={operator} onChange={(event) => setOperator(event.target.value)} />
+            <input className="rounded-md border border-border-strong px-3 py-2" maxLength={100} required value={operator} onChange={(event) => setOperator(event.target.value)} />
           </label>
           <label className="grid gap-1 text-sm">
             <span>リダイレクト URI（1行に 1 つ）</span>
-            <textarea className="rounded-md border border-border px-3 py-2" rows={4} required value={redirectUris} onChange={(event) => setRedirectUris(event.target.value)} />
+            <textarea className="rounded-md border border-border-strong px-3 py-2" rows={4} required value={redirectUris} onChange={(event) => setRedirectUris(event.target.value)} />
           </label>
           <label className="grid gap-1 text-sm">
             <span>Web origin（{client.clientType === 'public' ? 'public のみ指定可' : 'confidential では指定不可'}）</span>
-            <textarea className="rounded-md border border-border px-3 py-2" rows={2} disabled={client.clientType === 'confidential'} value={webOrigins} onChange={(event) => setWebOrigins(event.target.value)} />
+            <textarea className="rounded-md border border-border-strong px-3 py-2" rows={2} disabled={client.clientType === 'confidential'} value={webOrigins} onChange={(event) => setWebOrigins(event.target.value)} />
           </label>
           <fieldset className="grid gap-1 text-sm">
             <legend>許可する scope</legend>
@@ -218,7 +218,7 @@ export function ApplicationDetail({ client }: { client: ApplicationDetailData })
         </div>
         {message && <p className="mt-4 text-sm" role="status">{message}</p>}
         {error && <p className="mt-4 text-sm text-danger" role="alert">{error}</p>}
-        <button className="mt-4 rounded-md border border-border px-4 py-2 text-sm disabled:opacity-60" type="submit" disabled={busy || !csrfToken}>
+        <button className="mt-4 rounded-md border border-border-strong px-4 py-2 text-sm disabled:opacity-60" type="submit" disabled={busy || !csrfToken}>
           {busy ? '保存中…' : '保存する'}
         </button>
         {secret && <SecretNotice secret={secret} onClose={() => setSecret(null)} />}
@@ -228,7 +228,7 @@ export function ApplicationDetail({ client }: { client: ApplicationDetailData })
         <section className="rounded-lg border border-border bg-card p-6">
           <h2 className="text-lg font-semibold">client secret の再生成</h2>
           <p className="mt-2 text-sm text-muted-fg">再生成すると現在の secret は直ちに無効になります。本人確認が必要です。</p>
-          <button className="mt-4 rounded-md border border-border px-4 py-2 text-sm disabled:opacity-60" type="button" disabled={busy || !csrfToken} onClick={() => setDialog('rotate')}>
+          <button className="mt-4 rounded-md border border-border-strong px-4 py-2 text-sm disabled:opacity-60" type="button" disabled={busy || !csrfToken} onClick={() => setDialog('rotate')}>
             再生成する
           </button>
           {dialog === 'rotate' && (
@@ -264,7 +264,7 @@ export function ApplicationDetail({ client }: { client: ApplicationDetailData })
           {client.clientType === 'confidential' && (
             <label className="mt-4 grid gap-1 text-sm">
               <span>client secret（このテストのためだけに送信します。保存されません）</span>
-              <input autoComplete="off" className="rounded-md border border-border px-3 py-2" type="password" value={clientSecretInput} onChange={(event) => setClientSecretInput(event.target.value)} />
+              <input autoComplete="off" className="rounded-md border border-border-strong px-3 py-2" type="password" value={clientSecretInput} onChange={(event) => setClientSecretInput(event.target.value)} />
             </label>
           )}
           <button

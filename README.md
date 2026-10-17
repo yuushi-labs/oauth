@@ -276,7 +276,7 @@ oauth/
 | M1 | Phase 1 | メール/パスワード認証（登録・ログイン・確認・リセット・セッション・CSRF・レート制限） | **完了** |
 | M2 | Phase 2 | Webセキュリティ・CSRF・レート制限・期限切れデータ削除 | **完了（2026-10-12）** |
 | M2.5 | Phase 2.5 | 自作サービス向けOAuth 2.0 / OIDC Provider、scope・同意管理・client registry | **実装中** |
-| M3 | Phase 3 | UI / テーマ / 通知メール / デバイス管理 | 未着手 |
+| M3 | Phase 3 | UI / テーマ / 通知メール / デバイス管理 | 未着手（計画: `docs/phase3-ui-theme-notification-実装計画.md`。着手前に既存バグ7件を是正済み） |
 | M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | 未着手 |
 | M5 | Phase 5 | TOTP 2FA + Recovery Codes | 未着手 |
 | M6 | Phase 6 | Passkey / WebAuthn | 未着手 |
@@ -370,7 +370,25 @@ users_role_id_idx / users_deleted_at_idx
 
 ### 次のステップ（Phase 3）
 
-1. UI基盤、テーマ切替、通知、デバイス管理
+1. UI基盤、テーマ切替、通知、デバイス管理 — 詳細は `docs/phase3-ui-theme-notification-実装計画.md`
+
+---
+
+## バグ修正（2026-10-17 / Phase 3 着手前）
+
+Phase 3 の計画作成時に、仕様と実装が食い違っていた欠陥 **7 件**を先に是正しました（`docs/bugfix-BUG1-7-修正計画.md`）。
+
+| # | 内容 | 影響 |
+|---|---|---|
+| BUG-1 | パスワードリセットのメール内 URL が存在しない `/password/reset` を指していた → `/reset-password` に修正し画面を追加 | **リセットが一切完了できなかった** |
+| BUG-2 | email 変更確認のメール内 URL に GET が無く 405 → `GET`（303 転送）と画面を追加 | **メールアドレス変更が完了できなかった** |
+| BUG-3 | dark でボタンのコントラストが 2.54:1（AA 失敗）→ `--primary-fg` を追加し `text-white` を全廃 | WCAG 1.4.3 違反 |
+| BUG-4 | 入力欄・ボタンの境界が 1.41:1 → `--border-strong` を追加し適用 | WCAG 1.4.11 違反 |
+| BUG-5 | OIDC 同意画面がライト専用 → `prefers-color-scheme` 対応（`script-src 'none'` は維持） | dark で白飛び |
+| BUG-6 | メール送信が try/catch 外で、Resend 未設定時に 500 → best-effort 化 ＋ `security_notification_failed` ＋ テスト用 seam | 登録/リセット/再送がブラウザエラー |
+| BUG-7 | Next の Route Handler を実 HTTP でテストする基盤が無い → `src/test/helpers/app-server.ts` を追加 | 検証の弱さ |
+
+**検証**: `pnpm lint`（0 errors）/ `pnpm typecheck` / `pnpm test`（49 files / 297 tests green）/ `pnpm build` すべて green。追加画面は `/forgot-password` `/reset-password` `/email-change/confirm`。
 
 ---
 

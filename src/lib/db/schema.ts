@@ -196,6 +196,7 @@ export const SECURITY_EVENT_TYPES = [
   'password_reset',
   'email_changed',
   'email_change_notification_failed',
+  'security_notification_failed',
   'email_verified',
   '2fa_enabled',
   '2fa_disabled',

@@ -34,7 +34,7 @@ export function LogoutButton() {
 
   return (
     <div className="flex flex-col items-start gap-2">
-      <button className="rounded-md border border-border px-4 py-2 font-medium" type="button" onClick={logout} disabled={busy}>
+      <button className="rounded-md border border-border-strong px-4 py-2 font-medium" type="button" onClick={logout} disabled={busy}>
         {busy ? '処理中…' : 'ログアウト'}
       </button>
       {error && <p className="text-sm text-danger" role="alert">{error}</p>}

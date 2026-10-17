@@ -113,8 +113,13 @@ export function middleware(request: NextRequest) {
       response.headers.set('Access-Control-Allow-Credentials', 'true');
     }
   }
-  if (isApi || request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/register')
-    || request.nextUrl.pathname.startsWith('/settings')) {
+  // Token-bearing screens must never be cached: the query string holds the verification /
+  // password-reset / email-change token.
+  const noStorePaths = [
+    '/login', '/register', '/verify-email', '/forgot-password', '/reset-password',
+    '/email-change/confirm', '/settings',
+  ];
+  if (isApi || noStorePaths.some((path) => request.nextUrl.pathname.startsWith(path))) {
     response.headers.set('Cache-Control', 'no-store');
   }
   return response;

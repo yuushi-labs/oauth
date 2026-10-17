@@ -28,8 +28,38 @@ function send(res: ServerResponse, status: number, body: string): void {
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
+  // 'unsafe-inline' for style-src only: these pages render their own <style> block so they
+  // can honour the OS colour scheme (BUG-5). script-src stays absent, i.e. 'none' by
+  // default-src, so no script can ever run on these pages.
+  res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'self' 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
   res.end(body);
+}
+
+/**
+ * Minimal theme support for the self-rendered OIDC pages (BUG-5). These pages bypass the
+ * React tree, so they never see globals.css or ThemeProvider. The block follows the OS
+ * preference, which is enough to satisfy the §64 "Dark" requirement for the consent flow.
+ */
+const OIDC_PAGE_STYLE = `<style>
+:root{color-scheme:light dark}
+body{margin:0;padding:32px 16px;background:#f8fafc;color:#0f172a;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;line-height:1.7}
+main{max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #6b7280;border-radius:12px;padding:24px}
+h1{font-size:20px;margin:0 0 16px}h2{font-size:16px;margin:24px 0 8px}
+a{color:#1d4ed8}
+button{font:inherit;padding:10px 18px;margin:8px 8px 0 0;border-radius:8px;border:1px solid #1d4ed8;background:#1d4ed8;color:#ffffff;cursor:pointer}
+button[name="decision"][value="deny"]{background:#ffffff;color:#0f172a;border-color:#6b7280}
+@media (prefers-color-scheme:dark){
+body{background:#0b0f19;color:#e5e7eb}
+main{background:#111827;border-color:#6b7280}
+a{color:#93c5fd}
+button{background:#1d4ed8;color:#ffffff;border-color:#93c5fd}
+button[name="decision"][value="deny"]{background:#1f2937;color:#e5e7eb;border-color:#6b7280}
+}
+</style>`;
+
+/** Wraps a body fragment into a themed HTML document. */
+function themedPage(title: string, body: string): string {
+  return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title>${OIDC_PAGE_STYLE}</head><body><main>${body}</main></body></html>`;
 }
 
 function escapeHtml(value: string): string {
@@ -71,7 +101,7 @@ async function interaction(req: IncomingMessage, res: ServerResponse, provider: 
   try {
     const details = await provider.interactionDetails(req, res);
     const uid = typeof details.uid === 'string' ? details.uid : '';
-    if (!uid) return send(res, 400, '<!doctype html><title>認証エラー</title><p>認証リクエストを確認できませんでした。</p>');
+    if (!uid) return send(res, 400, themedPage('認証エラー', '<p>認証リクエストを確認できませんでした。</p>'));
     const user = await currentOidcAppSession(req);
     const promptValue = typeof details.params?.prompt === 'string' ? details.params.prompt : '';
     const prompts = new Set(promptValue.split(/\s+/u).filter(Boolean));
@@ -111,7 +141,7 @@ async function interaction(req: IncomingMessage, res: ServerResponse, provider: 
     const client = clientResult.rows[0];
     if (!client || !scopes.includes('openid') || !isScopeSubset(scopes, client.allowed_scopes)) {
       await recordSecurityEvent('oidc_authorize_denied', user.id, req.socket.remoteAddress ?? '', req.headers['user-agent'] ?? '', { reason: 'client_or_scope' });
-      return send(res, 400, '<!doctype html><title>認証エラー</title><p>要求されたサービスまたは権限を確認できません。</p>');
+      return send(res, 400, themedPage('認証エラー', '<p>要求されたサービスまたは権限を確認できません。</p>'));
     }
 
     const promptName = details.prompt?.name;
@@ -119,14 +149,14 @@ async function interaction(req: IncomingMessage, res: ServerResponse, provider: 
       const origin = req.headers.origin;
       const issuerOrigin = new URL(getEnv().OIDC_ISSUER!).origin;
       if (origin !== issuerOrigin || req.headers['content-type']?.split(';')[0] !== 'application/x-www-form-urlencoded') {
-        return send(res, 403, '<!doctype html><title>拒否されました</title><p>送信元を確認できません。</p>');
+        return send(res, 403, themedPage('拒否されました', '<p>送信元を確認できません。</p>'));
       }
       const form = await readForm(req);
       const expected = interactionCsrf(uid, user.sessionId);
       if (!safeEqual(form.get('csrf') ?? '', expected)) {
-        return send(res, 403, '<!doctype html><title>拒否されました</title><p>フォームの有効期限が切れました。最初からやり直してください。</p>');
+        return send(res, 403, themedPage('拒否されました', '<p>フォームの有効期限が切れました。最初からやり直してください。</p>'));
       }
-      if (promptName !== 'consent') return send(res, 400, '<!doctype html><title>認証エラー</title><p>操作を完了できません。</p>');
+      if (promptName !== 'consent') return send(res, 400, themedPage('認証エラー', '<p>操作を完了できません。</p>'));
       if (form.get('decision') !== 'allow') {
         await recordSecurityEvent('oidc_consent_denied', user.id, req.socket.remoteAddress ?? '', req.headers['user-agent'] ?? '', { clientId, scopes });
         await provider.interactionFinished(req, res, { error: 'access_denied' }, { mergeWithLastSubmission: true });
@@ -135,14 +165,14 @@ async function interaction(req: IncomingMessage, res: ServerResponse, provider: 
       const subject = await ensureSubject(user.id, clientId);
       if (!subject) {
         await recordSecurityEvent('oidc_authorize_denied', user.id, req.socket.remoteAddress ?? '', req.headers['user-agent'] ?? '', { reason: 'subject_issue_failed' });
-        return send(res, 400, '<!doctype html><title>認証エラー</title><p>認証リクエストを完了できません。最初からやり直してください。</p>');
+        return send(res, 400, themedPage('認証エラー', '<p>認証リクエストを完了できません。最初からやり直してください。</p>'));
       }
       const priorGrantId = typeof details.grantId === 'string' ? details.grantId
         : typeof details.session?.grantId === 'string' ? details.session.grantId : undefined;
       const existingGrant = priorGrantId ? await provider.Grant.find(priorGrantId) : undefined;
       if (existingGrant && existingGrant.accountId !== subject) {
         await recordSecurityEvent('oidc_authorize_denied', user.id, req.socket.remoteAddress ?? '', req.headers['user-agent'] ?? '', { reason: 'grant_account_mismatch', clientId });
-        return send(res, 400, '<!doctype html><title>認証エラー</title><p>認証リクエストを完了できません。最初からやり直してください。</p>');
+        return send(res, 400, themedPage('認証エラー', '<p>認証リクエストを完了できません。最初からやり直してください。</p>'));
       }
       const grant = existingGrant ?? new provider.Grant({ accountId: subject, clientId });
       grant.addOIDCScope(scopes.join(' '));
@@ -179,7 +209,7 @@ async function interaction(req: IncomingMessage, res: ServerResponse, provider: 
       const subject = await ensureSubject(user.id, clientId);
       if (!subject) {
         await recordSecurityEvent('oidc_authorize_denied', user.id, req.socket.remoteAddress ?? '', req.headers['user-agent'] ?? '', { reason: 'subject_issue_failed' });
-        return send(res, 400, '<!doctype html><title>認証エラー</title><p>認証リクエストを完了できません。最初からやり直してください。</p>');
+        return send(res, 400, themedPage('認証エラー', '<p>認証リクエストを完了できません。最初からやり直してください。</p>'));
       }
       await provider.interactionFinished(req, res, {
         login: { accountId: subject, ts: Math.floor(user.createdAt.getTime() / 1000), acr: 'urn:oauth:auth:password' },
@@ -190,7 +220,7 @@ async function interaction(req: IncomingMessage, res: ServerResponse, provider: 
       await provider.interactionFinished(req, res, { error: 'consent_required' }, { mergeWithLastSubmission: true });
       return;
     }
-    if (promptName !== 'consent') return send(res, 400, '<!doctype html><title>認証エラー</title><p>この認証方式には対応していません。</p>');
+    if (promptName !== 'consent') return send(res, 400, themedPage('認証エラー', '<p>この認証方式には対応していません。</p>'));
 
     const claimLabels: Record<string, string> = {
       openid: 'このサービスだけが使用できる不透明なID (sub)',
@@ -206,15 +236,15 @@ async function interaction(req: IncomingMessage, res: ServerResponse, provider: 
     const registrantNotice = client.owner_username
       ? '運営者名を自由に設定できるため、必ず登録者が意図した相手か確認してください。'
       : '運営者が設定したアプリです。';
-    const html = `<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>サービス連携の確認</title><main><h1>サービス連携の確認</h1><p><strong>${escapeHtml(client.name)}</strong>（運営者: ${escapeHtml(client.operator || client.name)}）がアカウント情報へのアクセスを求めています。</p><p>${registrant}。</p><p>${registrantNotice}</p><p>ログイン中: ${escapeHtml(user.username)}</p><h2>共有される情報</h2><ul>${scopeList}</ul><p>許可しない場合、サービスには情報を共有しません。許可はアカウント設定から後で取り消せます。</p><form method="post"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}"><button type="submit" name="decision" value="allow">許可する</button> <button type="submit" name="decision" value="deny">許可しない</button></form></main></html>`;
-    send(res, 200, html);
+    const consentBody = `<h1>サービス連携の確認</h1><p><strong>${escapeHtml(client.name)}</strong>（運営者: ${escapeHtml(client.operator || client.name)}）がアカウント情報へのアクセスを求めています。</p><p>${registrant}。</p><p>${registrantNotice}</p><p>ログイン中: ${escapeHtml(user.username)}</p><h2>共有される情報</h2><ul>${scopeList}</ul><p>許可しない場合、サービスには情報を共有しません。許可はアカウント設定から後で取り消せます。</p><form method="post"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}"><button type="submit" name="decision" value="allow">許可する</button> <button type="submit" name="decision" value="deny">許可しない</button></form>`;
+    send(res, 200, themedPage('サービス連携の確認', consentBody));
   } catch (cause) {
     logger.error('oidc interaction failed', {
       cause: cause instanceof Error ? cause.message : String(cause),
       detail: (cause as { error_description?: unknown })?.error_description ?? null,
       stack: cause instanceof Error ? (cause.stack ?? '').slice(0, 600) : '',
     });
-    if (!res.headersSent) send(res, 400, '<!doctype html><title>認証エラー</title><p>認証リクエストを完了できません。最初からやり直してください。</p>');
+    if (!res.headersSent) send(res, 400, themedPage('認証エラー', '<p>認証リクエストを完了できません。最初からやり直してください。</p>'));
     else res.end();
   }
 }
