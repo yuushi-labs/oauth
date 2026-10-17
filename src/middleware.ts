@@ -113,7 +113,8 @@ export function middleware(request: NextRequest) {
       response.headers.set('Access-Control-Allow-Credentials', 'true');
     }
   }
-  if (isApi || request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/register')) {
+  if (isApi || request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/register')
+    || request.nextUrl.pathname.startsWith('/settings')) {
     response.headers.set('Cache-Control', 'no-store');
   }
   return response;

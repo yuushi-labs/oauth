@@ -290,6 +290,7 @@ export const oauthClients = pgTable(
     webOrigins: text('web_origins').array().notNull().default(sql`ARRAY[]::text[]`),
     tokenEndpointAuthMethod: text('token_endpoint_auth_method').notNull(),
     secretHash: text('secret_hash'),
+    ownerUserId: text('owner_user_id').references(() => users.id, { onDelete: 'set null' }),
     active: boolean('active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -297,6 +298,7 @@ export const oauthClients = pgTable(
   },
   (table) => [
     index('oauth_clients_active_idx').on(table.active),
+    index('oauth_clients_owner_user_id_idx').on(table.ownerUserId),
     check('oauth_clients_type_chk', sql`${table.clientType} in (${OIDC_CLIENT_TYPE_SQL_LIST})`),
     check('oauth_clients_openid_required_chk', sql`'openid' = ANY(${table.allowedScopes})`),
     check('oauth_clients_scope_allowlist_chk', sql`${table.allowedScopes} <@ ARRAY[${OIDC_SCOPE_SQL_LIST}]::text[]`),

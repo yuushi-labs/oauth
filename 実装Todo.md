@@ -37,6 +37,7 @@
 | M1 メール認証 | Phase 1 | アカウント7項目（email確認・PWリセット・**アカウント削除**含む）＋一意制約＋セッションハッシュ/Cookie属性＋CSRF（Route Handler & Server Action 双方）＋レート制限＋session fixation テスト | **[x] 達成（2026-10-10）** |
 | M2 基盤 | Phase 2 | §64のPhase 2担当分（HTTPS／Security Headers／CORS/CSRF／Web攻撃対策） | **[x] 達成（2026-10-12）** |
 | M2.5 認証元 | Phase 2.5 | §69 OIDC Provider + Authorization Code/PKCE + scope/consent + first-party RP相互運用 | [ ] 未達（26/29 タスク完了。残りは P25-E-01/E-04/E-05 の 3 件。2026-10-13、§4.5 / `docs/phase2.5-実装計画.md` §0） |
+| M2.6 管理コンソール | Phase 2.6 | ログイン後の画面遷移＋OIDC/OAuth 2.0 アプリのセルフサービス作成・編集・secret 管理・接続テスト | [ ] 実装中（`docs/phase2.6-oidc-client-console-実装計画.md` のチェックボックスで進捗管理） |
 | M3 UI | Phase 3 | §64「UI」6項目＋セッション一覧/個別/全ログアウト | [ ] 未着手 |
 | M4 ソーシャル | Phase 4 | Google/GitHub/Discord ログイン＋紐付け＋解除 | [ ] 未着手 |
 | M5 2FA | Phase 5 | TOTP＋Recovery Codes＋atomic 1回限り | [ ] 未着手 |

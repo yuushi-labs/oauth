@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { normalizeError, ok, type ApiErrorBody } from '@/lib/errors';
+import { ApiError, normalizeError, ok, type ApiErrorBody } from '@/lib/errors';
 import { getSession } from '@/lib/auth/session';
 import { findUserById } from '@/lib/db/queries/users';
 import { runCorePipeline } from '@/lib/auth/pipeline';
+import { logger } from '@/lib/util/logger';
 import type { SessionData } from '@/lib/auth/session';
 import type { User } from '@/lib/db/schema';
 import { getAnonCookieName, getSessionCookieName } from '@/lib/auth/cookie';
 
+/** Expected API errors stay silent; unexpected failures are logged server-side but never returned. */
 export function handleApiError(error: unknown): NextResponse<ApiErrorBody> {
+  if (!(error instanceof ApiError)) {
+    logger.error('unhandled api error', {
+      cause: error instanceof Error ? error.message : String(error),
+      detail: error instanceof Error ? (error.stack ?? '').slice(0, 600) : '',
+    });
+  }
   const { status, body } = normalizeError(error);
   return NextResponse.json(body, { status });
 }

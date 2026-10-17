@@ -18,6 +18,14 @@
 >
 > E2E の作成過程で本体実装の欠陥 4 件（grant の accountId 未設定、ID Token の `sub` が raw user id、`auth_time` 欠落、opaque subject を考慮していない account 状態判定）を修正済み。詳細は `phase2.5-gate-a.md` §2.3 と `phase2.5-review.md` §4。
 
+> **2026-10-17 Phase 2.6 で CLI 限定の登録をセルフサービス化。** 任意のログインユーザーが `/settings/applications` から client を作成・編集でき、`oauth_clients.owner_user_id`（migration `0013_oidc_client_owner.sql`）で所有者を管理します。変更点は次のとおりで、詳細と進捗は `docs/phase2.6-oidc-client-console-実装計画.md` を参照する。
+>
+> 1. 検証ロジックを `src/lib/oidc/client-validation.ts` へ切り出し、CLI と管理画面で同一ルールを共有（`scripts/oidc-client.ts` は thin wrapper）
+> 2. 所有者または `role_admin`/`role_superadmin` のみ編集可能。他人の client は 404 で秘匿。1 ユーザー 5 件の上限とユーザー単位レート制限を追加
+> 3. client secret は生成・再生成の応答で一度だけ表示（HMAC ダイジェストのみ保存）。再生成と利用停止は本人確認（`requireReauth`）を必須化
+> 4. **同意画面に登録者（owner の username と登録日）を必須表示**（`scripts/server.ts`）。セルフサービス化によるなりすまし対策
+> 5. 接続テスト機能（`/settings/applications/[clientId]`）を追加。テスト用 redirect URI は利用者が**手動追加**し、code 交換と UserInfo 取得を実行して返ってきた claim を表示する
+
 ### 0.1 完了タスクの根拠
 
 | タスク | 根拠 |

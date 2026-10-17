@@ -64,3 +64,19 @@
 1. 本番公開前に、本番同等の TLS + reverse proxy 構成で E2E を 1 回手動実行する（Discovery URL・redirect・CORS）。
 2. `pnpm oidc:client update` は scope を広げる操作であり、`oidc_user_grants` の既存 grant は変わらない。新 scope は再同意時にのみ付与される運用を README に明示する。
 3. client の台数が増えた場合は `oauth_clients` への定期監査（active client と最終利用時刻）を運用に組み込む。
+---
+
+## 6. Phase 2.6 追記 — セルフサービス client 登録による新たな脅威（2026-10-17）
+
+CLI のみだった client 登録を「任意のログインユーザーが管理画面から自己登録」できる方式へ変更したため、脅威モデルにセルフサービス登録由来の脅威表（§6）を追加する。詳細は `docs/phase2.6-oidc-client-console-実装計画.md` §7。
+
+| # | 脅威（セルフ化了よって新たに発生） | 対策 | 実装箇所 | 検証 |
+|---|---|---|---|---|
+| S1 | 運営者名を偽装した phishing client（正規アプリに見せかけ同意画面を誘導） | 同意画面に**登録者（owner の username と登録日）を必須表示**。CLI 登録（`owner_user_id` NULL）は「運営者による登録」と明示。名称は `escapeHtml` 済みで描画 | `scripts/server.ts` の interaction HTML、`src/lib/util/html.ts` | e2e `client-console.test.ts`（consent に username が出ることを検証）、security `web-attack` の escape 方針 |
+| S2 | 他人の client に対する IDOR（redirect URI 改竄・secret 再生成・失効） | `oauth_clients.owner_user_id` による所有者判定。owner または `role_admin`/`role_superadmin` のみ、**他人の client は 404**（存在の秘匿） | `src/lib/oidc/clients.ts` `requireManageableClient`、`src/lib/auth/roles.ts` | security `oidc-client-console.test.ts` / `-routes.test.ts`、integration |
+| S3 | client の大量登録による DB 荒らし・スパム | ユーザー毎上限（`OIDC_MAX_CLIENTS_PER_USER`、既定 5）とユーザー単位レート制限（create 1h/5、mutation 10min/30）、`rate_limited` イベント | `src/lib/oidc/clients.ts`、route、config/rate-limits.ts | security（上限強制）、integration |
+| S4 | 同意画面への制御文字注入による表示改竄 | アプリ名・運営者名は 100 文字以内で制御文字・改行を拒否（zod refine）。描画は escape 済み | `src/lib/oidc/client-validation.ts` | unit `client-validation.test.ts` |
+| S5 | 悪意ある redirect URI（open redirect 経由のトークン窃取） | https 強制（loopback のみ http 許可）、userinfo/fragment 禁止、完全一致登録制、`exactAuthorizationRequest` による未知パラメータ拒否 | `client-validation.ts`、`scripts/server.ts` | unit、security |
+| S6 | client secret の漏えい（応答・ログ・DB・キャッシュ） | 平文は保存せず `hmac-sha256:` ダイジェストのみ。生成/再生成の応答で**一度だけ**表示、`Cache-Control: no-store`、ログ redaction | `src/lib/oidc/crypto.ts`、route、middleware（`/settings` も no-store） | security（保存文字列に平文が出現しないこと）、integration |
+| S7 | secret 再生成・利用停止の悪用（トークン大量発行後の破壊） | 本人確認（`requireReauth`、5分猶予）を必須化。失効時は既存 grant と artifact を物理破棄 | `src/app/api/auth/oidc/clients/[clientId]/{route,secret/route}.ts` | security（再認証なしでは 401） |
+| S8 | 接続テスト機構の悪用（他人の token 取得・code 窃取） | テスト用 state/verifier は署名付き HttpOnly cookie（10分、session 绑定）。code は**サーバ内**で交換し、secret は AES-GCM で暗号化して cookie に保持。テスト callback は手動登録制でログとイベントにも secret/code を残さない | `src/lib/oidc/client-test.ts`、`.../test/start/route.ts`、`/settings/applications/test/callback/route.ts` | unit `client-test-state.test.ts`、e2e（表示 claim に secret が含まれない） |

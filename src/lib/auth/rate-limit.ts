@@ -31,6 +31,30 @@ function getSqlState(error: unknown): string | null {
   return null;
 }
 
+const SERIALIZABLE_MAX_ATTEMPTS = 5;
+
+const RETRYABLE_SQL_STATES = new Set(['40001', '40P01']);
+
+/**
+ * Runs a reservation transaction and retries serialization failures.
+ *
+ * The counter row is locked with `FOR UPDATE`, which is what the algorithm needs to keep the hard
+ * limit strict. Isolation is REPEATABLE READ rather than SERIALIZABLE because SERIALIZABLE adds
+ * predicate locks whose range conflicts abort unrelated keys (SQLSTATE 40001), which surfaced as 500
+ * responses on login. Deadlocks and any residual 40001 are still retried with backoff.
+ */
+async function runSerializable<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!RETRYABLE_SQL_STATES.has(getSqlState(error) ?? '') || attempt >= SERIALIZABLE_MAX_ATTEMPTS - 1) throw error;
+      const backoff = 10 * 2 ** attempt + Math.floor(Math.random() * 10);
+      await new Promise((resolve) => setTimeout(resolve, backoff));
+    }
+  }
+}
+
 /** PostgreSQL is the authoritative store so backend outages fail closed, never open. */
 export class RateLimiter {
   async check(key: string, windowMs: number, max: number, softLimit = max): Promise<RateLimitResult> {
@@ -75,9 +99,7 @@ export class RateLimiter {
     const now = new Date();
     const expiry = new Date(now.getTime() + windowMs);
 
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      try {
-        return await db.transaction(async (tx) => {
+    return runSerializable(async () => db.transaction(async (tx) => {
       await tx.insert(rateLimitHits).values({
         key: storageKey,
         failedCount: 0,
@@ -129,13 +151,7 @@ export class RateLimiter {
           resetAt: hit.windowExpiresAt.getTime(),
         },
       };
-        }, { isolationLevel: 'serializable' });
-      } catch (error) {
-        if (getSqlState(error) !== '40001' || attempt === 2) throw error;
-        await new Promise((resolve) => setTimeout(resolve, 10 * (attempt + 1)));
-      }
-    }
-    throw new Error('Rate limit reservation retry exhausted');
+    }, { isolationLevel: 'repeatable read' }));
   }
 
   async releaseReservation(reservation: FailedAttemptReservation): Promise<void> {
@@ -149,7 +165,7 @@ export class RateLimiter {
 
   async finishFailedAttempt(reservation: FailedAttemptReservation, success: boolean): Promise<boolean> {
     const db = getDb();
-    return db.transaction(async (tx) => {
+    return runSerializable(async () => db.transaction(async (tx) => {
       const [locked] = await tx.select().from(rateLimitReservations)
         .where(eq(rateLimitReservations.reservationId, reservation.reservationId))
         .for('update').limit(1);
@@ -172,7 +188,7 @@ export class RateLimiter {
         return updated?.failedCount === 5;
       }
       return false;
-    }, { isolationLevel: 'serializable' });
+    }, { isolationLevel: 'repeatable read' }));
   }
 }
 

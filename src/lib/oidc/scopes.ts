@@ -1,7 +1,7 @@
-import { OIDC_SCOPES, type OidcScope } from '@/lib/db/schema';
+import { OIDC_CLIENT_TYPES, OIDC_SCOPES, type OidcClientType, type OidcScope } from '@/lib/db/schema';
 
-export { OIDC_SCOPES };
-export type { OidcScope };
+export { OIDC_SCOPES, OIDC_CLIENT_TYPES };
+export type { OidcScope, OidcClientType };
 
 export function isOidcScope(value: string): value is OidcScope {
   return (OIDC_SCOPES as readonly string[]).includes(value);

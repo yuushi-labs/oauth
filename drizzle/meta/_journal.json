@@ -92,6 +92,13 @@
       "when": 1791891988418,
       "tag": "0012_oidc_drop_secret_ciphertext",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792151812676,
+      "tag": "0013_oidc_client_owner",
+      "breakpoints": true
     }
   ]
 }

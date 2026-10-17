@@ -42,6 +42,7 @@ const requiredEnvSchema = z.object({
   OIDC_ISSUER: z.preprocess((value) => value === '' ? undefined : value, z.string().url().optional()),
   OIDC_JWKS_JSON: z.string().optional(),
   OIDC_ADAPTER_ENCRYPTION_KEY: z.string().optional(),
+  OIDC_MAX_CLIENTS_PER_USER: z.coerce.number().int().min(1).max(100).default(5),
   HIBP_TIMEOUT_MS: z.coerce.number().int().positive().default(1500),
   BREACH_CHECK_FAIL_OPEN: z
     .enum(['true', 'false'])

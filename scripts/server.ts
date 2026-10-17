@@ -100,9 +100,13 @@ async function interaction(req: IncomingMessage, res: ServerResponse, provider: 
     const scopes: string[] = typeof requestedScope === 'string' ? [...new Set(requestedScope.split(/\s+/u).filter(Boolean))] : [];
     const clientResult = await getPool().query<{
       name: string; operator: string; allowed_scopes: string[]; active: boolean;
+      owner_username: string | null; registered_at: Date;
     }>(
-      `SELECT name, operator, allowed_scopes, active FROM oauth_clients
-       WHERE client_id = $1 AND active = true AND revoked_at IS NULL`, [clientId],
+      `SELECT c.name, c.operator, c.allowed_scopes, c.active, c.created_at AS "registered_at",
+              u.username AS "owner_username"
+       FROM oauth_clients c
+       LEFT JOIN users u ON u.id = c.owner_user_id
+       WHERE c.client_id = $1 AND c.active = true AND c.revoked_at IS NULL`, [clientId],
     );
     const client = clientResult.rows[0];
     if (!client || !scopes.includes('openid') || !isScopeSubset(scopes, client.allowed_scopes)) {
@@ -195,7 +199,14 @@ async function interaction(req: IncomingMessage, res: ServerResponse, provider: 
     };
     const scopeList = scopes.map((scope) => `<li><strong>${escapeHtml(scope)}</strong>: ${escapeHtml(claimLabels[scope] ?? '未対応の権限')}</li>`).join('');
     const csrf = interactionCsrf(uid, user.sessionId);
-    const html = `<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>サービス連携の確認</title><main><h1>サービス連携の確認</h1><p><strong>${escapeHtml(client.name)}</strong>（運営者: ${escapeHtml(client.operator || client.name)}）がアカウント情報へのアクセスを求めています。</p><p>ログイン中: ${escapeHtml(user.username)}</p><h2>共有される情報</h2><ul>${scopeList}</ul><p>許可しない場合、サービスには情報を共有しません。許可はアカウント設定から後で取り消せます。</p><form method="post"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}"><button type="submit" name="decision" value="allow">許可する</button> <button type="submit" name="decision" value="deny">許可しない</button></form></main></html>`;
+    // Self-service clients are registered by their own users, so the registrant is always disclosed.
+    const registrant = client.owner_username
+      ? `このアプリはユーザー「${escapeHtml(client.owner_username)}」が ${escapeHtml(client.registered_at.toISOString().slice(0, 10))} に登録したものです`
+      : 'このアプリは運営者がコマンドラインで登録したものです';
+    const registrantNotice = client.owner_username
+      ? '運営者名を自由に設定できるため、必ず登録者が意図した相手か確認してください。'
+      : '運営者が設定したアプリです。';
+    const html = `<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>サービス連携の確認</title><main><h1>サービス連携の確認</h1><p><strong>${escapeHtml(client.name)}</strong>（運営者: ${escapeHtml(client.operator || client.name)}）がアカウント情報へのアクセスを求めています。</p><p>${registrant}。</p><p>${registrantNotice}</p><p>ログイン中: ${escapeHtml(user.username)}</p><h2>共有される情報</h2><ul>${scopeList}</ul><p>許可しない場合、サービスには情報を共有しません。許可はアカウント設定から後で取り消せます。</p><form method="post"><input type="hidden" name="csrf" value="${escapeHtml(csrf)}"><button type="submit" name="decision" value="allow">許可する</button> <button type="submit" name="decision" value="deny">許可しない</button></form></main></html>`;
     send(res, 200, html);
   } catch (cause) {
     logger.error('oidc interaction failed', {

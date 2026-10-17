@@ -82,6 +82,39 @@ Providerは`pnpm dev` / `pnpm start`のcustom Node server経由で動作しま�
 
 docker へ権限が無い環境では、执行用户在 `docker` グループへ追加してください（`sudo usermod -aG docker $USER` → 再ログイン）。現在のシェルだけで済ませる場合は `sg docker -c "docker compose up -d"` のように実行できます。
 
+## 管理画面からOIDCアプリを作成・接続テストする（M2.6）
+
+ログイン後は `/` → `/settings` から設定画面へ遷移できます。**`/settings/applications`** では、利用者自身が OIDC / OAuth 2.0 クライアント（アプリ）を作成・編集できます。CLI と同じ検証ルール（https 必須の redirect URI、scope allowlist、confidential に Web origin 不可）が適用されます。
+
+| 画面 | 内容 |
+|---|---|
+| `/settings` | 設定ホーム（アカウント / 接続済みサービス / アプリケーション） |
+| `/settings/account` | アカウント情報 |
+| `/settings/connected-apps` | 許可した連携の確認と取り消し |
+| `/settings/applications` | アプリ一覧＋新規作成 |
+| `/settings/applications/[clientId]` | 詳細・編集・secret 再生成・利用停止・接続テスト |
+
+手順:
+
+1. `/settings/applications` で「アプリ名」「運営者名」「種別」「リダイレクト URI」「許可 scope」「Web origin（public のみ）」を入力して作成します
+2. 作成した `client_id` と issuer / Discovery URL は詳細画面でワンクリックコピーできます
+3. **client secret は作成時に一度だけ表示**されます。保存後は再表示できないため、RP のサーバー側 secret store へ保存してください。失った場合は詳細画面の「client secret の再生成」（本人確認が必要）から再生成します
+4. 種別（public / confidential）は作成後に変更できません（DB制約との整合）。変更する場合は作り直してください
+5. 「利用を停止する」は本人確認が必要で、既存の連携と発行済みトークンをすべて破棄します（不可逆）
+
+### 接続テスト（redirect URI と secret でユーザー情報を確認する）
+
+1. 詳細画面の「接続テスト」セクションに表示される `${NEXT_PUBLIC_APP_URL}/settings/applications/test/callback` をコピーし、**手動で**リダイレクト URI へ追加して「保存する」
+2. confidential の場合は client secret を入力します（テストのためだけに送信され、保存されません）
+3. 「接続テストを実行」で同意画面へ移動し、許可すると token 交換と UserInfo 取得まで行われ、返ってきた claim（`sub` / `name` / `preferred_username` / `email` / `email_verified`）が結果ページに表示されます
+
+利用上の注意:
+
+- セルフサービス登録のため、**同意画面には必ず登録者（ユーザー名と登録日）が表示されます**。運営者名は自由に設定できるため、利用者は登録者が意図した相手かを確認してください
+- 他人のアプリは操作できません（所有者または `role_admin` / `role_superadmin` のみ）
+- 1ユーザーあたりの上限は `OIDC_MAX_CLIENTS_PER_USER`（既定 5）
+- scope を広げても既存の同意は変わりません。新 scope は再同意時に付与されます
+
 ## コマンド
 
 | コマンド | 内容 | 状態 |
