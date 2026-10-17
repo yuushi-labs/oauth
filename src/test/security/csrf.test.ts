@@ -18,6 +18,7 @@ describe('Security - CSRF Protection (validateCsrfToken)', () => {
     userAgent: 'UA',
     ip: '192.168.1.1',
     ipMasked: 'masked',
+    ipHash: null,
     deviceName: 'Unknown',
     reauthVerifiedAt: null,
   };

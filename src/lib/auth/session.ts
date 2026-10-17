@@ -6,6 +6,7 @@ import { randomToken } from '@/lib/util/crypto';
 import { hashIp, maskIp } from '@/lib/util/ip';
 import { getEnv } from '@/lib/env';
 import { createHmac, randomBytes } from 'node:crypto';
+import { deriveDeviceName } from '@/lib/util/device';
 
 export type SessionData = {
   id: string;
@@ -15,6 +16,7 @@ export type SessionData = {
   userAgent: string;
   ip: string;
   ipMasked: string | null;
+  ipHash: string | null;
   deviceName: string;
   reauthVerifiedAt: string | null;
 };
@@ -58,7 +60,7 @@ async function createSessionInternal(
   const ipMasked = maskIp(ip);
   const ipHash = hashIp(ip, env.IP_HASH_PEPPER);
   const userAgent = getUserAgent(request.headers);
-  const deviceName = 'Unknown device';
+  const deviceName = deriveDeviceName(userAgent);
 
   const id = newId('ses');
   const now = new Date();
@@ -91,6 +93,7 @@ async function createSessionInternal(
       userAgent,
       ip,
       ipMasked,
+      ipHash,
       deviceName,
       reauthVerifiedAt: null,
     },
@@ -132,7 +135,8 @@ export async function getSession(token: string): Promise<SessionData | null> {
     userAgent: row.userAgent,
     ip: '',
     ipMasked: row.ipMasked ?? '',
-    deviceName: row.deviceName ?? 'Unknown device',
+    ipHash: row.ipHash ?? null,
+    deviceName: row.deviceName ?? 'その他のデバイス',
     reauthVerifiedAt: row.reauthVerifiedAt ? row.reauthVerifiedAt.toISOString() : null,
   };
 }

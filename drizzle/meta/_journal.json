@@ -99,6 +99,13 @@
       "when": 1792151812676,
       "tag": "0013_oidc_client_owner",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792213672482,
+      "tag": "0014_user_preferences",
+      "breakpoints": true
     }
   ]
 }

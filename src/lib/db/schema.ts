@@ -197,6 +197,7 @@ export const SECURITY_EVENT_TYPES = [
   'email_changed',
   'email_change_notification_failed',
   'security_notification_failed',
+  'new_device_login',
   'email_verified',
   '2fa_enabled',
   '2fa_disabled',
@@ -238,6 +239,23 @@ export const securityEvents = pgTable(
   (table) => [
     index('security_events_event_type_created_at_idx').on(table.eventType, table.createdAt),
     index('security_events_user_id_created_at_idx').on(table.userId, table.createdAt),
+  ],
+);
+
+/** ユーザー設定（§40 テーマ / §60 タイムゾーン）。行が無い場合は既定値を使う。 */
+export const userPreferences = pgTable(
+  'user_preferences',
+  {
+    userId: text('user_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    theme: text('theme').notNull().default('system'),
+    language: text('language').notNull().default('ja'),
+    timezone: text('timezone').notNull().default('UTC'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check('user_preferences_theme_chk', sql`${table.theme} in ('system', 'light', 'dark')`),
   ],
 );
 
@@ -377,6 +395,7 @@ export type NewPasswordResetToken = typeof passwordResetTokens.$inferInsert;
 export type EmailChangeRequest = typeof emailChangeRequests.$inferSelect;
 export type NewEmailChangeRequest = typeof emailChangeRequests.$inferInsert;
 export type SecurityEvent = typeof securityEvents.$inferSelect;
+export type UserPreferences = typeof userPreferences.$inferSelect;
 export type NewSecurityEvent = typeof securityEvents.$inferInsert;
 export type RateLimitHit = typeof rateLimitHits.$inferSelect;
 export type RateLimitReservation = typeof rateLimitReservations.$inferSelect;

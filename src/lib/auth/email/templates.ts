@@ -34,7 +34,7 @@ export async function sendPasswordResetEmail(
 
 export async function sendSecurityNotificationEmail(
   to: string,
-  data: { device: string; ip: string; time: string },
+  data: { device: string; ip: string; time: string; region?: string | null },
 ): Promise<void> {
   await sendEmail({
     to,

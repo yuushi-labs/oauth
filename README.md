@@ -276,7 +276,7 @@ oauth/
 | M1 | Phase 1 | メール/パスワード認証（登録・ログイン・確認・リセット・セッション・CSRF・レート制限） | **完了** |
 | M2 | Phase 2 | Webセキュリティ・CSRF・レート制限・期限切れデータ削除 | **完了（2026-10-12）** |
 | M2.5 | Phase 2.5 | 自作サービス向けOAuth 2.0 / OIDC Provider、scope・同意管理・client registry | **実装中** |
-| M3 | Phase 3 | UI / テーマ / 通知メール / デバイス管理 | 未着手（計画: `docs/phase3-ui-theme-notification-実装計画.md`。着手前に既存バグ7件を是正済み） |
+| M3 | Phase 3 | UI / テーマ / 通知メール / デバイス管理 | **実装中**（共通UI・テーマ・設定画面・セッション管理・通知メール。計画: `docs/phase3-ui-theme-notification-実装計画.md`） |
 | M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | 未着手 |
 | M5 | Phase 5 | TOTP 2FA + Recovery Codes | 未着手 |
 | M6 | Phase 6 | Passkey / WebAuthn | 未着手 |
@@ -368,9 +368,18 @@ users_role_id_idx / users_deleted_at_idx
 - Docker 権限が無い環境では `sg docker -c "docker compose ..."` のようにグループを明示する必要がある
 - `docker compose` の DB は `127.0.0.1:5432` にのみバインドしている。外部公開しないこと
 
-### 次のステップ（Phase 3）
+## Phase 3 実装詳細（2026-10-17 / 実施中）
 
-1. UI基盤、テーマ切替、通知、デバイス管理 — 詳細は `docs/phase3-ui-theme-notification-実装計画.md`
+| 領域 | 内容 |
+|---|---|
+| 共通UI | `src/components/ui/*`（button / input / label / card / alert / dialog / tabs / toast）。shadcn 互換だが **CLI は使わず**、既存 CSS 変数（`--primary` / `--primary-fg` / `--border-strong`）へ手書き（D-30-02） |
+| テーマ | `src/lib/theme/resolver.ts`（純関数）＋ `ThemeProvider` ＋ 3 択 `ThemeToggle`。`user_preferences.theme` > localStorage > `system`。`system` のときだけ `matchMedia` を購読して OS 変更にリロードなしで追従（§41） |
+| 設定画面 | `/settings/security`（§37 の 8 カード）/ `/settings/sessions`（§38 カード・個別/全ログアウト）/ `/settings/appearance`（3 択）/ `/settings/password` |
+| API | `GET /api/auth/sessions`、`DELETE /api/auth/sessions/{id}`、`POST /api/auth/logout-all`（再認証必須）、`GET/PATCH /api/auth/preferences`、`GET /api/auth/security/events` |
+| 通知 | 新規デバイスログイン通知（`(ip_hash, device_name)` 一致判定）。本文にはデバイス名・masked IP・日時・（あれば）地域のみ |
+| 文言 | `messages/ja.ts` に `m()`（型安全なドット参照）と `errorMessage()` を追加。UI 文言を `ui.*` に一元化 |
+
+**テスト**: 55 files / 343 tests green（Phase 3 で +6 files / +46 tests）
 
 ---
 

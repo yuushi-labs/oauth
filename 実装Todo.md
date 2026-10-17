@@ -38,7 +38,7 @@
 | M2 基盤 | Phase 2 | §64のPhase 2担当分（HTTPS／Security Headers／CORS/CSRF／Web攻撃対策） | **[x] 達成（2026-10-12）** |
 | M2.5 認証元 | Phase 2.5 | §69 OIDC Provider + Authorization Code/PKCE + scope/consent + first-party RP相互運用 | **[x] 達成（2026-10-17）** — 29/29 タスク完了。DoD 6 項のうち 5 項を達成、6 項目（本番公開）は Phase 9 運用 DoD へ繰り越し。残るは「本番公開の運用確認」と「multi-process adapter 一致性の実測」の 2 点のみ。`docs/phase2.5-実装計画.md` §5.1 / `docs/phase2.5-closeout-実行Todo.md` |
 | M2.6 管理コンソール | Phase 2.6 | ログイン後の画面遷移＋OIDC/OAuth 2.0 アプリのセルフサービス作成・編集・secret 管理・接続テスト | **[x] 達成（2026-10-17）** — P26-A-01〜G-02 の全 33 タスク完了（PR #4 → `c82cd1c`）。DoD 4 項すべて達成。仕様書 v1.3 の §69.4-2 と整合。`docs/phase2.6-oidc-client-console-実装計画.md` |
-| M3 UI | Phase 3 | §64「UI」6項目＋セッション一覧/個別/全ログアウト | [ ] 未着手（計画は `docs/phase3-ui-theme-notification-実装計画.md`）。**着手前に既存バグ 7 件を是正済み**（`docs/bugfix-BUG1-7-修正計画.md`） |
+| M3 UI | Phase 3 | §64「UI」6項目＋セッション一覧/個別/全ログアウト | [~] **実装中（2026-10-17）** — 共通UI基盤・テーマ・`/settings/{security,sessions,appearance,password}`・新規API 5本・新規デバイス通知を実装。残りは社会/passkey/2FA ボタン枠組み、文言の最終整備、DoD 達成確認。計画 `docs/phase3-ui-theme-notification-実装計画.md`、着手前の欠陥是正は `docs/bugfix-BUG1-7-修正計画.md` |
 | M4 ソーシャル | Phase 4 | Google/GitHub/Discord ログイン＋紐付け＋解除 | [ ] 未着手 |
 | M5 2FA | Phase 5 | TOTP＋Recovery Codes＋atomic 1回限り | [ ] 未着手 |
 | M6 Passkey | Phase 6 | Passkey 登録/ログイン/削除＋Level3検証 | [ ] 未着手 |
@@ -237,41 +237,41 @@
 
 ### 5-A 共通UI + テーマ（§39-42）
 
-- [ ] **P3-A-01** shadcn/ui 導入（button, input, label, card, dialog, toast, tabs, alert）
-- [ ] **P3-A-02** `components/theme/*`: ThemeProvider / ThemeToggle / **system 購読（§41）** / FOUC防止
+- [ ] **P3-A-01** ~~shadcn/ui 導入（button, input, label, card, dialog, toast, tabs, alert）~~ ✅ 2026-10-17: 既存 CSS 変数へ手書きで `src/components/ui/*` 8種＋`components.json`（CLI 未実行・D-30-02）
+- [ ] **P3-A-02** ~~`components/theme/*`~~ ✅ 2026-10-17: ThemeProvider（server>localStorage>system・matchMedia 購読・cleanup）／ThemeToggle（3択）／theme-script（server 値を静的埋め込み）
 - [x] **P3-A-03** `globals.css` CSS変数（`--bg --fg --card --border --primary --muted-fg --danger --success --warning --ring --disabled-bg` ＋ **`--primary-fg` / `--border-strong`**）。★2026-10-17 は BUG-3/4 の是正分のみ実施（Phase 3-A の完成ではない）
-- [ ] **P3-A-04** コントラスト検証（dark でも 4.5:1 以上）／状態は **色＋アイコン＋テキスト**（§42）
-- [ ] **P3-A-05** `settings/appearance`（system/light/dark の3択）＋ `PATCH /api/auth/preferences`
-- [ ] **P3-A-06** テーマ同期: 未ログイン=localStorage、ログイン済=`user_preferences.theme` 優先、**既定 `system`**（§40）
-- [ ] **P3-A-07** `matchMedia('(prefers-color-scheme: dark)')` の change 購読（リロード不要で切替・§41）
-- [ ] **P3-A-08** レスポンシブ 375/768/1024/1440 でログイン〜設定を操作可能（§43）
-- [ ] **P3-A-09** アクセシビリティ: 全フォームに label/`autocomplete`、エラーは `aria-live=polite`、フォーカスリング視認可、WCAG AA 目標
+- [ ] **P3-A-04** ~~コントラスト検証／状態は色＋アイコン＋テキスト~~ ✅ 2026-10-17: `src/test/unit/theme-contrast.test.ts`（26 値の閾値）、Alert/Badge/PW meter/セッションバッジに適用
+- [ ] **P3-A-05** ~~`settings/appearance`＋`PATCH /api/auth/preferences`~~ ✅ 2026-10-17: migration `0014_user_preferences.sql`、`GET/PATCH /api/auth/preferences`、3択フォーム（選択＝保存・失敗ロールバック）
+- [ ] **P3-A-06** ~~テーマ同期~~ ✅ 2026-10-17: `src/lib/theme/resolver.ts`（純関数）+ `server-preference`、login/logout 往復を確認
+- [ ] **P3-A-07** ~~matchMedia change 購読~~ ✅ 2026-10-17: `system` のときのみ購読・light/dark では OS 無視
+- [ ] **P3-A-08** ~~レスポンシブ~~ ✅ 2026-10-17: 固定幅 px を持ち込まない、sm/md ブレークポイント使用。**実ブラウザ viewport 検証は Phase 8-B**
+- [ ] **P3-A-09** ~~アクセシビリティ~~ ✅ 2026-10-17: Label/autocomplete/aria-live/フォーカスリング、role=progressbar・role=alert
 
 ### 5-B 認証画面
 
-- [ ] **P3-B-01** `/register`（PW meter、**8文字**表記、breached エラー表示）
-- [ ] **P3-B-02** `/login`（email/username 切替、社会ログインボタンは **registry から自動生成**、passkey ボタン、2FA入力UI、メッセージ統一）
-- [ ] **P3-B-03** `/verify-email`（GETで状態変更しない＝UI表示→auto POST／§25）
+- [ ] **P3-B-01** ~~`/register`~~ ✅ 2026-10-17: PW meter（5段階・色＋アイコン＋テキスト）、8〜128 表記、breached 表示
+- [ ] **P3-B-02** [~] `/login` ✅ 2026-10-17（1入力欄維持・統一メッセージ・PW meter・ThemeToggle）。社会/passkey/2FA ボタンは **Phase 4/5/6 で registry から自動生成する枠組みだけ**
+- [ ] **P3-B-03** ~~`/verify-email`~~ ✅ 2026-10-17: auto POST を useRef で 1 回だけ実行（§25）、再送信 UI
 - [ ] **P3-B-04** `/forgot-password`（常に同一メッセージ）★2026-10-17 最小画面を追加済み（BUG-1）。PW meter・文言一元化は未着手
 - [ ] **P3-B-05** `/reset-password`（token＋新PW＋PW meter）★2026-10-17 最小画面を追加済み（BUG-1）。PW meter は未着手
-- [ ] **P3-B-06** 未ログイン時の `settings/*` はサーバ側ガードで `/login` へ（§49）
+- [ ] **P3-B-06** ~~未ログイン時の `settings/*` サーバ側ガード~~ ✅ 2026-10-17: 既存 `requireSettingsUser` が新規 4 ページへ適用（307→/login を実測）
 - [x] **P3-B-11★** `/email-change/confirm` 画面 ＋ `GET` 303 リダイレクト（BUG-2・2026-10-17 完了。UI の見た目の整えは Phase 3-A に任せる）
 
 ### 5-C セッション/デバイス管理（§19, 38）
 
-- [ ] **P3-C-01** `GET /api/auth/sessions`（現在を先頭、device / ip_masked / last_seen）
-- [ ] **P3-C-02** `DELETE /api/auth/sessions/{id}`（**owner 確認で IDOR 防止**）
-- [ ] **P3-C-03** `POST /api/auth/logout-all`（再認証必須）＋通知メール
-- [ ] **P3-C-04** `settings/sessions` カードUI（現在デバイス表示、個別/全ログアウト）
-- [ ] **P3-C-05** `util/device.ts`（`ua-parser-js`）で `device_name` 生成（例: `Chrome on Windows`）
+- [ ] **P3-C-01** ~~`GET /api/auth/sessions`~~ ✅ 2026-10-17: 現在を先頭、7項目のみ返却（生IP/user_agent/session_hash は返さない）
+- [ ] **P3-C-02** ~~`DELETE /api/auth/sessions/{id}`~~ ✅ 2026-10-17: owner 確認・他人は 404・現行は Cookie 削除。IDOR テスト green
+- [ ] **P3-C-03** ~~`POST /api/auth/logout-all`~~ ✅ 2026-10-17: 再認証必須（401 REAUTH_REQUIRED を実測）・通知メール（失敗非致命）
+- [ ] **P3-C-04** ~~`settings/sessions` カードUI~~ ✅ 2026-10-17: §38 カード・現在バッジ・個別/全ログアウト・再認証ダイアログ
+- [ ] **P3-C-05** ~~`util/device.ts`~~ ✅ 2026-10-17: `deriveDeviceName`/`deriveOsLabel`（120文字・制御文字制限）、`createSession` に配線。`Chrome on Windows` を実測
 
 ### 5-D 通知メール（§18, 44）
 
-- [ ] **P3-D-01** 新規デバイスログイン通知（デバイス名、**masked IP** `203.0.113.xxx`、地域、日時）
-- [ ] **P3-D-02** 変更系通知（PW変更 / email変更 / Passkey追加削除 / 連携追加解除 / 全ログアウト）
-- [ ] **P3-D-03** `settings/security` 一覧（§37 レイアウト：PW最終変更・email+認証済・2FA・passkey数・連携・デバイス・全ログアウト・最近のセキュリティイベント）
-- [ ] **P3-D-04** `GET /api/auth/security/events`（自イベント、直近N件、読み取り専用GET）
-- [ ] **P3-D-05** `messages/ja.ts` へ UI 文言（ログイン/登録/設定画面）を追加して一元化を完了（Phase 1-B でメール文面＋エラーメッセージは作成済み）、HTML+text/plain 併記、**ログにメール本文/token を出さない**（`token=` も redaction・★）
+- [ ] **P3-D-01** ~~新規デバイスログイン通知~~ ✅ 2026-10-17: `(ip_hash, device_name)` 一致判定、`security_notification` 文面（地域は値があるときのみ）、本文に秘密値なしをテストで固定
+- [ ] **P3-D-02** ~~変更系通知~~ ✅ 2026-10-17: 全ログアウト分を追加。Passkey/連携は Phase 6/4 で同テンプレ再利用
+- [ ] **P3-D-03** ~~`settings/security` 一覧~~ ✅ 2026-10-17: §37 の 8 カード。2FA/Passkey/連携は如实表示し導線なし（D-30-16）
+- [ ] **P3-D-04** ~~`GET /api/auth/security/events`~~ ✅ 2026-10-17: 本人限定・許可列のみ・limit 既定10/上限50・読み取り専用
+- [ ] **P3-D-05** ~~`messages/ja.ts` へ UI 文言~~ ✅ 2026-10-17: `m()`（型安全なドット参照）＋`errorMessage()` を追加し UI 文言を ui.* に集約
 
 **DoD（Phase 3）**
 - [ ] 仕様64章「セッション」「UI」カテゴリ完了

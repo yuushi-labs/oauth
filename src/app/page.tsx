@@ -6,11 +6,13 @@ import { getSession } from '@/lib/auth/session';
 import { getSessionCookieName } from '@/lib/auth/cookie';
 import { APP_NAME } from '@/config/app';
 import { findUserById } from '@/lib/db/queries/users';
+import { ThemeToggle } from '@/components/theme/theme-toggle';
+import { m } from '@/messages/ja';
 
 const destinations = [
-  { href: '/settings', title: '設定メニュー', description: 'アカウント・接続済みサービス・アプリケーション' },
-  { href: '/settings/connected-apps', title: '接続済みサービス', description: '許可した連携の確認と取り消し' },
-  { href: '/settings/applications', title: 'アプリケーション', description: 'OIDC / OAuth 2.0 アプリの作成と接続テスト' },
+  { href: '/settings', title: m('settings.title'), description: 'アカウント・セキュリティ・セッション・外観' },
+  { href: '/settings/security', title: m('settings.security'), description: 'セキュリティの設定をまとめて確認' },
+  { href: '/settings/sessions', title: m('settings.sessions'), description: 'ログイン中のデバイスとログアウト' },
 ] as const;
 
 export default async function HomePage() {
@@ -24,9 +26,15 @@ export default async function HomePage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-8 px-6 py-12">
-      <header>
-        <h1 className="text-2xl font-bold">{APP_NAME}</h1>
-        <p className="mt-2 text-muted-fg">{user.username} さんがログインしています。</p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">{APP_NAME}</h1>
+          <p className="mt-2 text-muted-fg">{user.username} さんがログインしています。</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <LogoutButton />
+        </div>
       </header>
       <ul className="grid gap-4">
         {destinations.map((item) => (
@@ -38,7 +46,6 @@ export default async function HomePage() {
           </li>
         ))}
       </ul>
-      <LogoutButton />
     </main>
   );
 }

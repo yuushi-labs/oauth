@@ -12,6 +12,7 @@ import { verifyCaptchaIfRequired } from '@/lib/auth/captcha';
 import { ApiError } from '@/lib/errors';
 import type { FailedAttemptReservation } from '@/lib/auth/rate-limit';
 import { findUserByEmailOrUsername } from '@/lib/db/queries/users';
+import { isFirstSessionFromDevice, notifyNewDeviceLogin } from '@/lib/auth/notifications';
 import { z } from 'zod';
 
 const loginSchema = z.object({
@@ -91,11 +92,28 @@ export async function POST(request: NextRequest) {
         return failResponse('ACCOUNT_SUSPENDED', 'このアカウントは利用できません', 403);
       }
 
+      const userAgent = request.headers.get('user-agent') ?? '';
       const { token, session } = await createSession(user.id, request);
       await setSessionCookie(token);
       await setAnonCookie(session.csrfSecret);
 
-      await recordSecurityEvent('login_success', user.id, ip, request.headers.get('user-agent') ?? '');
+      // 新規デバイスからのログインなら通知を送る（§18）。判定・送信の失敗でログインは失敗させない。
+      try {
+        const isNewDevice = await isFirstSessionFromDevice(
+          user.id, session.id, session.ipHash, session.deviceName,
+        );
+        if (isNewDevice) {
+          await notifyNewDeviceLogin({
+            userId: user.id, userEmail: user.email,
+            deviceName: session.deviceName, ipMasked: session.ipMasked, ipCountry: null,
+            occurredAt: new Date(), ip, userAgent,
+          });
+        }
+      } catch {
+        // 通知判定の失敗でもログインは成功として扱う
+      }
+
+      await recordSecurityEvent('login_success', user.id, ip, userAgent);
 
       return handleSuccess({ message: 'ログインしました' });
     },

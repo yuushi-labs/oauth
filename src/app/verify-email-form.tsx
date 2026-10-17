@@ -1,72 +1,91 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { apiClient, ApiClientError, resetCsrfCache } from '@/lib/api/client';
+import { m } from '@/messages/ja';
 
-type ApiResponse = {
-  success: boolean;
-  data?: { message?: string };
-  error?: { message?: string };
-};
-
+/**
+ * メール確認（§25: GET では状態変更しない）。
+ *
+ * ページ表示は GET、確定は画面内の POST。auto POST は StrictMode の二重実行と
+ * 再レンダによる重複を避けるため useRef で 1 回だけ実行する。
+ */
 export function VerifyEmailForm({ token }: { token: string }) {
-  const [csrfToken, setCsrfToken] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [resendMessage, setResendMessage] = useState('');
+  const autoPosted = useRef(false);
 
-  useEffect(() => {
-    let active = true;
-    fetch('/api/auth/csrf', { cache: 'no-store' })
-      .then(async (response) => (await response.json()) as { success: boolean; data?: { csrfToken?: string } })
-      .then((result) => {
-        if (active && result.success && result.data?.csrfToken) setCsrfToken(result.data.csrfToken);
-        else if (active) setError('確認画面を準備できませんでした。再読み込みしてください。');
-      })
-      .catch(() => {
-        if (active) setError('確認画面を準備できませんでした。再読み込みしてください。');
-      });
-    return () => { active = false; };
-  }, []);
-
-  async function confirmEmail() {
-    if (!token || !csrfToken) return;
+  const confirm = useCallback(async () => {
+    if (!token) {
+      setError('確認リンクにトークンがありません。');
+      return;
+    }
     setSubmitting(true);
-    setError('');
     try {
-      const response = await fetch('/api/auth/verify-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ token }),
-      });
-      const result = (await response.json()) as ApiResponse;
-      if (!response.ok || !result.success) {
-        setError(result.error?.message ?? 'メールアドレスを確認できませんでした。');
-        return;
-      }
-      setMessage('メールアドレスを確認しました。ログインできます。');
-    } catch {
-      setError('通信に失敗しました。時間をおいて再度お試しください。');
+      await apiClient.post('/api/auth/verify-email', { token });
+      resetCsrfCache();
+      setError('');
+      setMessage(m('auth.verifyDone'));
+    } catch (caught) {
+      setError(caught instanceof ApiClientError ? caught.message : m('auth.verifyFailed'));
     } finally {
       setSubmitting(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (autoPosted.current || !token) return;
+    autoPosted.current = true;
+    void confirm();
+  }, [token, confirm]);
+
+  async function resend() {
+    setResendMessage('');
+    try {
+      await apiClient.post('/api/auth/resend-verification');
+      setResendMessage(m('auth.resendSent'));
+    } catch (caught) {
+      setResendMessage(
+        caught instanceof ApiClientError && caught.status === 429
+          ? m('auth.resendTooMany')
+          : m('auth.resendFailed'),
+      );
     }
   }
 
   return (
     <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
-      {!token && <p className="mb-4 text-sm text-danger" role="alert">確認リンクにトークンがありません。</p>}
-      {error && <p className="mb-4 text-sm text-danger" role="alert">{error}</p>}
+      {error && (
+        <Alert variant="danger" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
       {message ? (
-        <p className="text-sm text-success" role="status">{message} <Link className="underline" href="/login">ログイン</Link></p>
+        <div className="flex flex-col gap-4">
+          <Alert variant="success">
+            <AlertDescription>{message}</AlertDescription>
+          </Alert>
+          <Link className="text-sm text-primary underline" href="/login">{m('auth.submitLogin')}</Link>
+        </div>
       ) : (
-        <button
-          className="w-full rounded-md bg-primary px-4 py-2 font-medium text-primary-fg disabled:cursor-not-allowed disabled:opacity-60"
-          type="button"
-          onClick={confirmEmail}
-          disabled={!token || !csrfToken || submitting}
-        >
-          {submitting ? '確認中…' : 'メールアドレスを確認する'}
-        </button>
+        <div className="flex flex-col gap-4">
+          <Button onClick={() => void confirm()} disabled={!token || submitting} aria-busy={submitting}>
+            {submitting ? m('common.loading') : m('auth.verifyAction')}
+          </Button>
+          <div className="flex flex-col gap-2">
+            <Button variant="secondary" size="sm" onClick={() => void resend()}>
+              {m('auth.resendAction')}
+            </Button>
+            {resendMessage && (
+              <p className="text-sm text-muted-fg" role="status">{resendMessage}</p>
+            )}
+          </div>
+        </div>
       )}
     </section>
   );
