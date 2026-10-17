@@ -158,7 +158,7 @@
 
 ## 9. DoD
 
-- [x] `pnpm lint` / `pnpm typecheck` / `pnpm test`（42ファイル 260件）/ `pnpm test:e2e`（10件）/ `pnpm build` がすべて green
+- [x] `pnpm lint` / `pnpm typecheck` / `pnpm test`（43ファイル 262件）/ `pnpm test:e2e`（12件）/ `pnpm build` がすべて green（M2.5 closeout で Go 相互運用 e2e が加わった後の最終確認。2026-10-17）
 - [x] 画面から client を作成し、redirect URI と secret で userinfo の claim を確認できる（開発サーバで smoke 実行済み・e2e でも実証）
 - [x] secret の平文が DB・ログ・セキュリティイベントに残らないことをレビューで確認（`secret_hash` は `hmac-sha256:` のみ・一覧/詳細ページに平文は出ない）
 - [x] 他人の client へアクセスできないことをテストで実証（security 2ファイル 17件 / integration 7件）

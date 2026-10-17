@@ -37,7 +37,7 @@
 | M1 メール認証 | Phase 1 | アカウント7項目（email確認・PWリセット・**アカウント削除**含む）＋一意制約＋セッションハッシュ/Cookie属性＋CSRF（Route Handler & Server Action 双方）＋レート制限＋session fixation テスト | **[x] 達成（2026-10-10）** |
 | M2 基盤 | Phase 2 | §64のPhase 2担当分（HTTPS／Security Headers／CORS/CSRF／Web攻撃対策） | **[x] 達成（2026-10-12）** |
 | M2.5 認証元 | Phase 2.5 | §69 OIDC Provider + Authorization Code/PKCE + scope/consent + first-party RP相互運用 | **[x] 達成（2026-10-17）** — 29/29 タスク完了。DoD 6 項のうち 5 項を達成、6 項目（本番公開）は Phase 9 運用 DoD へ繰り越し。残るは「本番公開の運用確認」と「multi-process adapter 一致性の実測」の 2 点のみ。`docs/phase2.5-実装計画.md` §5.1 / `docs/phase2.5-closeout-実行Todo.md` |
-| M2.6 管理コンソール | Phase 2.6 | ログイン後の画面遷移＋OIDC/OAuth 2.0 アプリのセルフサービス作成・編集・secret 管理・接続テスト | [ ] 実装中（`docs/phase2.6-oidc-client-console-実装計画.md` のチェックボックスで進捗管理） |
+| M2.6 管理コンソール | Phase 2.6 | ログイン後の画面遷移＋OIDC/OAuth 2.0 アプリのセルフサービス作成・編集・secret 管理・接続テスト | **[x] 達成（2026-10-17）** — P26-A-01〜G-02 の全 33 タスク完了（PR #4 → `c82cd1c`）。DoD 4 項すべて達成。仕様書 v1.3 の §69.4-2 と整合。`docs/phase2.6-oidc-client-console-実装計画.md` |
 | M3 UI | Phase 3 | §64「UI」6項目＋セッション一覧/個別/全ログアウト | [ ] 未着手 |
 | M4 ソーシャル | Phase 4 | Google/GitHub/Discord ログイン＋紐付け＋解除 | [ ] 未着手 |
 | M5 2FA | Phase 5 | TOTP＋Recovery Codes＋atomic 1回限り | [ ] 未着手 |
