@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { CircleCheck, ShieldAlert } from 'lucide-react';
-import { BadgeCheck, KeyRound, Link2, MonitorSmartphone, Fingerprint } from 'lucide-react';
+import { BadgeCheck, KeyRound, Link2, MonitorSmartphone, Fingerprint, Plug } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatLocalDateTime } from '@/lib/util/datetime';
 import type { SessionRow } from '@/components/settings/session-list';
@@ -124,6 +124,25 @@ export function SecurityOverview({
         <CardContent className="pt-0">
           <p className="text-sm text-fg">{m('security.notLinked')}</p>
           <p className="text-xs text-muted-fg">{m('security.notAvailable')}</p>
+        </CardContent>
+      </Card>
+
+      {/* 5b. OIDC クライアント（既存 M2.6 への導線）*/}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2">
+            <Plug aria-hidden className="size-4 text-muted-fg" />
+            {m('security.oidcClients')}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <p className="text-xs text-muted-fg">{m('security.oidcClientsHint')}</p>
+          <Link
+            className="mt-2 inline-block text-sm text-primary underline"
+            href="/settings/applications"
+          >
+            {m('settings.applications')}
+          </Link>
         </CardContent>
       </Card>
 

@@ -276,7 +276,7 @@ oauth/
 | M1 | Phase 1 | メール/パスワード認証（登録・ログイン・確認・リセット・セッション・CSRF・レート制限） | **完了** |
 | M2 | Phase 2 | Webセキュリティ・CSRF・レート制限・期限切れデータ削除 | **完了（2026-10-12）** |
 | M2.5 | Phase 2.5 | 自作サービス向けOAuth 2.0 / OIDC Provider、scope・同意管理・client registry | **実装中** |
-| M3 | Phase 3 | UI / テーマ / 通知メール / デバイス管理 | **実装中**（共通UI・テーマ・設定画面・セッション管理・通知メール。計画: `docs/phase3-ui-theme-notification-実装計画.md`） |
+| M3 | Phase 3 | UI / テーマ / 通知メール / デバイス管理 | **完了（2026-10-17）**（共通UI・テーマ・設定画面・セッション管理・通知メール。実ブラウザ viewport 検証のみ Phase 8-B へ） |
 | M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | 未着手 |
 | M5 | Phase 5 | TOTP 2FA + Recovery Codes | 未着手 |
 | M6 | Phase 6 | Passkey / WebAuthn | 未着手 |
@@ -379,7 +379,11 @@ users_role_id_idx / users_deleted_at_idx
 | 通知 | 新規デバイスログイン通知（`(ip_hash, device_name)` 一致判定）。本文にはデバイス名・masked IP・日時・（あれば）地域のみ |
 | 文言 | `messages/ja.ts` に `m()`（型安全なドット参照）と `errorMessage()` を追加。UI 文言を `ui.*` に一元化 |
 
-**テスト**: 55 files / 343 tests green（Phase 3 で +6 files / +46 tests）
+| 文言 | `messages/ja.ts` に型安全な `m()`（ドット参照・未定義キーはコンパイルエラー）と `errorMessage()` を追加。UI 文言を `ui.*` に一元化 |
+
+**DoD**: §64「セッション」6項目・「UI」6項目すべて green。未ブラウザでのみ**実ブラウザ viewport / スクリーンリーダー実機検証**が残存し、Phase 8-B（Playwright 導入時）に引継ぐ。
+
+**テスト**: 57 files / 359 tests green（Phase 3 で +8 files / +62 tests）
 
 ---
 

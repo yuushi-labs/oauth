@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-
-type CsrfResponse = { success: boolean; data?: { csrfToken?: string } };
+import { apiClient, resetCsrfCache } from '@/lib/api/client';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { errorMessage, m } from '@/messages/ja';
 
 export function LogoutButton() {
   const router = useRouter();
@@ -14,19 +16,13 @@ export function LogoutButton() {
     setBusy(true);
     setError('');
     try {
-      const csrfResponse = await fetch('/api/auth/csrf', { cache: 'no-store' });
-      const csrf = (await csrfResponse.json()) as CsrfResponse;
-      const token = csrf.data?.csrfToken;
-      if (!csrfResponse.ok || !token) throw new Error('csrf');
-      const response = await fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': token },
-      });
-      if (!response.ok) throw new Error('logout');
+      await apiClient.post('/api/auth/logout');
+      // セッションが変わるので CSRF トークンのキャッシュを捨てる（D-30-22）
+      resetCsrfCache();
       router.replace('/login');
       router.refresh();
-    } catch {
-      setError('ログアウトに失敗しました。再度お試しください。');
+    } catch (caught) {
+      setError(errorMessage('INTERNAL_ERROR'));
     } finally {
       setBusy(false);
     }
@@ -34,10 +30,14 @@ export function LogoutButton() {
 
   return (
     <div className="flex flex-col items-start gap-2">
-      <button className="rounded-md border border-border-strong px-4 py-2 font-medium" type="button" onClick={logout} disabled={busy}>
-        {busy ? '処理中…' : 'ログアウト'}
-      </button>
-      {error && <p className="text-sm text-danger" role="alert">{error}</p>}
+      <Button variant="outline" onClick={() => void logout()} disabled={busy} aria-busy={busy}>
+        {busy ? m('common.loading') : m('auth.logout')}
+      </Button>
+      {error && (
+        <Alert variant="danger" size="sm">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 }

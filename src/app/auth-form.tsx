@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PasswordStrength } from '@/components/auth/password-strength';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
+import { LoginButtons } from '@/components/auth/login-buttons';
 import { apiClient, ApiClientError, resetCsrfCache } from '@/lib/api/client';
 import { APP_DESCRIPTION, APP_NAME } from '@/config/app';
 import { errorMessage, m } from '@/messages/ja';
@@ -141,6 +142,13 @@ export function AuthForm({ mode, returnTo }: { mode: AuthMode; returnTo?: string
             {submitting ? m('common.loading') : isRegister ? m('auth.submitRegister') : m('auth.submitLogin')}
           </Button>
         </form>
+
+        {/* 社会ログイン/passkey/2FA は registry から自動生成。0 件なら描画されない（D-30-21）*/}
+        {!isRegister && (
+          <div className="mt-4">
+            <LoginButtons />
+          </div>
+        )}
 
         <div className="mt-6 flex flex-col gap-2 text-sm text-muted-fg">
           {!isRegister && (

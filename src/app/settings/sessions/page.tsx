@@ -1,3 +1,6 @@
+import { cookies } from 'next/headers';
+import { getSession } from '@/lib/auth/session';
+import { getSessionCookieName } from '@/lib/auth/cookie';
 import { listActiveSessionsByUser } from '@/lib/db/queries/sessions';
 import { getUserPreferences } from '@/lib/db/queries/user-preferences';
 import { resolveTimeZone } from '@/lib/util/datetime';
@@ -11,13 +14,19 @@ export const dynamic = 'force-dynamic';
 /**
  * セッション/デバイス管理（§19 / §38）。
  * 認可は layout のサーバ側ガード（requireSettingsUser）に任せる（§49 / D-30-19）。
- * 現在セッションの判定はサーバ側で行い、current フラグを渡す（D-30-08）。
+ * 現在セッションの判定もサーバー側で行い、初回描画から current を正しく付ける（D-30-08）。
  */
 export default async function SettingsSessionsPage() {
-  const user = await requireSettingsUser();
+  const settingsUser = await requireSettingsUser();
+
+  // 現在セッションは Cookie から確定する（クライアントで Cookie を読まない）
+  const sessionToken = (await cookies()).get(getSessionCookieName())?.value;
+  const session = sessionToken ? await getSession(sessionToken) : null;
+  const currentSessionId = session?.id ?? '';
+
   const [rows, preferences] = await Promise.all([
-    listActiveSessionsByUser(user.id),
-    getUserPreferences(user.id),
+    listActiveSessionsByUser(settingsUser.id),
+    getUserPreferences(settingsUser.id),
   ]);
 
   const initialSessions = rows
@@ -28,9 +37,11 @@ export default async function SettingsSessionsPage() {
       ip_masked: row.ipMasked ?? null,
       last_seen_at: row.lastSeenAt.toISOString(),
       created_at: row.createdAt.toISOString(),
-      current: false,
+      current: row.id === currentSessionId,
     }))
-    .sort((a, b) => b.last_seen_at.localeCompare(a.last_seen_at));
+    .sort(
+      (a, b) => Number(b.current) - Number(a.current) || b.last_seen_at.localeCompare(a.last_seen_at),
+    );
 
   return (
     <main className="flex flex-col gap-6">

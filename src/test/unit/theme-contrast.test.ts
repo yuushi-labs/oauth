@@ -48,6 +48,7 @@ const TEXT_PAIRS: [string, string][] = [
   ['--warning', '--bg'],
   ['--primary', '--bg'],
   ['--primary-fg', '--primary'],
+  ['--danger-fg', '--danger'],
 ];
 
 const NON_TEXT_PAIRS: [string, string][] = [
@@ -92,6 +93,12 @@ describe('theme token contrast (WCAG AA)', () => {
   it('BUG-3: dark で --primary-fg は白ではなく暗色（従来 #fff だと 2.54:1 だった）', () => {
     expect(contrast('#ffffff', dark['--primary']!)).toBeLessThan(4.5);
     expect(contrast(dark['--primary-fg']!, dark['--primary']!)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('BUG-3b: dark の危険色ボタンに #ffffff を使うと 2.77:1。--danger-fg を使う', () => {
+    expect(contrast('#ffffff', dark['--danger']!)).toBeLessThan(4.5);
+    expect(contrast(dark['--danger-fg']!, dark['--danger']!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(light['--danger-fg']!, light['--danger']!)).toBeGreaterThanOrEqual(4.5);
   });
 
   it('BUG-4: --border は card 境界に 3:1 未満。入力欄には --border-strong を使う', () => {

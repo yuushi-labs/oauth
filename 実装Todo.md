@@ -38,7 +38,7 @@
 | M2 基盤 | Phase 2 | §64のPhase 2担当分（HTTPS／Security Headers／CORS/CSRF／Web攻撃対策） | **[x] 達成（2026-10-12）** |
 | M2.5 認証元 | Phase 2.5 | §69 OIDC Provider + Authorization Code/PKCE + scope/consent + first-party RP相互運用 | **[x] 達成（2026-10-17）** — 29/29 タスク完了。DoD 6 項のうち 5 項を達成、6 項目（本番公開）は Phase 9 運用 DoD へ繰り越し。残るは「本番公開の運用確認」と「multi-process adapter 一致性の実測」の 2 点のみ。`docs/phase2.5-実装計画.md` §5.1 / `docs/phase2.5-closeout-実行Todo.md` |
 | M2.6 管理コンソール | Phase 2.6 | ログイン後の画面遷移＋OIDC/OAuth 2.0 アプリのセルフサービス作成・編集・secret 管理・接続テスト | **[x] 達成（2026-10-17）** — P26-A-01〜G-02 の全 33 タスク完了（PR #4 → `c82cd1c`）。DoD 4 項すべて達成。仕様書 v1.3 の §69.4-2 と整合。`docs/phase2.6-oidc-client-console-実装計画.md` |
-| M3 UI | Phase 3 | §64「UI」6項目＋セッション一覧/個別/全ログアウト | [~] **実装中（2026-10-17）** — 共通UI基盤・テーマ・`/settings/{security,sessions,appearance,password}`・新規API 5本・新規デバイス通知を実装。残りは社会/passkey/2FA ボタン枠組み、文言の最終整備、DoD 達成確認。計画 `docs/phase3-ui-theme-notification-実装計画.md`、着手前の欠陥是正は `docs/bugfix-BUG1-7-修正計画.md` |
+| M3 UI | Phase 3 | §64「UI」6項目＋セッション一覧/個別/全ログアウト | **[x] 達成（2026-10-17）** — 3-A〜3-D 全タスク完了。DoD は §64「UI」「セッション」全項目 green。残るのは**実ブラウザ viewport / スクリーンリーダー実機検証のみ**（Phase 8-B へ引継ぎ）。計画 `docs/phase3-ui-theme-notification-実装計画.md`、欠陥是正 `docs/bugfix-BUG1-7-修正計画.md` |
 | M4 ソーシャル | Phase 4 | Google/GitHub/Discord ログイン＋紐付け＋解除 | [ ] 未着手 |
 | M5 2FA | Phase 5 | TOTP＋Recovery Codes＋atomic 1回限り | [ ] 未着手 |
 | M6 Passkey | Phase 6 | Passkey 登録/ログイン/削除＋Level3検証 | [ ] 未着手 |
@@ -250,10 +250,10 @@
 ### 5-B 認証画面
 
 - [ ] **P3-B-01** ~~`/register`~~ ✅ 2026-10-17: PW meter（5段階・色＋アイコン＋テキスト）、8〜128 表記、breached 表示
-- [ ] **P3-B-02** [~] `/login` ✅ 2026-10-17（1入力欄維持・統一メッセージ・PW meter・ThemeToggle）。社会/passkey/2FA ボタンは **Phase 4/5/6 で registry から自動生成する枠組みだけ**
+- [x] **P3-B-02** ~~`/login`~~ ✅ 2026-10-17: 1入力欄維持（API契約と列挙対策を不変に）、統一メッセージ、PW meter、ThemeToggle。`lib/auth/oauth/registry.ts`（型＋空エントリ）と `LoginButtons`（registry 駆動・0件なら非表示）を追加し、社会/passkey/2FA は Phase 4/5/6 でエントリ追加＝ボタン自動表示
 - [ ] **P3-B-03** ~~`/verify-email`~~ ✅ 2026-10-17: auto POST を useRef で 1 回だけ実行（§25）、再送信 UI
-- [ ] **P3-B-04** `/forgot-password`（常に同一メッセージ）★2026-10-17 最小画面を追加済み（BUG-1）。PW meter・文言一元化は未着手
-- [ ] **P3-B-05** `/reset-password`（token＋新PW＋PW meter）★2026-10-17 最小画面を追加済み（BUG-1）。PW meter は未着手
+- [x] **P3-B-04** ~~`/forgot-password`~~ ✅ 2026-10-17: 常に同一メッセージ（§46）、文言一元化、`api/client` 経由、`no-store`
+- [x] **P3-B-05** ~~`/reset-password`~~ ✅ 2026-10-17: token を画面に出さない（§45）、PW meter 付き、`INVALID_TOKEN` は既定文言のみ、`no-store`
 - [ ] **P3-B-06** ~~未ログイン時の `settings/*` サーバ側ガード~~ ✅ 2026-10-17: 既存 `requireSettingsUser` が新規 4 ページへ適用（307→/login を実測）
 - [x] **P3-B-11★** `/email-change/confirm` 画面 ＋ `GET` 303 リダイレクト（BUG-2・2026-10-17 完了。UI の見た目の整えは Phase 3-A に任せる）
 
@@ -273,9 +273,29 @@
 - [ ] **P3-D-04** ~~`GET /api/auth/security/events`~~ ✅ 2026-10-17: 本人限定・許可列のみ・limit 既定10/上限50・読み取り専用
 - [ ] **P3-D-05** ~~`messages/ja.ts` へ UI 文言~~ ✅ 2026-10-17: `m()`（型安全なドット参照）＋`errorMessage()` を追加し UI 文言を ui.* に集約
 
-**DoD（Phase 3）**
-- [ ] 仕様64章「セッション」「UI」カテゴリ完了
-- [ ] `src/test/e2e/{login,register,theme,sessions}.test.ts` green（※`実装Todo.md` の旧表記 `.spec.ts` は D-30-01 により `.test.ts` に読み替え。モバイル viewport の実ブラウザ検証は Phase 8-B へ引継ぎ）
+**DoD（Phase 3）— 2026-10-17 判定**
+
+§64「セッション」6項目
+- [x] 複数端末対応（2 セッションで一覧が 2 件以上=e2e で実証）
+- [x] セッション一覧（`GET /api/auth/sessions`・`current` 先頭・`ip_masked` のみ）
+- [x] 個別ログアウト（`DELETE`・他人は 404）
+- [x] 全端末ログアウト（`POST /logout-all`・**再認証必須**＝401 を実証）
+- [x] セッション失効（`revoked_at`/`revoke_reason` 記録）
+- [x] セッションローテーション（既存維持・回帰 green）
+
+§64「UI」6項目
+- [x] Light / Dark / System の 3 択（`/settings/appearance`・既定 `system`）
+- [x] OS テーマ変更へのリアルタイム追従（`matchMedia` change 購読・リロード不要）
+- [x] PC 対応（固定幅 px を持ち込まない＝静的チェック green）
+- [x] スマホ対応（**静的チェック＋SSR の viewport meta まで。実ブラウザ viewport は Phase 8-B**）
+- [x] OIDC 同意画面も dark に追従（BUG-5 で対応済み）
+
+その他
+- [x] 新規 6 API が契約どおり（IDOR・CSRF・再認証込み）
+- [x] 新規デバイス通知・全ログアウト通知が秘密情報を含まない
+- [x] `messages/ja.ts` へ UI 文言を集約（`m()` は型安全なドット参照）
+- [x] `pnpm lint`(0 errors) / `typecheck` / `test`(57 files / 359 tests) / `build` が green
+- [ ] **実ブラウザ viewport / スクリーンリーダー実機検証** — Phase 8-B（Playwright 導入時）に引継ぎ
 
 **Phase 3 着手前に完了した欠陥是正（2026-10-17 / `docs/bugfix-BUG1-7-修正計画.md`）**
 - [x] BUG-1 パスワードリセットのメール内 URL（`/password/reset` → `/reset-password`）＋画面
