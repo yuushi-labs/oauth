@@ -293,7 +293,7 @@ Cache-Control: no-store
 const entry = getProvider(providerParam);           // 見つからなければ 404
 if (!entry.isConfigured(process.env)) return fail(INVALID_PROVIDER, 404);
 
-// 2. ユーザーキャンセルは情報漏洩 없이 login へ
+// 2. ユーザーのキャンセル（access_denied）は情報を出さず login へ戻す
 if (search.error === 'access_denied') return redirect('/login?error=cancelled');
 
 // 3. state の検証と【消費】 ← ここが replay 対策の要
