@@ -96,10 +96,16 @@ export function fail(code: ErrorCode, message?: string): ApiErrorBody {
 
 export type NormalizedError = { status: number; body: ApiErrorBody };
 
+import { ZodError } from 'zod';
+
 /** 未知の例外をクライアントへ返さない形に正規化する（仕様45章・58章）。 */
 export function normalizeError(error: unknown): NormalizedError {
   if (error instanceof ApiError) {
     return { status: error.status, body: fail(error.code, error.message) };
+  }
+  if (error instanceof ZodError) {
+    const message = error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
+    return { status: ERROR_STATUS.VALIDATION_ERROR, body: fail('VALIDATION_ERROR', message) };
   }
   return { status: ERROR_STATUS.INTERNAL_ERROR, body: fail('INTERNAL_ERROR') };
 }
