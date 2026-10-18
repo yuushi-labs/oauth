@@ -8,6 +8,7 @@ const sections = [
   { href: '/settings/sessions', title: m('settings.sessions'), description: 'ログイン中のデバイスを確認し、個別にログアウトできます。' },
   { href: '/settings/password', title: m('settings.password'), description: 'パスワードを変更します（変更すると他のデバイスからログアウトされます）。' },
   { href: '/settings/appearance', title: m('settings.appearance'), description: 'テーマ（システムに追従／ライト／ダーク）を選びます。' },
+  { href: '/settings/connected-accounts', title: m('settings.connectedAccounts'), description: 'Google / GitHub / Discord などの外部アカウントを連携し、外部アカウントでログインできるようにします。' },
   { href: '/settings/connected-apps', title: m('settings.connectedApps'), description: '許可したサービスと共有範囲を確認し、連携を取り消せます。' },
   { href: '/settings/applications', title: m('settings.applications'), description: 'OIDC / OAuth 2.0 アプリ（client）を作成・設定し、接続をテストします。' },
 ] as const;

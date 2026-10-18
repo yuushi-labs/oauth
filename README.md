@@ -277,7 +277,7 @@ oauth/
 | M2 | Phase 2 | Webセキュリティ・CSRF・レート制限・期限切れデータ削除 | **完了（2026-10-12）** |
 | M2.5 | Phase 2.5 | 自作サービス向けOAuth 2.0 / OIDC Provider、scope・同意管理・client registry | **実装中** |
 | M3 | Phase 3 | UI / テーマ / 通知メール / デバイス管理 | **完了（2026-10-17）**（共通UI・テーマ・設定画面・セッション管理・通知メール。実ブラウザ viewport 検証のみ Phase 8-B へ） |
-| M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | 未着手（計画: `docs/phase4-oauth-social-login-実装計画.md`。**着手前に `interop/README.md` で client ID を取得する**） |
+| M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | **実装完了（2026-10-18）**（ログイン・新規登録・紐付け・解除。**実ブラウザでの手動疎通 11 手順のみ未実施**） |
 | M5 | Phase 5 | TOTP 2FA + Recovery Codes | 未着手 |
 | M6 | Phase 6 | Passkey / WebAuthn | 未着手 |
 | M7 | Phase 7 | 管理者 / RBAC / 監査ログ | 未着手 |
@@ -368,7 +368,7 @@ users_role_id_idx / users_deleted_at_idx
 - Docker 権限が無い環境では `sg docker -c "docker compose ..."` のようにグループを明示する必要がある
 - `docker compose` の DB は `127.0.0.1:5432` にのみバインドしている。外部公開しないこと
 
-## Phase 3 実装詳細（2026-10-17 / 実施中）
+## Phase 3 実装詳細（2026-10-17 / 完了）
 
 | 領域 | 内容 |
 |---|---|
@@ -386,6 +386,41 @@ users_role_id_idx / users_deleted_at_idx
 **実ブラウザ検証で判明した欠陥の是正**: `nonce` の hydration mismatch（warning のみ。DOM/CSP は正しく `suppressHydrationWarning` で解消）／`favicon.ico` 404（`src/app/favicon.ico` を追加）／RootLayout の不要な DB 往復（`findUserById` を削除）
 
 **テスト**: 58 files / 365 tests green（Phase 3 で +9 files / +68 tests）
+
+## Phase 4 実装詳細（2026-10-18 / 実装完了）
+
+計画: `docs/phase4-oauth-social-login-実装計画.md`（v1.1 / D-31-01〜D-31-18）／credential 取得手順: `interop/README.md`
+
+| 領域 | 内容 |
+|---|---|
+| registry | `src/lib/auth/oauth/types.ts` で型を全面再設計（`exchangeCode` / `fetchIdentity` / `verifyIdToken?`）。`registry.ts` に **Google / GitHub / Discord のエントリ 3 件**を追加。UI は自動でボタンが出る（`social-login-buttons.tsx` を `<a>` 化） |
+| provider | `google.ts`（`jose` の `jwtVerify`・**alg=RS256 固定**・`aud`=client_id・`iss` 2 形式・`nonce` 照合）、`github.ts`（**`Accept: application/json` 必須**・`primary && verified` のみ採用）、`discord.ts`（`verified === true` のみ採用） |
+| state | `state.ts`。`state`/`nonce`/`code_verifier` を **`oauth_states`** に保存し、消費時に `UPDATE` して **1 回限りを DB 側で強制**（replay 防止）。`state` は SHA-256 で引くので生値は保存しない |
+| intent | `oauth_states.intent`（`login` / `link`）+ `user_id` で **login と link の判定を分離**。link は `POST /api/auth/oauth/link`（**再認証必須**）から別々に state を発行する |
+| API | `GET /api/auth/oauth/{provider}`（303・PKCE S256）、`GET .../callback`（intent で分岐）、`POST /api/auth/oauth/link`、`GET /api/auth/accounts`、`DELETE /api/auth/accounts/{id}` |
+| migration | `drizzle/0015_milky_captain_marvel.sql` = `accounts` ＋ `oauth_states`。`accounts` は `UNIQUE(provider, provider_account_id)`、**refresh token 列は持たない** |
+| 画面 | `/settings/connected-accounts`（一覧・追加・解除）。`security-overview.tsx` の連携カードを「件数＋導線」に変更 |
+| パージ | `scripts/purge-expired.ts` に `oauth state` ジョブを追加（期限切れは即削除、消費済みは 1 時間後） |
+
+**セキュリティ上の要点**
+
+| 脅威 | 対策 |
+|---|---|
+| ★ link による乗っ取り | `(provider, provider_account_id)` が既に存在する時点で **409 で拒否**（他人のものを奪わない）。email 一致による自動 link も禁止 |
+| email 一致の自動統合 | **しない**。login では「停止して link を誘導」、link では「409 で拒否」（片方を他方の抜け穴にしない） |
+| 認可コードの再利用 | `consumeOAuthState` の `UPDATE ... WHERE consumed_at IS NULL` で 2 回目は必ず失敗 |
+| ID token の alg=none | `algorithms: ['RS256']` を明示 + `aud` / `iss` / `exp` / `nonce` を照合 |
+| 未検証 email での登録 | `emailVerified === false` または `email === null` では新規登録も紐付けもしない |
+| redirect 窃取 | `redirect_uri` は `NEXT_PUBLIC_APP_URL` から組み立て（**Host ヘッダに依存しない**）。`redirect_to` は同一オリジンの相対パスのみ受理 |
+| 最後の認証手段の消失 | パスワード未設定 ＋ 連携 0 件の状態での解除は 409 |
+
+**social-only ユーザーと再認証**: パスワードが無いユーザーは `POST /api/auth/reauth` が原理的に成立しないため、OAuth ログインで発行するセッションには `reauth_verified_at` を最初から立てる。これで 5 分の猶予が通常ユーザーと同じ挙動になる（`session.ts` の `createSession({ reauthVerified: true })`）。
+
+**DoD**: 仕様 §64「ソーシャルログイン」6項目 green。`pnpm lint`（0 errors）/ `typecheck` / `test`（**65 files / 446 tests**、Phase 3 比 +7 files / +81 tests）/ `build` すべて green。
+
+**残作業**: **実ブラウザでの手動疎通確認 11 手順**（計画書 §9）。実 OAuth アカウントと provider コンソールでの redirect URI 登録が必要なので保留。自動テストと e2e（実 HTTP での authorize リダイレクト）は green。
+
+---
 
 ---
 

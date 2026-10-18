@@ -74,12 +74,21 @@ describe('E2E - login / register screens', () => {
     expect(response.body).toContain('maxLength="128"');
   }, 60_000);
 
-  it('テーマ切替 UI（3 択）が描画され、registry が空なので社会ログインボタンは出ない', async () => {
+  it('テーマ切替 UI（3 択）が描画され、社会ログインボタンは registry 設定時だけ出る', async () => {
     const response = await httpRequest(`${app.origin}/login`);
     expect(response.body).toContain('システムに追従');
     expect(response.body).toContain('ライト');
     expect(response.body).toContain('ダーク');
-    expect(response.body).not.toContain('Google で続行');
+
+    // Phase 4 で registry にエントリが入ったので、設定されていればボタンが出る。
+    // 「Google で続行」は registry が空のときだけ出ない（D-30-21）。
+    const googleConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+    if (googleConfigured) {
+      expect(response.body).toContain('Google で続行');
+      expect(response.body).toContain('/api/auth/oauth/google');
+    } else {
+      expect(response.body).not.toContain('Google で続行');
+    }
   }, 60_000);
 
   it('未ログインの /settings/* は /login へリダイレクトされる', async () => {

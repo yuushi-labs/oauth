@@ -10,6 +10,7 @@ const items = [
   { href: '/settings/sessions', label: m('settings.sessions') },
   { href: '/settings/password', label: m('settings.password') },
   { href: '/settings/appearance', label: m('settings.appearance') },
+  { href: '/settings/connected-accounts', label: m('settings.connectedAccounts') },
   { href: '/settings/connected-apps', label: m('settings.connectedApps') },
   { href: '/settings/applications', label: m('settings.applications') },
 ] as const;

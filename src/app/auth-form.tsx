@@ -25,10 +25,19 @@ type AuthMode = 'login' | 'register';
  * - autocomplete 属性を用途ごとに指定する（§13.1）
  * - 社会ログイン/passkey/2FA は registry（Phase 4 以降）から自動生成するため、ここでは描画しない（D-30-21）
  */
-export function AuthForm({ mode, returnTo }: { mode: AuthMode; returnTo?: string }) {
+export function AuthForm({
+  mode,
+  returnTo,
+  oauthError,
+}: {
+  mode: AuthMode;
+  returnTo?: string;
+  /** OAuth コールバックから `?error=` で渡された利用者向けの文言（§12.2）。 */
+  oauthError?: string;
+}) {
   const router = useRouter();
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(oauthError ?? '');
   const [submitting, setSubmitting] = useState(false);
   const isRegister = mode === 'register';
 

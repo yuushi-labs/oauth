@@ -5,7 +5,8 @@
 > 正典: 仕様書 §9（プロバイダー）/ §10（accounts）/ §11（linking）/ §16（レート制限）、計画 12.1〜12.4、Todo §6
 > credential 取得手順: `interop/README.md`（**2026-10-17 に 3 provider の取得完了**）
 > v1.0: 2026-10-17 初版（計画のみ）
-> **v1.1: 設計レビューで見つけた未決論点を解決し、実装可能な粒度まで詰め直した**（§3 に変更点を列挙／全 949 行）
+> **v1.1: 設計レビューで見つけた未決論点を解決し、実装可能な粒度まで詰め直した**（§3 に変更点を列挙）
+> **v1.2: 実装完了（2026-10-18）。設計変更 3 件を反映**（§15 改訂履歴）
 
 ---
 
@@ -948,3 +949,4 @@ Step 6: pnpm lint / typecheck / test / build + 手動 11 手順の完了
 | v1.0 | 2026-10-17 | 初版（計画のみ・実装未着手）。Phase 3 完了時点のコードを精査して不足を特定。migration 2 本、`jose` 採用（D-31-02、`openid-client` からの逸脱）、GitHub の `Accept: application/json` 要件（D-31-03）、`state` の 1 回限りを PostgreSQL で強制（D-31-05）を確定 |
 | **v1.1** | 2026-10-17 | **設計レビューで 10 個の未決論点を解決**（§3）。特に ★★ **link フローの account takeover（§7.8 の 8 脅威）** が v1.0 の設計では防げていなかった点を発見し、`intent`（login/link）の分岐と「既存リンクは奪わない」ルールを追加。`registry` の型に token 交換・identity 取得のスロットが欠けていたため再設計。provider 3 つの**実装可能コード**（jose 検証・GitHub の primary&&verified・Discord の verified）、`state.ts` の 1 回限り消費の実装、5 API の完全な契約、callback 判定の 2 系統化、mock 戦略、**実 provider 手動疎通 11 手順**、パージ統合、監視シグナルを追加。client ID 取得済みも確認（6 キー非空・長さも形式一致）。
 ▸ **自己レビューで 20 箇所の表記揺れを修正**（§7.1 のファイル数 20 → 25 に合わせて §0・§8.3・§7.1 を整合、§12 の工数を各行の合計 30.6h に再計算、P4-C-05 の ID 重複を解消、文言の混入を排除） |
+| **v1.2** | 2026-10-18 | **実装完了。設計変更 3 件**（いずれも計画の回顾で見つかった実害）。(1) **callback の Origin 検証を見直し** — provider からの top-level GET 遷移ではブラウザが `Origin` を付けないため、元の「ヘッダが無ければ 403」は正常な連携を永久に壊していた。`Origin` / `Referer` が**存在する場合のみ**検証し、CSRF の本体は `state` + PKCE に委ねる形へ変更（§7.7 ステップ 3）。(2) **provider 検証の失敗を 401 に統一** — `ProviderError` だけを拾っていたため、`jose` が投げる署名検証エラーが 500 になっていた（内部情報の漏えい）。provider 側の例外はすべて fail closed で 401 に落とす（§7.7 ステップ 6）。(3) **social-only ユーザーの再認証** — パスワードが無いと `POST /api/auth/reauth` が成立せず、link / unlink が永久に実行できなくなる。OAuth ログインで発行するセッションに `reauthVerified` を立てて、5 分猶予を通常ユーザーと統一した（§7.6）。<br>このほか §7.1 のファイル名・migration 名（`0015_milky_captain_marvel.sql`）とレート制限キー名（`rateLimitKeys.oauthStart` / `.oauthCallback`）を実装に合わせて訂正。テストは 65 files / 446 tests green、lint / typecheck / build も green。**残作業は実ブラウザでの手動疎通 11 手順のみ**（§9）。
