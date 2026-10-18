@@ -54,6 +54,26 @@ export function buildSocialClaimCookie(token: string): string {
   return attributes.join('; ');
 }
 
+/**
+ * anon Cookie をレスポンスヘッダで書くための値（Route Handler 用・BUG-15）。
+ *
+ * Next.js 15 では Server Component の描画中は Cookie を**変更**できない。
+ * そのため anon Cookie の発行は callback（Route Handler）で行い、
+ * 確認画面は「既に存在する secret を読む」だけにする。
+ */
+export function buildAnonCookie(secret: string): string {
+  const signature = createHmac('sha256', getEnv().CSRF_SECRET).update(secret).digest('hex');
+  const attributes = [
+    `${getAnonCookieName()}=${secret}.${signature}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${ANON_MAX_AGE}`,
+  ];
+  if (isProduction()) attributes.push('Secure');
+  return attributes.join('; ');
+}
+
 /** claim を消すための Set-Cookie 値（Max-Age=0）。 */
 export function buildClearedSocialClaimCookie(): string {
   const attributes = [`${getSocialClaimCookieName()}=`, 'Path=/', 'HttpOnly', 'SameSite=Lax', 'Max-Age=0'];

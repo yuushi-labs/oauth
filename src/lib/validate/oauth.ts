@@ -32,7 +32,11 @@ export const oauthLinkBodySchema = z.object({
  */
 export const socialConfirmBodySchema = z.object({
   action: z.enum(['signup', 'password']),
-  /** password アクションのみ。email またはユーザー名。 */
-  identifier: z.string().min(1).optional(),
-  password: z.string().min(1).optional(),
+  /**
+   * password アクションのみ。**空文字も許す**。
+   * 空文字は「email が空」なので、body の parse で 400 にせず
+   * 通常の認証判定（INVALID_CREDENTIALS）に落とす。UI 側の必須表示に任せる。
+   */
+  identifier: z.string().max(320).optional(),
+  password: z.string().max(128).optional(),
 });

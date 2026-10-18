@@ -400,9 +400,13 @@ Phase 4 の本体内で未だった 2 点（BUG-12 後の実ブラウザ検証�
 | lib | `auth/oauth/social-claim.ts` / `auth/oauth/username.ts` |
 | API | `POST /api/auth/oauth/social-login`（signup / password）、`POST /api/auth/oauth/social-login/cancel` |
 | 画面 | `/login/social-confirm` ＋ `SocialConfirmForm`。**メールアドレスとパスワードの 2 欄**（email は明示入力させる） |
+| CSRF | **callback が claim と anon Cookie を 1 つの応答に**書き出し、確認画面が読み取る（D-32-20）。クライアントに `/api/auth/csrf` を叩かせない |
+| claim 消費 | **peek → 検証 → 成功確定直前で消費**（D-32-19）。password 誤りでも claim を失わない |
 | パージ | `scripts/purge-expired.ts` に `social claim` ジョブを追加 |
 
-**DoD**: 仕様 §9・§11・§49 に対応。`pnpm lint`（0 errors）/ `typecheck` / `test`（**68 files / 479 tests**）/ `build` すべて green。
+**BUG-15 の是正（2026-10-18）**: 実ブラウザで「403 → 400、内部的には連携済み」という症状が出た。原因は (1) claim を password 検証前に消費していた、(2) CSRF トークンをクライアント再取得に依存させていた、の 2 つ。どちらも解消し、実 HTTP で再現・修正を確認した。
+
+**DoD**: 仕様 §9・§11・§49 に対応。`pnpm lint`（0 errors）/ `typecheck` / `test`（**68 files / 482 tests**）/ `build` すべて green。
 **残作業**: 実ブラウザでの 3 provider 通し（既存の §9 の 11 手順）。
 
 ---

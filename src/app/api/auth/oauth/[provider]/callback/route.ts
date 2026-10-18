@@ -3,7 +3,15 @@ import { RATE_LIMITS } from '@/config/rate-limits';
 import { rateLimitKeys } from '@/lib/auth/rate-limit-keys';
 import { rateLimiter } from '@/lib/auth/rate-limit';
 import { createSession, getRequestClientIp, getSession } from '@/lib/auth/session';
-import { buildSocialClaimCookie, setSessionCookie, setAnonCookie } from '@/lib/auth/cookie';
+import {
+  buildAnonCookie,
+  buildSocialClaimCookie,
+  generateAnonCsrfSecret,
+  getAnonCookieName,
+  getAnonCsrfSecret,
+  setAnonCookie,
+  setSessionCookie,
+} from '@/lib/auth/cookie';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
 import { isFirstSessionFromDevice, notifyNewDeviceLogin } from '@/lib/auth/notifications';
 import { getCookieToken, handleApiError, rateLimitResponse } from '@/lib/api/utils';
@@ -200,7 +208,7 @@ async function completeLoginCallback(args: {
       });
       throw new ApiError('ACCOUNT_SUSPENDED');
     case 'needs_confirmation':
-      return enterSocialConfirm(outcome.emailOwnerId, outcome.identity, provider);
+      return enterSocialConfirm(request, outcome.emailOwnerId, outcome.identity, provider);
     default:
       break;
   }
@@ -245,6 +253,7 @@ async function completeLoginCallback(args: {
  * を選んだときだけ、完了 API が実行する。
  */
 async function enterSocialConfirm(
+  request: NextRequest,
   emailOwnerId: string | null,
   identity: Identity,
   provider: SocialProvider,
@@ -254,10 +263,20 @@ async function enterSocialConfirm(
   // ここでは何も記録しない。まだ「完了」していないので login_failed ではなく、
   // 新しい event type も増やさない（D-32-15）。完了した時点で oauth_linked を記録する。
   //
-  // claim token は Cookie で運ぶ（URL には載せない・D-32-05）。
-  return redirectToPath(SOCIAL_CONFIRM_PATH, {
-    'Set-Cookie': buildSocialClaimCookie(token),
-  });
+  // ★ claim token と anon Cookie を**この 1 つの応答で**書く（BUG-15）。
+  // 確認画面は Server Component なので Cookie を書けない。あとからクライアントに
+  // `/api/auth/csrf` を叩かせると Cookie 保存のタイミングが読めず、トークンと
+  // Cookie が食い合って 403 になる。ここで先に用意しておく。
+  const anonCookie = request.cookies.get(getAnonCookieName())?.value ?? null;
+  const anonSecret = getAnonCsrfSecret(anonCookie) ?? generateAnonCsrfSecret();
+
+  const headers = new Headers();
+  headers.set('Cache-Control', 'no-store');
+  headers.append('Set-Cookie', buildSocialClaimCookie(token));
+  headers.append('Set-Cookie', buildAnonCookie(anonSecret));
+
+  const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, '') ?? 'http://localhost:3000';
+  return NextResponse.redirect(new URL(SOCIAL_CONFIRM_PATH, base), { status: 303, headers });
 }
 
 async function completeLinkCallback(

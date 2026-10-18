@@ -31,7 +31,19 @@ async function fetchCsrfToken(): Promise<string> {
   return cachedCsrf;
 }
 
-export type ApiRequest = { method?: string; body?: unknown; signal?: AbortSignal };
+export type ApiRequest = {
+  method?: string;
+  body?: unknown;
+  signal?: AbortSignal;
+  /**
+   * 明示的に指定する CSRF トークン。
+   *
+   * サーバーがレイアウト描画と一緒に発行したトークンをそのまま送りたい場合に使う。
+   * クライアントが後から `/api/auth/csrf` を叩いて取得したトークンは、
+   * ブラウザが Cookie _accept できていないと Cookie 側と食い違い 403 になる（BUG-15）。
+   */
+  csrfToken?: string;
+};
 
 export async function apiRequest<T>(path: string, init: ApiRequest = {}): Promise<T> {
   const method = (init.method ?? 'GET').toUpperCase();
@@ -40,7 +52,7 @@ export async function apiRequest<T>(path: string, init: ApiRequest = {}): Promis
 
   const send = async (): Promise<Response> => {
     if (method !== 'GET' && method !== 'HEAD') {
-      headers['X-CSRF-Token'] = await fetchCsrfToken();
+      headers['X-CSRF-Token'] = init.csrfToken ?? (await fetchCsrfToken());
     }
     return fetch(path, {
       method,
@@ -75,7 +87,7 @@ export async function apiRequest<T>(path: string, init: ApiRequest = {}): Promis
 
 export const apiClient = {
   get: <T>(path: string, options: { signal?: AbortSignal } = {}) => apiRequest<T>(path, options),
-  post: <T>(path: string, body?: unknown, options: { signal?: AbortSignal } = {}) =>
+  post: <T>(path: string, body?: unknown, options: { signal?: AbortSignal; csrfToken?: string } = {}) =>
     apiRequest<T>(path, { ...options, method: 'POST', body: body ?? {} }),
   patch: <T>(path: string, body: unknown) => apiRequest<T>(path, { method: 'PATCH', body }),
   put: <T>(path: string, body: unknown) => apiRequest<T>(path, { method: 'PUT', body }),

@@ -31,6 +31,7 @@ export function SocialConfirmForm({
   providerEmail,
   canSignup,
   hasExistingAccount,
+  csrfToken,
 }: {
   providerLabel: string;
   providerEmail: string | null;
@@ -38,6 +39,8 @@ export function SocialConfirmForm({
   canSignup: boolean;
   /** 既存アカウントと一致しているか（email + password で連携できる） */
   hasExistingAccount: boolean;
+  /** サーバーが画面描画と同時に発行した CSRF トークン（BUG-15） */
+  csrfToken: string;
 }) {
   const router = useRouter();
   const [email, setEmail] = React.useState(providerEmail ?? '');
@@ -49,10 +52,15 @@ export function SocialConfirmForm({
     setError('');
     setBusy(action);
     try {
-      await apiClient.post('/api/auth/oauth/social-login', {
-        action,
-        ...(action === 'password' ? { identifier: email, password } : {}),
-      });
+      await apiClient.post(
+        '/api/auth/oauth/social-login',
+        {
+          action,
+          ...(action === 'password' ? { identifier: email, password } : {}),
+        },
+        // サーバーが確定させたトークンを使う（クライアント再取得に依存させない）
+        { csrfToken },
+      );
       resetCsrfCache();
       // 完了後は新しいセッションになるので、`/` へ戻して再描画する
       router.replace('/');

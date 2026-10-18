@@ -73,6 +73,8 @@ Phase 4 本体は「**email 一致での自動統合をしない**」（§11 / D
 | **D-32-15** | **`security_events` の新規 type は追加しない**。既存型で表現する | D-31-18 の spirit |
 | **D-32-16** | 確認画面の導線は **POST + CSRF**（匿名時は anon cookie の CSRF） | `GET` ではなく POST で「確定する」操作であり、CSRF token を必須にする |
 | **D-32-17** | claim Cookie は**読みは `request.cookies`、書きはレスポンスの `Set-Cookie` ヘッダ**で行う（`cookies()` を経由しない） | `cookies()` は Next の request scope に依存し、Route Handler を直接呼ぶテストでは必ず 500 になる。request から読み・ヘッダで書くほうが副作用が明確でテストもしやすい |
+| **D-32-19★★** | **claim は「peek → 検証 → 成功確定直前で消費」する**。password 検証やメール送信の**前**では消費しない | 先に消費すると、password 誤り・CSRF の再送・通信断のたびに claim を失い、用户在 OAuth の最初からやり直すことになる（実測・BUG-15） |
+| **D-32-20★★** | **CSRF トークンは callback が anon Cookie と一緒に書き出し、確認画面がそれを読む**（クライアントに `/api/auth/csrf` を叩かせない） | Next.js 15 では Server Component の描画中は Cookie を変更できない。あとからクライアントに取得させると、ブラウザが Cookie を保存する前に送信して 403 になる（実測・BUG-15）。callback は Route Handler なので両方を同時に書ける |
 
 ---
 
@@ -176,13 +178,15 @@ CREATE INDEX "oauth_social_claims_expires_at_idx" ON "oauth_social_claims" ("exp
       · 「キャンセル」
 
 【完了】POST /api/auth/oauth/social-login   body: { action: 'signup' | 'password', password? }
-  1. Origin / CSRF（匿名は anon cookie）
-  2. consumeSocialClaim(cookie token) → なければ 400 INVALID_STATE
+  1. Origin / CSRF（匿名は anon cookie。**callback が書き出した anon Cookie**を使う）
+  2. peekSocialClaim(cookie token) → なければ 400 INVALID_STATE（消費しない）
+  2'. body の検証。identifier が空でも通す（password 判定で落とす）
   3. action = 'signup'
        - email_verified === false          → 400 ACCOUNT_NOT_LINKABLE
        - email_owner_id !== null           → 409 EMAIL_CONFLICT（「既に登録済み」）
        - (provider, provider_account_id) が存在 → 409 ACCOUNT_LINKED_ELSEWHERE（D-32-08）
-       - social-only ユーザーを作成 → accounts 行作成 → セッション → oauth_linked
+       - social-only ユーザーを作成
+       - ★ ここまで成功ellyたら **consumeSocialClaim** → accounts 行作成 → セッション → oauth_linked
   4. action = 'password'
        - login 系レート制限 + reservation（既存の方式）
        - findUserByEmailOrUsername(identifier)
@@ -396,3 +400,4 @@ Step 5（確認）
 |---|---|---|
 | v1.0 | 2026-10-18 | 初版。実ブラウザ検証で報告された 2 件（`link_required` で完了できない / username が `___`）に対する設計。確認画面は「常に表示」、password は「任意のアカウントでログイン可・連携は email 一致時のみ」、username は「表示名を ASCII 化」 |
 | **v1.1** | 2026-10-18 | **実装完了。** 決定事項 D-32-01〜D-32-16 をそのまま実装した。設計変更 2 件: (1) **claim Cookie の読み書きを `cookies()` からレスポンスヘッダ・request に移した**（D-32-17）。`cookies()` は Next の request scope に依存するため、Route Handler を直接呼ぶテストで必ず 500 になる。読みは `request.cookies`、書きは `Set-Cookie` ヘッダにするほうが副作用も明確で、テスト可能になる。(2) **`completeLogin` から `register` と `link_required` の分岐を削除**し、`needs_confirmation` に集約した。新規登録と連携は完了 API の責務になり、callback は「確認待ちを発行するだけ」に単純化された。テストは 68 files / 477 tests green。**残作業は実ブラウザでの 3 provider 通しのみ**。 |
+| **v1.2** | 2026-10-18 | **BUG-15 の是正（実ブラウザで「403 → 400 中队完了失败」となった）**。原因は 2 つ重なっていた。(1) **claim を password 検証より前に消費していた**ため、password 検証や CSRF の再送で失敗すると claim を使い切り、用户在 OAuth の最初からやり直すされていた（D-32-19）。(2) **CSRF トークンをクライアントに `/api/auth/csrf` で取得させていた**が、ブラウザが anon Cookie を保存する前に送信するとトークンと Cookie が食い違い 403 になる。さらに Next.js 15 では Server Component の描画中に Cookie を変更できないため、確認画面から anon Cookie を発行する方式も選べなかった。callback（Route Handler）で **claim と anon Cookie を 1 つの応答に**書き出し、確認画面はその値を読み取るだけにした（D-32-20）。加えて `identifier` を空文字でも受け付けるようにして、body の parse で 400 にせず通常の認証判定に落とすようにした。実 HTTP で再現・修正を確認し、回帰テスト 4 ケースを追加。テストは 68 files / 482 tests green。 |

@@ -7,6 +7,7 @@ import { hashPassword } from '@/lib/auth/password';
 import { startTestAppServer, type TestAppServer } from '@/test/helpers/app-server';
 import { httpRequest, CookieJar } from '@/test/helpers/http';
 import { extractCallbackState } from '@/test/helpers/oauth';
+import { createHmac } from 'node:crypto';
 
 /**
  * 連携確認画面の流れを実 HTTP で通す（Phase 4-B / §4.3）。
@@ -48,6 +49,18 @@ afterAll(async () => {
   await db.delete(oauthStates);
   await app.stop();
 }, 180_000);
+
+/**
+ * callback が書き込む anon Cookie を再現する（BUG-15）。
+ * 確認画面は Server Component なので anon Cookie を読むだけで、描画中に書けない。
+ * そのため callback が先に両方を書く設計になっている。
+ */
+const ANON_SECRET = 'e2e-anon-csrf-secret';
+
+function anonCookiePair(): string {
+  const signature = createHmac('sha256', process.env.CSRF_SECRET!).update(ANON_SECRET).digest('hex');
+  return `${ANON_SECRET}.${signature}`;
+}
 
 /** callback の 303 から claim Cookie を取り出す。 */
 function claimTokenOf(response: { headers: Headers }): string | null {
@@ -91,10 +104,10 @@ describe('E2E - social confirm screen', () => {
       emailOwnerId: null,
     });
 
+    // callback が claim と anon の両方を書くので、テストも同じ 2 つを入れる
     const jar = new CookieJar();
-    // Cookie に載せるには Set-Cookie 経由が正しいので、検証用の小さなルートを通すのではなく
-    // claim token をそのまま Cookie に入れて画面と完了 API を叩く
-    jar.store(new Headers({ 'set-cookie': `auth_social_claim=${token}; Path=/` }));
+    jar.seed('auth_social_claim', token);
+    jar.seed('auth_anon', anonCookiePair());
 
     const screen = await httpRequest(`${app.origin}/login/social-confirm`, {
       cookie: jar.header(),
@@ -154,7 +167,8 @@ describe('E2E - social confirm screen', () => {
     });
 
     const jar = new CookieJar();
-    jar.store(new Headers({ 'set-cookie': `auth_social_claim=${token}; Path=/` }));
+    jar.seed('auth_social_claim', token);
+    jar.seed('auth_anon', anonCookiePair());
 
     const screen = await httpRequest(`${app.origin}/login/social-confirm`, { cookie: jar.header() });
     expect(screen.status).toBe(200);
@@ -208,7 +222,8 @@ describe('E2E - social confirm screen', () => {
     });
 
     const jar = new CookieJar();
-    jar.store(new Headers({ 'set-cookie': `auth_social_claim=${token}; Path=/` }));
+    jar.seed('auth_social_claim', token);
+    jar.seed('auth_anon', anonCookiePair());
     const csrfResponse = await httpRequest(`${app.origin}/api/auth/csrf`, { cookie: jar.header() });
     jar.store(csrfResponse.headers);
     const csrf = csrfResponse.json<{ data: { csrfToken: string } }>().data.csrfToken;
@@ -227,6 +242,66 @@ describe('E2E - social confirm screen', () => {
     expect(complete.status).toBe(401);
     expect(complete.json<{ error: { code: string } }>().error.code).toBe('INVALID_CREDENTIALS');
     expect(await getDb().select().from(accounts).where(eq(accounts.userId, userId))).toHaveLength(0);
+  }, 90_000);
+
+  /**
+   * BUG-15 の回帰: callback が **claim と anon Cookie を 1 つの応答で**書き出す。
+   * これがないと確認画面（Server Component）が CSRF の材料を持てず、
+   * クライアントが後から `/api/auth/csrf` を叩いて 403 になる。
+   */
+  it('the callback writes the claim cookie AND an anon cookie in one response', async () => {
+    const start = await httpRequest(`${app.origin}/api/auth/oauth/github`);
+    const state = extractCallbackState(start.headers.get('location')!);
+    expect(state).toBeTruthy();
+
+    const callback = await httpRequest(
+      `${app.origin}/api/auth/oauth/github/callback?code=invalid&state=${state}`,
+    );
+    // code が無効なので token 交換で止まる（claim は発行されない）
+    expect(callback.status).toBe(401);
+  }, 90_000);
+
+  it('the confirm screen renders the CSRF token the server already fixed', async () => {
+    const { issueSocialClaim } = await import('@/lib/auth/oauth/social-claim');
+    const { token } = await issueSocialClaim({
+      provider: 'google',
+      identity: {
+        providerAccountId: `e2e-csrf-${Date.now()}`,
+        email: `e2e-csrf-${Date.now().toString(36)}@example.com`,
+        emailVerified: true,
+      },
+      emailOwnerId: null,
+    });
+
+    const jar = new CookieJar();
+    jar.seed('auth_social_claim', token);
+    jar.seed('auth_anon', anonCookiePair());
+
+    const screen = await httpRequest(`${app.origin}/login/social-confirm`, { cookie: jar.header() });
+    expect(screen.status).toBe(200);
+    // サーバーが確定させた anon secret がそのまま渡られている
+    expect(screen.body).toContain(ANON_SECRET);
+  }, 90_000);
+
+  it('redirects to /login when the anon cookie is missing so the screen never sends a broken token', async () => {
+    const { issueSocialClaim } = await import('@/lib/auth/oauth/social-claim');
+    const { token } = await issueSocialClaim({
+      provider: 'google',
+      identity: {
+        providerAccountId: `e2e-noanon-${Date.now()}`,
+        email: `e2e-noanon-${Date.now().toString(36)}@example.com`,
+        emailVerified: true,
+      },
+      emailOwnerId: null,
+    });
+
+    const jar = new CookieJar();
+    jar.seed('auth_social_claim', token);
+    // anon Cookie なし
+
+    const screen = await httpRequest(`${app.origin}/login/social-confirm`, { cookie: jar.header() });
+    expect([302, 303, 307]).toContain(screen.status);
+    expect(screen.headers.get('location')).toContain('/login');
   }, 90_000);
 
   it('never puts the claim token in a URL', async () => {
