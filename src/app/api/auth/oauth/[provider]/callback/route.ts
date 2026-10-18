@@ -7,7 +7,6 @@ import { setSessionCookie, setAnonCookie } from '@/lib/auth/cookie';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
 import { isFirstSessionFromDevice, notifyNewDeviceLogin } from '@/lib/auth/notifications';
 import { getCookieToken, handleApiError, rateLimitResponse } from '@/lib/api/utils';
-import { isAllowedOrigin } from '@/lib/auth/pipeline';
 import { ApiError } from '@/lib/errors';
 import { getProvider } from '@/lib/auth/oauth/registry';
 import { redirectUriFor } from '@/lib/auth/oauth/redirect-uri';
@@ -72,20 +71,17 @@ async function handleCallback(request: NextRequest, providerId: string): Promise
     return rateLimitResponse(limited.resetAt);
   }
 
-  // 参照元ヘッダが**存在する場合のみ**検証する。
+  // ★ `Origin` / `Referer` は**検証しない**。
   //
-  // provider からの top-level GET 遷移では、ブラウザは Origin を付けないことが
-  // 多い（同一オリジンの GET ナビゲーションでは Origin なしが既定）。ここで
-  // 「ヘッダ無し」を拒否すると、正常な外部連携が 403 で永久に壊れる。
-  // CSRF の本体は `state`（OIDC は `nonce`）+ PKCE なので、
-  // ヘッダ 있을 때の検証は defence-in-depth として扱う。
-  const origin = request.headers.get('origin');
-  const referer = request.headers.get('referer');
-  if (origin || referer) {
-    if (!isAllowedOrigin(origin, referer)) {
-      throw new ApiError('CSRF_FAILED', '不正なリクエスト元です');
-    }
-  }
+  // この経路は provider から top-level GET で戻ってくるので、参照元は
+  // *provider 自身*（accounts.google.com など）になる。アプリ自身のオリジンでは
+  // ないので、同一オリジン判定をここへかけると**正常な連携がすべて 403 になる**。
+  //
+  // CSRF の防御は OAuth 仕様が定める次の 2 点が担う:
+  //   - `state`: サーバ側の 1 回限り行に紐付き、所持者だけが持ち回れる
+  //   - PKCE:   `code_verifier` を持つ者だけが token を引き出せる
+  // これらは参照元ヘッダに頼らないので、ブラウザがヘッダの有無をどう送っても
+  // 同じ強度で防げる（§8.4 の例外規定）。
 
   const query = oauthCallbackQuerySchema.parse(
     Object.fromEntries(new URL(request.url).searchParams.entries()),

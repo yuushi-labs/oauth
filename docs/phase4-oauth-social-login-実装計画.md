@@ -8,6 +8,7 @@
 > **v1.1: 設計レビューで見つけた未決論点を解決し、実装可能な粒度まで詰め直した**（§3 に変更点を列挙）
 > **v1.2: 実装完了（2026-10-18）。設計変更 3 件を反映**（§15 改訂履歴）
 > **v1.3: BUG-11（hydration mismatch）を是正**（§15 改訂履歴）
+> **v1.4: BUG-12（callback の Origin 検証で 403）を是正**（§15 改訂履歴）
 
 ---
 
@@ -140,7 +141,7 @@ v1.0 を実装前に読み返して見つけた「書いていないと実装時
 | **D-31-11** | social-only ユーザーは `password_hash=NULL` / `email_verified=true` / `status=active` で作成する | `users_status_email_verified_chk` CHECK により `active` は `email_verified=true` 必須 |
 | **D-31-12** | `security_events.metadata` は `provider` と真偽値・文脈**のみ**。`code`/`state`/`access_token`/`id_token` は入れない | §21 / 計画 12.4-3 |
 | **D-31-13** | レート制限は既存の `rateLimitKeys.oauthStartIp` / `oauthCallbackIp` と `RATE_LIMITS.oauth.start`（10回/10分・ソフト制限 5）/ `.callback`（20回/10分・ソフト制限 10）を使う。**新規キー追加なし** | 既に定義済み。命名も揃っている |
-| **D-31-14** | `callback` は `withAuthPipeline` を**通さない**（GET のみ・CSRF 例外経路）。ただし **Origin は同一オリジンか検証する** | 計画 12.2 の例外規定。CSRF は `state`（OIDC は `nonce`）で担保。この経路以外はずれない |
+| **D-31-14** | `callback` は `withAuthPipeline` を**通さない**（GET のみ・CSRF 例外経路）。**`Origin` / `Referer` も検証しない** | 計画 12.2 の例外規定。provider から戻る top-level GET の参照元は **provider 自身**なので、アプリ自身のオリジン判定は必ず失敗する（実測・BUG-12）。CSRF は `state`（OIDC は `nonce`）+ PKCE で担保する。この経路以外はずれない |
 | **D-31-15★** | **`oauth_states` に `intent`（`login` / `link`）と `user_id`（link 時のみ）を追加する**。login は `GET /api/auth/oauth/{provider}` から、link は **`POST /api/auth/oauth/link`（再認証必須）** から**別々に state を発行**する。**state を共有しない** | §3-2/3-4。link は「誰が」紐付けるかを確定させないと §7.8 の乗っ取りが成立する |
 | **D-31-16★** | link フローは **`(provider, provider_account_id)` が既に存在する時点で拒否**する（他 user への紐付けは不可）。email 一致による link も**しない** | §7.8。**最重要のセキュリティ決定** |
 | **D-31-17★** | `oauth_states` は `scripts/purge-expired.ts` の削除ジョブに追加する（`expires_at < NOW()`）。consumed 済みは 1 時間後に削除 | §7.10 |
@@ -584,7 +585,7 @@ function normalizeRedirectTo(value: string | null | undefined): string | null {
 【共通】
  1. provider 解決（未登録 or 未設定 → 404 INVALID_PROVIDER）
  2. error=access_denied → /login?error=cancelled（情報を出さない）
- 3. Origin ヘッダが同一オリジンか検証（D-31-14）
+ 3. `Origin` / `Referer` は検証しない（provider 自身が参照元になるため／BUG-12・§7.9）
  4. consumeOAuthState(state, provider)
       → null なら 400 INVALID_STATE ＋ login_failed{provider, state_present:true}
         （= 不一致・期限切れ・消費済みのすべて。どれが該当するか教えない）
@@ -671,6 +672,7 @@ link フローは「認証済みのユーザーが、自分のアカウントに
 | **ID token の alg=none 攻撃** | `jwtVerify` に `algorithms: ['RS256']` を明示。`aud` は `client_id`、`iss` は 2 形式、`exp` は `clockTolerance: 5` |
 | **ID token リプレイ** | `nonce` を state に保存し、ID token の `nonce` claim と照合 |
 | **link による乗っ取り** | §7.8 の 8 脅威すべて |
+| **callback への CSRF** | `Origin` / `Referer` は検証しない。防御は `state`（1 回限り消費）＋ PKCE。参照元ヘッダは provider 自身になるため使えない（§8.4 の例外規定・BUG-12） |
 | **client_secret の漏えい** | server 専用（`LAZY_ENV`）。`NEXT_PUBLIC_*` にしない。UI へ渡すのは `{id,label}` のみ |
 | **ログへの機密値** | `code`/`state`/`nonce`/`code_verifier`/`id_token` を `logger` に渡さない。**callback の URL 全体をログに出さない**（クエリに `code` が含まれる） |
 | **`security_events.metadata`** | `provider` / `error` / `state_present` のような真偽値・文脈**のみ**（D-31-12） |
@@ -952,3 +954,4 @@ Step 6: pnpm lint / typecheck / test / build + 手動 11 手順の完了
 ▸ **自己レビューで 20 箇所の表記揺れを修正**（§7.1 のファイル数 20 → 25 に合わせて §0・§8.3・§7.1 を整合、§12 の工数を各行の合計 30.6h に再計算、P4-C-05 の ID 重複を解消、文言の混入を排除） |
 | **v1.2** | 2026-10-18 | **実装完了。設計変更 3 件**（いずれも計画の回顾で見つかった実害）。(1) **callback の Origin 検証を見直し** — provider からの top-level GET 遷移ではブラウザが `Origin` を付けないため、元の「ヘッダが無ければ 403」は正常な連携を永久に壊していた。`Origin` / `Referer` が**存在する場合のみ**検証し、CSRF の本体は `state` + PKCE に委ねる形へ変更（§7.7 ステップ 3）。(2) **provider 検証の失敗を 401 に統一** — `ProviderError` だけを拾っていたため、`jose` が投げる署名検証エラーが 500 になっていた（内部情報の漏えい）。provider 側の例外はすべて fail closed で 401 に落とす（§7.7 ステップ 6）。(3) **social-only ユーザーの再認証** — パスワードが無いと `POST /api/auth/reauth` が成立せず、link / unlink が永久に実行できなくなる。OAuth ログインで発行するセッションに `reauthVerified` を立てて、5 分猶予を通常ユーザーと統一した（§7.6）。<br>このほか §7.1 のファイル名・migration 名（`0015_milky_captain_marvel.sql`）とレート制限キー名（`rateLimitKeys.oauthStart` / `.oauthCallback`）を実装に合わせて訂正。テストは 65 files / 446 tests green、lint / typecheck / build も green。**残作業は実ブラウザでの手動疎通 11 手順のみ**（§9）。
 | **v1.3** | 2026-10-18 | **BUG-11 の是正（実ブラウザ検証で発見）**。`/login` で hydration mismatch が発生。原因是 `AuthForm`（`'use client'`）が `LoginButtons` を `import` していたことで、**サーバー専用モジュールがクライアントバンドルに取り込まれていた**。サーバーでは `process.env` から 3 provider が読めてボタン 3 個が出るが、ブラウザでは同数が 0 になり描画が食い違っていた。Phase 3 では registry が空だったため両側 0 で露見していなかった。修正: `AuthForm` は `socialSlot?: React.ReactNode` を受け取るだけにし、`LoginButtons` は **サーバーページ（`/login`）から `ReactNode` として渡す**（server children パターン）。再発防止として `src/test/unit/oauth-client-boundary.test.ts` を追加し、`'use client'` ファイルが `registry` / `env` / DB 系モジュールを import しないことを静的検査する。 |
+| **v1.4** | 2026-10-18 | **BUG-12 の是正（実ブラウザでの Google ログインで発見）**。callback が `403 CSRF_FAILED` を返し、外部連携が成立しなかった。原因は §7.7 ステップ 3 の Origin 検証。provider から戻る top-level GET では参照元が **provider 自身**（`https://accounts.google.com`）になるため、アプリ自身のオリジン判定に必ず失敗する。v1.2 で「ヘッダが存在する場合のみ検証」に緩めたが、ブラウザは top-level GET 遷移でも `Origin` / `Referer` を付けるため**やはり全部 403 になった**。**callback では `Origin` / `Referer` を検証しない**ことに改めた（§7.7 ステップ 3・§7.9）。CSRF の防御は OAuth 仕様が定める `state`（サーバ側の 1 回限り行に紐付く）+ PKCE が担う。どちらも参照元ヘッダに依存しないため、ブラウザがヘッダをどう送っても同じ強度で防げる。回帰テスト（`oauth-nonce.test.ts` / `oauth-flow.test.ts`）を追加。 |

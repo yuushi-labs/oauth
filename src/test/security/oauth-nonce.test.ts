@@ -280,19 +280,47 @@ describe('Security - OAuth auto-merge is disabled', () => {
   });
 });
 
-/** callback は Origin が別オリジンなら拒否する（CSRF の defence-in-depth）。 */
+/**
+ * callback は `Origin` / `Referer` に依存しない（§8.4 の例外規定）。
+ *
+ * provider から戻る top-level GET では参照元が provider 自身になるため、
+ * 同一オリジン判定をここへかけると正常な連携がすべて 403 になる（実測・BUG-12）。
+ * 防御は `state` の 1 回限り消費と PKCE が担う。
+ */
 describe('Security - OAuth callback origin', () => {
-  it('rejects a callback whose Origin is another site', async () => {
+  it('is not rejected by a foreign Origin: it falls through to the state check', async () => {
+    const built = makeOidcProvider({ nonceMatches: true });
+    currentEntry = built.entry;
+
+    const request = new NextRequest(
+      'http://localhost:3000/api/auth/oauth/google/callback?code=auth-code&state=never-issued',
+      { method: 'GET', headers: { host: 'localhost:3000', origin: 'https://accounts.google.com' } },
+    );
+    const response = await GET(request, { params: Promise.resolve({ provider: 'google' }) });
+
+    // 403 ではなく state の検証（400）で止まる = ヘッダではフローを止めない
+    expect(response.status).toBe(400);
+    expect((await response.json()).error.code).toBe('INVALID_STATE');
+  });
+
+  it('is not rejected by a provider Referer either', async () => {
     const built = makeOidcProvider({ nonceMatches: true });
     currentEntry = built.entry;
     const state = await issue('google');
 
     const request = new NextRequest(
       `http://localhost:3000/api/auth/oauth/google/callback?code=auth-code&state=${state}`,
-      { method: 'GET', headers: { host: 'localhost:3000', origin: 'https://evil.example' } },
+      {
+        method: 'GET',
+        headers: {
+          host: 'localhost:3000',
+          referer: 'https://accounts.google.com/signin/oauth/replay',
+        },
+      },
     );
     const response = await GET(request, { params: Promise.resolve({ provider: 'google' }) });
-    expect(response.status).toBe(403);
-    expect((await response.json()).error.code).toBe('CSRF_FAILED');
+
+    // state が有効なら、参照元が provider でも state の 1 回限りだけが防御になる
+    expect(response.status).not.toBe(403);
   });
 });

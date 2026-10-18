@@ -418,6 +418,8 @@ users_role_id_idx / users_deleted_at_idx
 
 **DoD**: 仕様 §64「ソーシャルログイン」6項目 green。`pnpm lint`（0 errors）/ `typecheck` / `test`（**65 files / 446 tests**、Phase 3 比 +7 files / +81 tests）/ `build` すべて green。
 
+**BUG-12 の是正**: 実ブラウザで Google ログインを試すと callback が `403 CSRF_FAILED` になった。provider から戻る top-level GET の参照元は provider 自身なので、アプリ自身のオリジン判定に必ず失敗していた。**callback では `Origin` / `Referer` を検証せず**、CSRF は `state`（1 回限り消費）＋ PKCE で担保する（OAuth 仕様が定める防御）。
+
 **BUG-11 の是正**: `/login` で hydration mismatch が発生。`AuthForm`（`use client`）が `LoginButtons` を import していたことで**サーバー専用モジュールがクライアントバンドルに取り込まれていた**。サーバーでは 3 provider が読めてボタンが出るが、ブラウザでは `process.env` が無く 0 件になり描画が食い違っていた（Phase 3 は registry が空で露見せず）。`LoginButtons` をサーバーページから `ReactNode` として渡すように変更し、`src/test/unit/oauth-client-boundary.test.ts` で静的検査による再発防止を追加。
 
 **残作業**: **実ブラウザでの手動疎通確認 11 手順**（計画書 §9）。実 OAuth アカウントと provider コンソールでの redirect URI 登録が必要なので保留。自動テストと e2e（実 HTTP での authorize リダイレクト）は green。

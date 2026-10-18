@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
 import { accounts, DEFAULT_ROLE_ID, oauthStates, securityEvents, sessions, users } from '@/lib/db/schema';
 import { createUser } from '@/lib/db/queries/users';
@@ -100,6 +100,32 @@ describe('E2E - OAuth authorize redirect', () => {
     const response = await httpRequest(`${app.origin}/api/auth/oauth/google/callback?code=abc`);
     expect(response.status).toBe(400);
     expect(response.json<{ error: { code: string } }>().error.code).toBe('INVALID_STATE');
+  }, 60_000);
+
+  /**
+   * BUG-12 の回帰: provider から戻る top-level GET には `Origin` / `Referer` が付く。
+   * アプリ自身のオリジンではないので、同一オリジン判定をここへかけると
+   * 正常な連携がすべて 403 になる（実測で発生）。
+   */
+  it('provider 由来の Referer / Origin でも 403 にしない（BUG-12 の回帰）', async () => {
+    const start = await httpRequest(`${app.origin}/api/auth/oauth/google`);
+    const state = extractCallbackState(start.headers.get('location')!);
+    if (!state) throw new Error('state がありません');
+
+    const response = await httpRequest(
+      `${app.origin}/api/auth/oauth/google/callback?code=abc&state=${state}`,
+      {
+        headers: {
+          origin: 'https://accounts.google.com',
+          referer: 'https://accounts.google.com/signin/oauth/replay',
+        },
+      },
+    );
+
+    // 403 ではなく、state の検証結果（code 無効なので 400）で止まる
+    expect(response.status).not.toBe(403);
+
+    await getDb().delete(oauthStates).where(eq(oauthStates.stateHash, sha256Hex(state)));
   }, 60_000);
 
   it('authorize → callback の往復で state が 1 回だけ使われる', async () => {
