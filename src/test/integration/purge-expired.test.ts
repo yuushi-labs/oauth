@@ -38,6 +38,11 @@ beforeAll(async () => {
     user_id text, nonce text NOT NULL, code_verifier text NOT NULL, redirect_to text,
     created_at timestamptz NOT NULL DEFAULT NOW(), expires_at timestamptz NOT NULL, consumed_at timestamptz
   )`));
+  await db.execute(sql.raw(`CREATE TEMP TABLE oauth_social_claims (
+    state_hash text PRIMARY KEY, provider text NOT NULL, provider_account_id text NOT NULL,
+    provider_email text, email_verified boolean NOT NULL DEFAULT false, email_owner_id text,
+    created_at timestamptz NOT NULL DEFAULT NOW(), expires_at timestamptz NOT NULL, consumed_at timestamptz
+  )`));
   await db.execute(sql.raw(`CREATE TEMP TABLE oidc_user_grants (
     id text PRIMARY KEY, user_id text NOT NULL, client_id text NOT NULL,
     scopes text[] NOT NULL DEFAULT ARRAY['openid']::text[], created_at timestamptz NOT NULL DEFAULT NOW(),
@@ -83,6 +88,12 @@ describe('expired data cleanup', () => {
       ('consumed-old-state', 'github', 'nonce', 'verifier', NOW() + INTERVAL '1 hour', NOW() - INTERVAL '2 days'),
       ('consumed-recent-state', 'github', 'nonce', 'verifier', NOW() + INTERVAL '1 hour', NOW() - INTERVAL '10 minutes'),
       ('valid-state', 'google', 'nonce', 'verifier', NOW() + INTERVAL '10 minutes', NULL)`);
+    await db.execute(sql`INSERT INTO oauth_social_claims
+      (state_hash, provider, provider_account_id, email_verified, expires_at, consumed_at) VALUES
+      ('claim-expired', 'google', 'sub-1', true, NOW() - INTERVAL '1 hour', NULL),
+      ('claim-consumed-old', 'github', 'sub-2', true, NOW() + INTERVAL '1 hour', NOW() - INTERVAL '2 days'),
+      ('claim-consumed-recent', 'github', 'sub-3', true, NOW() + INTERVAL '1 hour', NOW() - INTERVAL '10 minutes'),
+      ('claim-valid', 'google', 'sub-4', true, NOW() + INTERVAL '10 minutes', NULL)`);
     await db.execute(sql`INSERT INTO oidc_user_grants (id, user_id, client_id, scopes, revoked_at) VALUES
       ('grant-revoked-old', 'usr_purge', 'cli_purge', ARRAY['openid'], NOW() - INTERVAL '31 days'),
       ('grant-revoked-recent', 'usr_purge', 'cli_purge', ARRAY['openid'], NOW() - INTERVAL '1 day')`);
@@ -100,6 +111,7 @@ describe('expired data cleanup', () => {
       'OIDC artifact': 2,
       'revoked OIDC grant': 1,
       'oauth state': 2,
+      'social claim': 2,
     });
 
     const reservations = await db.execute(sql`SELECT reservation_id, status FROM rate_limit_reservations ORDER BY reservation_id`);
@@ -117,5 +129,7 @@ describe('expired data cleanup', () => {
     expect(grants.rows).toEqual([{ id: 'grant-revoked-recent' }]);
     const oauthStates = await db.execute(sql`SELECT state_hash FROM oauth_states ORDER BY state_hash`);
     expect(oauthStates.rows).toEqual([{ state_hash: 'consumed-recent-state' }, { state_hash: 'valid-state' }]);
+    const claims = await db.execute(sql`SELECT state_hash FROM oauth_social_claims ORDER BY state_hash`);
+    expect(claims.rows).toEqual([{ state_hash: 'claim-consumed-recent' }, { state_hash: 'claim-valid' }]);
   });
 });

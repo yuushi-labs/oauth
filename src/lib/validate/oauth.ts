@@ -24,3 +24,15 @@ export const oauthCallbackQuerySchema = z.object({
 export const oauthLinkBodySchema = z.object({
   provider: oauthProviderSchema,
 });
+/**
+ * 連携確認画面の完了リクエスト（Phase 4-B）。
+ *
+ * `provider` は **受け取らない**。claim の token から解決する方が改竄に強く、
+ * 遷移や body を変えても別 provider の claim にすり替わらない。
+ */
+export const socialConfirmBodySchema = z.object({
+  action: z.enum(['signup', 'password']),
+  /** password アクションのみ。email またはユーザー名。 */
+  identifier: z.string().min(1).optional(),
+  password: z.string().min(1).optional(),
+});

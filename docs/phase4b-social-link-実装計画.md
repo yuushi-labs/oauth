@@ -2,7 +2,7 @@
 
 > 対象: M4 の追加分（Phase 4 v1.1 で意図的に「停止」した `link_required` フローの置き換え）
 > 前提: Phase 4 本体（`docs/phase4-oauth-social-login-実装計画.md`）が実装済み・PR #6
-> 本書: 決定事項 **D-32-01 〜 D-32-16**
+> 本書: 決定事項 **D-32-01 〜 D-32-17**（D-32-17 は実装で追加）
 > 現状（2026-10-18）: 実ブラウザ検証で 2 件の課題が判明
 > 1. Google / GitHub でログインすると `/login?error=link_required` に飛ばされ、**連携が完了できない**
 > 2. Discord で新規登録できたが、**username が `___` になった**
@@ -70,7 +70,8 @@ Phase 4 本体は「**email 一致での自動統合をしない**」（§11 / D
 | **D-32-13** | 未検証 email / `email: null` の場合、**新規登録ボタンは出さない**（ログインのみ可） | D-31-08 の維持 |
 | **D-32-14** | claim のテーブルも `purge-expired` に追加（期限切れは即削除、消費済みは 1 時間後） | `oauth_states` と同じ |
 | **D-32-15** | **`security_events` の新規 type は追加しない**。既存型で表現する | D-31-18 の spirit |
-| **D-32-16** | 確認画面の導線は **POST + CSRF**（匿名時は anon cookie の CSRF） | `GET` ではなく POST で「~(共识)を始める」操作であり、CSRF token を必須にする |
+| **D-32-16** | 確認画面の導線は **POST + CSRF**（匿名時は anon cookie の CSRF） | `GET` ではなく POST で「確定する」操作であり、CSRF token を必須にする |
+| **D-32-17★** | claim Cookie は**読みは `request.cookies`、書きはレスポンスの `Set-Cookie` ヘッダ**で行う（`cookies()` を経由しない） | `cookies()` は Next の request scope に依存し、Route Handler を直接呼ぶテストでは必ず 500 になる。request から読み・ヘッダで書くほうが副作用が明確でテストもしやすい |
 
 ---
 
@@ -393,3 +394,4 @@ Step 5（確認）
 | 版 | 日付 | 内容 |
 |---|---|---|
 | v1.0 | 2026-10-18 | 初版。実ブラウザ検証で報告された 2 件（`link_required` で完了できない / username が `___`）に対する設計。確認画面は「常に表示」、password は「任意のアカウントでログイン可・連携は email 一致時のみ」、username は「表示名を ASCII 化」 |
+| **v1.1** | 2026-10-18 | **実装完了。** 決定事項 D-32-01〜D-32-16 をそのまま実装した。設計変更 2 件: (1) **claim Cookie の読み書きを `cookies()` からレスポンスヘッダ・request に移した**（D-32-17）。`cookies()` は Next の request scope に依存するため、Route Handler を直接呼ぶテストで必ず 500 になる。読みは `request.cookies`、書きは `Set-Cookie` ヘッダにするほうが副作用も明確で、テスト可能になる。(2) **`completeLogin` から `register` と `link_required` の分岐を削除**し、`needs_confirmation` に集約した。新規登録と連携は完了 API の責務になり、callback は「確認待ちを発行するだけ」に単純化された。テストは 68 files / 477 tests green。**残作業は実ブラウザでの 3 provider 通しのみ**。 |

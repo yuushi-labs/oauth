@@ -3,7 +3,7 @@ import { RATE_LIMITS } from '@/config/rate-limits';
 import { rateLimitKeys } from '@/lib/auth/rate-limit-keys';
 import { rateLimiter } from '@/lib/auth/rate-limit';
 import { createSession, getRequestClientIp, getSession } from '@/lib/auth/session';
-import { setSessionCookie, setAnonCookie } from '@/lib/auth/cookie';
+import { buildSocialClaimCookie, setSessionCookie, setAnonCookie } from '@/lib/auth/cookie';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
 import { isFirstSessionFromDevice, notifyNewDeviceLogin } from '@/lib/auth/notifications';
 import { getCookieToken, handleApiError, rateLimitResponse } from '@/lib/api/utils';
@@ -12,6 +12,7 @@ import { getProvider } from '@/lib/auth/oauth/registry';
 import { redirectUriFor } from '@/lib/auth/oauth/redirect-uri';
 import { ProviderError } from '@/lib/auth/oauth/provider-error';
 import { consumeOAuthState } from '@/lib/auth/oauth/state';
+import { issueSocialClaim } from '@/lib/auth/oauth/social-claim';
 import { completeLogin } from '@/lib/auth/oauth/complete-login';
 import { completeLink } from '@/lib/auth/oauth/complete-link';
 import { findUserById } from '@/lib/db/queries/users';
@@ -22,12 +23,13 @@ import type { SocialProvider } from '@/lib/db/schema';
 
 export const dynamic = 'force-dynamic';
 
-/** login intent の失敗時に利用者へ見せる戻り先。どの.screen でも 403 の詳細は出さない。 */
+/** login intent の失敗時に利用者へ見せる戻り先。どの画面でも 403 の詳細は出さない。 */
 const LOGIN_ERROR_REDIRECTS = {
   cancelled: '/login?error=cancelled',
-  not_linkable: '/login?error=account_not_linkable',
-  link_required: '/login?error=link_required',
 } as const;
+
+/** 紐付きが無いときの確認画面（Phase 4-B / D-32-01）。 */
+const SOCIAL_CONFIRM_PATH = '/login/social-confirm';
 
 /**
  * 社会ログインのコールバック（§12.2）。
@@ -191,20 +193,14 @@ async function completeLoginCallback(args: {
   const outcome = await completeLogin({ provider, identity });
 
   switch (outcome.kind) {
-    case 'not_linkable':
-      return redirectToPath(LOGIN_ERROR_REDIRECTS.not_linkable);
-    case 'link_required':
-      await recordSecurityEvent('login_failed', null, ip, userAgent, {
-        provider,
-        error: 'link_required',
-      });
-      return redirectToPath(LOGIN_ERROR_REDIRECTS.link_required);
     case 'suspended':
       await recordSecurityEvent('login_failed', null, ip, userAgent, {
         provider,
         error: 'account_suspended',
       });
       throw new ApiError('ACCOUNT_SUSPENDED');
+    case 'needs_confirmation':
+      return enterSocialConfirm(outcome.emailOwnerId, outcome.identity, provider);
     default:
       break;
   }
@@ -237,14 +233,31 @@ async function completeLoginCallback(args: {
     // 通知の判定・送信に失敗してもログイン自体は失敗にしない（best-effort）
   }
 
-  if (outcome.kind === 'register') {
-    await recordSecurityEvent('register', outcome.user.id, ip, userAgent, { provider });
-    await recordSecurityEvent('oauth_linked', outcome.user.id, ip, userAgent, { provider });
-  } else {
-    await recordSecurityEvent('login_success', outcome.user.id, ip, userAgent, { provider });
-  }
+  await recordSecurityEvent('login_success', outcome.user.id, ip, userAgent, { provider });
 
   return redirectToPath(redirectTo ?? '/');
+}
+
+/**
+ * 紐付きが無いときは**エラーで止めない**。確認待ち（claim）を発行して画面へ送る（D-32-01）。
+ *
+ * ここで新規登録も連携も行わない。利用者が画面で「作る」か「password でログインして連携」
+ * を選んだときだけ、完了 API が実行する。
+ */
+async function enterSocialConfirm(
+  emailOwnerId: string | null,
+  identity: Identity,
+  provider: SocialProvider,
+): Promise<NextResponse> {
+  const { token } = await issueSocialClaim({ provider, identity, emailOwnerId });
+
+  // ここでは何も記録しない。まだ「完了」していないので login_failed ではなく、
+  // 新しい event type も増やさない（D-32-15）。完了した時点で oauth_linked を記録する。
+  //
+  // claim token は Cookie で運ぶ（URL には載せない・D-32-05）。
+  return redirectToPath(SOCIAL_CONFIRM_PATH, {
+    'Set-Cookie': buildSocialClaimCookie(token),
+  });
 }
 
 async function completeLinkCallback(
@@ -283,10 +296,10 @@ async function completeLinkCallback(
   return redirectToPath('/settings/connected-accounts');
 }
 
-function redirectToPath(path: string): NextResponse {
+function redirectToPath(path: string, headers: Record<string, string> = {}): NextResponse {
   const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, '') ?? 'http://localhost:3000';
   return NextResponse.redirect(new URL(path, base), {
     status: 303,
-    headers: { 'Cache-Control': 'no-store' },
+    headers: { 'Cache-Control': 'no-store', ...headers },
   });
 }

@@ -6,7 +6,6 @@ import { m, type UiMessagePath } from '@/messages/ja';
 const OAUTH_ERROR_PATHS: readonly UiMessagePath[] = [
   'oauth.errors.cancelled',
   'oauth.errors.account_not_linkable',
-  'oauth.errors.link_required',
 ];
 
 export default async function LoginPage({

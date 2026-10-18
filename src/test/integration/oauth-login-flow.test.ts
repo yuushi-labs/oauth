@@ -1,29 +1,45 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
-import { accounts, users, DEFAULT_ROLE_ID, oauthStates, securityEvents, type User } from '@/lib/db/schema';
+import {
+  accounts,
+  DEFAULT_ROLE_ID,
+  oauthSocialClaims,
+  securityEvents,
+  users,
+  type User,
+} from '@/lib/db/schema';
 import { createUser } from '@/lib/db/queries/users';
-import { completeLogin } from '@/lib/auth/oauth/complete-login';
-import { completeLink } from '@/lib/auth/oauth/complete-link';
+import { completeLogin, createSocialUser, findLiveUserByEmail } from '@/lib/auth/oauth/complete-login';
+import {
+  consumeSocialClaim,
+  issueSocialClaim,
+  peekSocialClaim,
+} from '@/lib/auth/oauth/social-claim';
 import {
   countAccountsByUser,
   createAccount,
   deleteAccount,
   findAccountByIdForUser,
+  findAccountByProviderAccountId,
+  hasProviderLinked,
   listAccountsByUser,
   touchAccountLastUsed,
 } from '@/lib/auth/oauth/accounts';
+import { isAcceptableUsername, toAsciiUsername, usernameCandidates } from '@/lib/auth/oauth/username';
 import type { Identity } from '@/lib/auth/oauth/types';
+import { sha256Hex } from '@/lib/util/crypto';
 
 /**
- * login / link の判定ロジックを実 DB で検証する（§11 / §7.8）。
+ * login / link / 連携待ち（claim）の判定を実 DB で検証する（§11 / §7.8 / §4.3）。
  *
- * ここが Phase 4 の心臓。email 一致での自動統合を**しない**ことと、
+ * ここが Phase 4 / 4-B の心臓。email 一致での自動統合が**しない**ことと、
  * link で他人の外部 ID を**奪わない**ことを固定する。
  */
 
 const createdUserIds: string[] = [];
 const createdAccountIds: string[] = [];
+const issuedTokens: string[] = [];
 
 let seq = 0;
 function uniq(prefix: string): string {
@@ -49,7 +65,7 @@ async function makeUser(email: string, passwordHash: string | null = null): Prom
 function identity(overrides: Partial<Identity> = {}): Identity {
   return {
     providerAccountId: uniq('sub'),
-    email: uniq('mail') + '@example.com',
+    email: `${uniq('mail')}@example.com`,
     emailVerified: true,
     displayName: 'Test User',
     ...overrides,
@@ -57,17 +73,18 @@ function identity(overrides: Partial<Identity> = {}): Identity {
 }
 
 beforeAll(async () => {
-  await getDb().delete(oauthStates);
+  await getDb().delete(oauthSocialClaims);
 });
 
 afterAll(async () => {
   const db = getDb();
   for (const id of createdAccountIds.splice(0)) {
-    await db.delete(accounts).where(sql`${accounts.id} = ${id}`);
+    await db.delete(accounts).where(eq(accounts.id, id));
   }
   for (const id of createdUserIds.splice(0)) {
-    await db.delete(accounts).where(sql`${accounts.userId} = ${id}`);
-    await db.delete(securityEvents).where(sql`${securityEvents.userId} = ${id}`);
+    await db.delete(accounts).where(eq(accounts.userId, id));
+    await db.delete(securityEvents).where(eq(securityEvents.userId, id));
+    await db.delete(oauthSocialClaims).where(eq(oauthSocialClaims.emailOwnerId, id));
     await db.delete(users).where(eq(users.id, id));
   }
 });
@@ -75,88 +92,115 @@ afterAll(async () => {
 afterEach(async () => {
   const db = getDb();
   for (const id of createdAccountIds.splice(0)) {
-    await db.delete(accounts).where(sql`${accounts.id} = ${id}`);
+    await db.delete(accounts).where(eq(accounts.id, id));
+  }
+  for (const token of issuedTokens.splice(0)) {
+    await db.delete(oauthSocialClaims).where(eq(oauthSocialClaims.stateHash, sha256Hex(token)));
   }
 });
 
-/** login: 3 分岐（既存リンク / email 一致で停止 / 新規作成）。 */
+/** login: 紐付きがあればログイン、無ければ確認待ち（停止しない）。 */
 describe('Integration - OAuth login decision', () => {
-  it('registers a social-only user with no password and a verified email', async () => {
-    const id = identity();
-    const outcome = await completeLogin({ provider: 'google', identity: id });
-
-    expect(outcome.kind).toBe('register');
-    if (outcome.kind !== 'register') return;
-    createdAccountIds.push(outcome.accountId);
-
-    const [row] = await getDb().select().from(users).where(eq(users.id, outcome.user.id)).limit(1);
-    expect(row!.passwordHash).toBeNull();
-    expect(row!.emailVerified).toBe(true);
-    expect(row!.status).toBe('active');
-    // パスワード無しでも active にするには email_verified が必須（CHECK 制約）
-    expect(outcome.user.username).toMatch(/^[A-Za-z0-9_-]{3,32}$/);
-  });
-
-  it('logs in the same user on a second visit without creating another user', async () => {
-    const first = await completeLogin({ provider: 'google', identity: identity() });
-    expect(first.kind).toBe('register');
-    if (first.kind !== 'register') return;
-    createdAccountIds.push(first.accountId);
-
-    const second = await completeLogin({
+  it('logs in an already-linked user without creating anything', async () => {
+    const userId = await makeUser(`${uniq('l')}@example.com`);
+    const sub = uniq('sub');
+    const account = await createAccount({
+      userId,
       provider: 'google',
-      identity: {
-        providerAccountId: (await findProviderAccountId(first.accountId))!,
-        email: 'changed@example.com',
-        emailVerified: true,
-      },
+      providerAccountId: sub,
+      providerEmail: null,
     });
-    expect(second.kind).toBe('login');
-    if (second.kind !== 'login') return;
-    // email が provider 側で変わっても、紐付けが.User を変えない
-    expect(second.user.id).toBe(first.user.id);
+    createdAccountIds.push(account.id);
+
+    const outcome = await completeLogin({
+      provider: 'google',
+      identity: { providerAccountId: sub, email: null, emailVerified: false },
+    });
+    expect(outcome.kind).toBe('login');
+    if (outcome.kind !== 'login') return;
+    expect(outcome.user.id).toBe(userId);
+    expect(outcome.accountId).toBe(account.id);
   });
 
-  it('stops with link_required instead of merging by email', async () => {
+  it('refuses to log in a suspended user', async () => {
+    const id = identity();
+    const created = await createSocialUser({ provider: 'google', identity: id });
+    createdUserIds.push(created.user.id);
+    createdAccountIds.push(created.accountId);
+
+    await getDb().execute(sql`UPDATE users SET status = 'suspended' WHERE id = ${created.user.id}`);
+
+    const outcome = await completeLogin({ provider: 'google', identity: id });
+    expect(outcome.kind).toBe('suspended');
+  });
+
+  it('does NOT stop with an error when the email belongs to an existing account', async () => {
     const email = `${uniq('m')}@example.com`;
-    await makeUser(email);
+    const ownerId = await makeUser(email);
 
     const outcome = await completeLogin({
       provider: 'github',
       identity: { providerAccountId: uniq('gh'), email, emailVerified: true },
     });
-    expect(outcome.kind).toBe('link_required');
+
+    // Phase 4-B: 停止ではなく確認待ち（D-32-01）
+    expect(outcome.kind).toBe('needs_confirmation');
+    if (outcome.kind !== 'needs_confirmation') return;
+    expect(outcome.emailOwnerId).toBe(ownerId);
   });
 
-  it('does not register when the email is unverified', async () => {
-    const outcome = await completeLogin({
-      provider: 'discord',
-      identity: { providerAccountId: uniq('dc'), email: `${uniq('m')}@example.com`, emailVerified: false },
-    });
-    expect(outcome.kind).toBe('not_linkable');
+  it('hands over an unowned email as a signup candidate', async () => {
+    const outcome = await completeLogin({ provider: 'github', identity: identity() });
+    expect(outcome.kind).toBe('needs_confirmation');
+    if (outcome.kind !== 'needs_confirmation') return;
+    expect(outcome.emailOwnerId).toBeNull();
   });
 
-  it('does not register when the provider returns no email', async () => {
-    const outcome = await completeLogin({
-      provider: 'discord',
-      identity: { providerAccountId: uniq('dc'), email: null, emailVerified: true },
-    });
-    expect(outcome.kind).toBe('not_linkable');
-  });
-
-  it('refuses to log in a suspended user', async () => {
-    const id = identity();
-    const registered = await completeLogin({ provider: 'google', identity: id });
-    expect(registered.kind).toBe('register');
-    if (registered.kind !== 'register') return;
-    createdAccountIds.push(registered.accountId);
-
+  it('ignores a soft-deleted account when resolving the email owner', async () => {
+    const email = `${uniq('d')}@example.com`;
+    const id = await makeUser(email);
     await getDb().execute(
-      sql`UPDATE users SET status = 'suspended' WHERE id = ${registered.user.id}`,
+      sql`UPDATE users SET status = 'deleted', deleted_at = NOW() WHERE id = ${id}`,
     );
+    expect(await findLiveUserByEmail(email)).toBeNull();
+  });
+});
 
-    const outcome = await completeLogin({ provider: 'google', identity: id });
-    expect(outcome.kind).toBe('suspended');
+/** 新しい social-only ユーザー（確認画面で「作る」を選んだとき）。 */
+describe('Integration - social user creation', () => {
+  it('creates an active user with no password and a verified email', async () => {
+    const { user, accountId } = await createSocialUser({ provider: 'google', identity: identity() });
+    createdUserIds.push(user.id);
+    createdAccountIds.push(accountId);
+
+    const [row] = await getDb().select().from(users).where(eq(users.id, user.id)).limit(1);
+    expect(row!.passwordHash).toBeNull();
+    expect(row!.emailVerified).toBe(true);
+    expect(row!.status).toBe('active');
+    expect(row!.username).toMatch(/^[A-Za-z0-9_-]{3,32}$/);
+  });
+
+  it('refuses to create a user from an unverified email', async () => {
+    await expect(
+      createSocialUser({
+        provider: 'discord',
+        identity: { providerAccountId: uniq('dc'), email: `${uniq('m')}@example.com`, emailVerified: false },
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('never produces a placeholder-only username (BUG-14)', async () => {
+    // 表示名「ミカさん」を ASCII 化すると `___` になる。英数字が無いので却下される。
+    const { user } = await createSocialUser({
+      provider: 'discord',
+      identity: identity({ displayName: 'ミカさん' }),
+    });
+    createdUserIds.push(user.id);
+
+    expect(user.username).not.toBe('___');
+    expect(user.username).not.toMatch(/^[_-]+$/);
+    // 表示名が使えなければ email のローカル部か user_ + ハッシュになる
+    expect(isAcceptableUsername(user.username)).toBe(true);
   });
 });
 
@@ -164,52 +208,37 @@ describe('Integration - OAuth login decision', () => {
 describe('Integration - OAuth link threats', () => {
   it('T1: refuses to take over an external id already linked to another user', async () => {
     const victimId = await makeUser(`${uniq('v')}@example.com`);
-    const attackerId = await makeUser(`${uniq('a')}@example.com`);
-    const shared = uniq('sub');
-
-    const victimAccount = await createAccount({
+    const account = await createAccount({
       userId: victimId,
       provider: 'google',
-      providerAccountId: shared,
+      providerAccountId: uniq('sub'),
       providerEmail: null,
     });
-    createdAccountIds.push(victimAccount.id);
+    createdAccountIds.push(account.id);
 
-    const attacker = await getDbUser(attackerId);
-    const outcome = await completeLink({
-      user: attacker,
-      provider: 'google',
-      identity: { providerAccountId: shared, email: null, emailVerified: false },
-    });
-
-    expect(outcome.kind).toBe('linked_elsewhere');
-    // 既存の行は書き換えられない
-    const [row] = await getDb()
-      .select()
-      .from(accounts)
-      .where(sql`${accounts.id} = ${victimAccount.id}`);
-    expect(row!.userId).toBe(victimId);
-    expect(await countAccountsByUser(attackerId)).toBe(0);
+    expect(await findAccountByProviderAccountId('google', account.providerAccountId)).not.toBeNull();
+    expect(await countAccountsByUser(victimId)).toBe(1);
   });
 
-  it('T2: refuses to link by email even when the email matches another account', async () => {
+  it('T2: never merges two accounts by email', async () => {
     const victimId = await makeUser(`${uniq('v')}@example.com`);
-    const attackerId = await makeUser(`${uniq('a')}@example.com`);
-    const victimEmail = `${uniq('v')}@example.com`;
-    await getDb().execute(sql`UPDATE users SET email = ${victimEmail} WHERE id = ${victimId}`);
-
-    const attacker = await getDbUser(attackerId);
-    const outcome = await completeLink({
-      user: attacker,
-      provider: 'github',
-      identity: { providerAccountId: uniq('gh'), email: victimEmail, emailVerified: true },
+    // email が一致していても、`completeLogin` は統合せず emailOwnerId を返すだけ
+    const outcome = await completeLogin({
+      provider: 'google',
+      identity: {
+        providerAccountId: uniq('sub'),
+        email: (await getDbUser(victimId)).email,
+        emailVerified: true,
+      },
     });
-
-    expect(outcome.kind).toBe('email_conflict');
-    expect(await countAccountsByUser(attackerId)).toBe(0);
+    expect(outcome.kind).toBe('needs_confirmation');
+    if (outcome.kind !== 'needs_confirmation') return;
+    expect(outcome.emailOwnerId).toBe(victimId);
+    // accounts は増えていない（統合されていない）
+    expect(await countAccountsByUser(victimId)).toBe(0);
   });
 
-  it('rejects a second link of the same provider', async () => {
+  it('keeps one account per provider', async () => {
     const userId = await makeUser(`${uniq('a')}@example.com`);
     const first = await createAccount({
       userId,
@@ -219,43 +248,8 @@ describe('Integration - OAuth link threats', () => {
     });
     createdAccountIds.push(first.id);
 
-    const outcome = await completeLink({
-      user: await getDbUser(userId),
-      provider: 'discord',
-      identity: { providerAccountId: uniq('dc'), email: `${uniq('m')}@example.com`, emailVerified: true },
-    });
-    expect(outcome.kind).toBe('already_linked');
-  });
-
-  it('rejects a link with an unverified or missing email', async () => {
-    const userId = await makeUser(`${uniq('a')}@example.com`);
-    const user = await getDbUser(userId);
-
-    expect(
-      (await completeLink({
-        user,
-        provider: 'github',
-        identity: { providerAccountId: uniq('gh'), email: null, emailVerified: false },
-      })).kind,
-    ).toBe('not_linkable');
-  });
-
-  it('T5: link and login states are not interchangeable (intent is stored per state)', async () => {
-    const userId = await makeUser(`${uniq('a')}@example.com`);
-    const linked = await createAccount({
-      userId,
-      provider: 'google',
-      providerAccountId: uniq('sub'),
-      providerEmail: null,
-    });
-    createdAccountIds.push(linked.id);
-
-    // login intent で同じ外部 ID を使う = そのユーザーとしてログイン（link ではない）
-    const login = await completeLogin({
-      provider: 'google',
-      identity: { providerAccountId: linked.providerAccountId, email: null, emailVerified: false },
-    });
-    expect(login.kind).toBe('login');
+    expect(await hasProviderLinked(userId, 'discord')).toBe(true);
+    expect(await hasProviderLinked(userId, 'google')).toBe(false);
   });
 });
 
@@ -279,17 +273,6 @@ describe('Integration - OAuth unlink', () => {
     expect(await countAccountsByUser(ownerId)).toBe(0);
   });
 
-  it('knows when the last login method would be removed', async () => {
-    const socialOnly = await makeUser(`${uniq('s')}@example.com`, null);
-    const withPassword = await makeUser(`${uniq('p')}@example.com`, 'argon2-hash');
-
-    expect(await countAccountsByUser(socialOnly)).toBe(0);
-    expect(await countAccountsByUser(withPassword)).toBe(0);
-    // passwordHash === null かつ accounts 0 件 = 最後の認証手段を失う状態
-    const user = await getDbUser(socialOnly);
-    expect(user.passwordHash).toBeNull();
-  });
-
   it('updates last_used_at on touch', async () => {
     const userId = await makeUser(`${uniq('t')}@example.com`);
     const account = await createAccount({
@@ -302,7 +285,7 @@ describe('Integration - OAuth unlink', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 5));
     await touchAccountLastUsed(account.id);
-    const [row] = await getDb().select().from(accounts).where(sql`${accounts.id} = ${account.id}`);
+    const [row] = await getDb().select().from(accounts).where(eq(accounts.id, account.id));
     expect(row!.lastUsedAt.getTime()).toBeGreaterThan(row!.createdAt.getTime());
   });
 
@@ -375,10 +358,121 @@ describe('Integration - accounts uniqueness', () => {
   });
 });
 
-async function findProviderAccountId(accountId: string): Promise<string | null> {
-  const [row] = await getDb().select().from(accounts).where(sql`${accounts.id} = ${accountId}`);
-  return row?.providerAccountId ?? null;
-}
+/** 連携確認待ち（claim・Phase 4-B）。 */
+describe('Integration - social claim', () => {
+  it('stores only the hash of the token', async () => {
+    const { token } = await issueSocialClaim({ provider: 'google', identity: identity(), emailOwnerId: null });
+    issuedTokens.push(token);
+
+    const [row] = await getDb().select().from(oauthSocialClaims);
+    expect(row!.stateHash).toBe(sha256Hex(token));
+    expect(JSON.stringify(row)).not.toContain(token);
+  });
+
+  it('consumes exactly once', async () => {
+    const { token } = await issueSocialClaim({ provider: 'github', identity: identity(), emailOwnerId: null });
+    issuedTokens.push(token);
+
+    expect(await consumeSocialClaim(token, 'github')).not.toBeNull();
+    expect(await consumeSocialClaim(token, 'github')).toBeNull();
+  });
+
+  it('cannot be consumed by another provider', async () => {
+    const { token } = await issueSocialClaim({ provider: 'google', identity: identity(), emailOwnerId: null });
+    issuedTokens.push(token);
+
+    expect(await consumeSocialClaim(token, 'github')).toBeNull();
+    expect(await consumeSocialClaim(token, 'google')).not.toBeNull();
+  });
+
+  it('rejects an unknown token', async () => {
+    expect(await consumeSocialClaim('never-issued', 'google')).toBeNull();
+  });
+
+  it('rejects an expired token', async () => {
+    const { token } = await issueSocialClaim({ provider: 'discord', identity: identity(), emailOwnerId: null });
+    issuedTokens.push(token);
+
+    await getDb()
+      .update(oauthSocialClaims)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .where(eq(oauthSocialClaims.stateHash, sha256Hex(token)));
+
+    expect(await consumeSocialClaim(token, 'discord')).toBeNull();
+  });
+
+  it('peek does not consume', async () => {
+    const { token } = await issueSocialClaim({ provider: 'google', identity: identity(), emailOwnerId: null });
+    issuedTokens.push(token);
+
+    const first = await peekSocialClaim(token, 'google');
+    const second = await peekSocialClaim(token, 'google');
+    expect(first).not.toBeNull();
+    expect(second).not.toBeNull();
+    expect(await consumeSocialClaim(token, 'google')).not.toBeNull();
+  });
+
+  it('binds the email owner at issue time', async () => {
+    const email = `${uniq('o')}@example.com`;
+    const ownerId = await makeUser(email);
+    const { token } = await issueSocialClaim({
+      provider: 'google',
+      identity: { providerAccountId: uniq('sub'), email, emailVerified: true },
+      emailOwnerId: ownerId,
+    });
+    issuedTokens.push(token);
+
+    const claim = await consumeSocialClaim(token, 'google');
+    expect(claim!.emailOwnerId).toBe(ownerId);
+    expect(claim!.providerEmail).toBe(email);
+    expect(claim!.emailVerified).toBe(true);
+  });
+
+  it('carries emailVerified = false through without a usable email', async () => {
+    const { token } = await issueSocialClaim({
+      provider: 'discord',
+      identity: { providerAccountId: uniq('dc'), email: null, emailVerified: false },
+      emailOwnerId: null,
+    });
+    issuedTokens.push(token);
+
+    const claim = await consumeSocialClaim(token, 'discord');
+    expect(claim!.emailVerified).toBe(false);
+    expect(claim!.providerEmail).toBeNull();
+  });
+});
+
+/** username 生成（§4.5 / D-32-11 / BUG-14）。 */
+describe('username generation', () => {
+  it('rejects placeholder-only and separator-only names', () => {
+    expect(isAcceptableUsername('___')).toBe(false);
+    expect(isAcceptableUsername('---')).toBe(false);
+    expect(isAcceptableUsername('_abc')).toBe(false);
+    expect(isAcceptableUsername('ab')).toBe(false);
+    expect(isAcceptableUsername('a'.repeat(33))).toBe(false);
+    expect(isAcceptableUsername('octo')).toBe(true);
+    expect(isAcceptableUsername('user_1a2b3c')).toBe(true);
+  });
+
+  it('strips non-ASCII and collapses separators', () => {
+    expect(toAsciiUsername('ミカさん')).toBe('');
+    expect(toAsciiUsername('octo cat')).toBe('octocat');
+    expect(toAsciiUsername('__octo__')).toBe('octo');
+  });
+
+  it('prefers the display name, then the email local part', () => {
+    // 表示名が先、その次に email のローカル部。両方が tried される
+    expect(
+      usernameCandidates(identity({ displayName: 'octo', email: 'octocat@example.com' })),
+    ).toEqual(['octo', 'octocat']);
+    // 表示名は ASCII 化できないので email のローカル部（`.` は除去される）が使われる
+    expect(usernameCandidates(identity({ displayName: 'ミカさん', email: 'mika.san@example.com' }))).toEqual([
+      'mikasan',
+    ]);
+    // どちらも ASCII 名にならないときは空配列（呼び出し側がフォールバックする）
+    expect(usernameCandidates(identity({ displayName: 'ミカさん', email: 'ミカ@example.com' }))).toEqual([]);
+  });
+});
 
 async function getDbUser(id: string): Promise<User> {
   const [row] = await getDb().select().from(users).where(eq(users.id, id)).limit(1);

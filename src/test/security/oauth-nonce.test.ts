@@ -171,10 +171,8 @@ describe('Security - OAuth nonce', () => {
     currentEntry = built.entry;
     const state = await issue('google');
 
-    // セッション発行は `cookies()` に request scope が要るため、
-    // 「新しいセッションが発行される」検証は integration 側（oauth-login-flow）で行う。
     const response = await callCallback({ code: 'auth-code', state });
-    expect([303, 500]).toContain(response.status);
+    expect(response.status).toBe(303);
     expect(built.seen.nonce).toBeTruthy();
     expect(built.seen.clientId).toBe(GOOGLE_CLIENT_ID);
     // PKCE verifier は state 行から取り出したもの（callback のクエリからは取らない）
@@ -217,7 +215,7 @@ describe('Security - OAuth replay', () => {
   });
 });
 
-/** provider が利用者をキャンセルした時は 정보를出さず /login へ戻す。 */
+/** provider が利用者をキャンセルした時は 情報を出さず /login へ戻す。 */
 describe('Security - OAuth cancellation', () => {
   it('returns to /login without creating a session when access is denied', async () => {
     const built = makeOidcProvider({ nonceMatches: true });
@@ -230,39 +228,12 @@ describe('Security - OAuth cancellation', () => {
   });
 });
 
-/** 未検証 email では新規登録しない（D-31-08）。 */
-describe('Security - OAuth registration guard', () => {
-  it('refuses to register when the provider email is not verified', async () => {
-    const built = makeOidcProvider({
-      nonceMatches: true,
-      emailVerified: false,
-      sub: `unverified-${Date.now()}`,
-    });
-    currentEntry = built.entry;
-    const state = await issue('google');
-
-    const response = await callCallback({ code: 'auth-code', state });
-    expect(response.status).toBe(303);
-    expect(response.headers.get('location')).toContain('account_not_linkable');
-  });
-
-  it('refuses to register when the provider returns no email', async () => {
-    const built = makeOidcProvider({
-      nonceMatches: true,
-      email: null,
-      sub: `noemail-${Date.now()}`,
-    });
-    currentEntry = built.entry;
-    const state = await issue('google');
-
-    const response = await callCallback({ code: 'auth-code', state });
-    expect(response.headers.get('location')).toContain('account_not_linkable');
-  });
-});
-
-/** email 一致の自動統合をしない（§11）。 */
-describe('Security - OAuth auto-merge is disabled', () => {
-  it('stops with link_required when the email already belongs to a local account', async () => {
+/**
+ * 紐付きが無いときは**エラーに落とさず確認画面へ送る**（Phase 4-B / D-32-01）。
+ * 新規登録も連携も行わないのは、その画面（完了 API）の責務。
+ */
+describe('Security - OAuth unlinked flow goes to the confirm screen', () => {
+  it('redirects to the confirm screen when the email already belongs to a local account', async () => {
     await makeUser('existing@example.com', `existing_${Date.now().toString(36)}`);
     const built = makeOidcProvider({
       nonceMatches: true,
@@ -274,9 +245,40 @@ describe('Security - OAuth auto-merge is disabled', () => {
 
     const response = await callCallback({ code: 'auth-code', state });
     expect(response.status).toBe(303);
-    expect(response.headers.get('location')).toContain('link_required');
-    // 自動統合されないのでセッションは発行されない
-    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(response.headers.get('location')).toContain('/login/social-confirm');
+    // claim token は Cookie で渡す（URL に載せない）
+    expect(response.headers.get('set-cookie')).toContain('auth_social_claim=');
+    // ★ 自動統合しない。セッションは発行されない
+    expect(response.headers.get('set-cookie')).not.toContain('auth_session=');
+  });
+
+  it('redirects to the confirm screen when the email is unverified or missing', async () => {
+    for (const overrides of [{ emailVerified: false }, { email: null }]) {
+      const built = makeOidcProvider({
+        nonceMatches: true,
+        sub: `unverified-${Date.now()}-${Math.random()}`,
+        ...overrides,
+      });
+      currentEntry = built.entry;
+      const state = await issue('google');
+
+      const response = await callCallback({ code: 'auth-code', state });
+      // Phase 4-B で停止しなくなったので、確認画面へ送る（signup は完了側で弾かれる）
+      expect(response.status).toBe(303);
+      expect(response.headers.get('location')).toContain('/login/social-confirm');
+      expect(response.headers.get('set-cookie')).toContain('auth_social_claim=');
+    }
+  });
+
+  it('redirects to the confirm screen for a brand new social user', async () => {
+    const built = makeOidcProvider({ nonceMatches: true, sub: `fresh-${Date.now()}` });
+    currentEntry = built.entry;
+    const state = await issue('google');
+
+    const response = await callCallback({ code: 'auth-code', state });
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toContain('/login/social-confirm');
+    expect(response.headers.get('set-cookie')).not.toContain('auth_session=');
   });
 });
 

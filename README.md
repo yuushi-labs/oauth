@@ -277,7 +277,7 @@ oauth/
 | M2 | Phase 2 | Webセキュリティ・CSRF・レート制限・期限切れデータ削除 | **完了（2026-10-12）** |
 | M2.5 | Phase 2.5 | 自作サービス向けOAuth 2.0 / OIDC Provider、scope・同意管理・client registry | **実装中** |
 | M3 | Phase 3 | UI / テーマ / 通知メール / デバイス管理 | **完了（2026-10-17）**（共通UI・テーマ・設定画面・セッション管理・通知メール。実ブラウザ viewport 検証のみ Phase 8-B へ） |
-| M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | **実装完了（2026-10-18）**（ログイン・新規登録・紐付け・解除。**実ブラウザでの手動疎通 11 手順のみ未実施**） |
+| M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | **実装完了（2026-10-18）**（+ Phase 4-B で連携確認画面を追加。**実ブラウザでの手動疎通 11 手順のみ未実施**） |
 | M5 | Phase 5 | TOTP 2FA + Recovery Codes | 未着手 |
 | M6 | Phase 6 | Passkey / WebAuthn | 未着手 |
 | M7 | Phase 7 | 管理者 / RBAC / 監査ログ | 未着手 |
@@ -425,6 +425,32 @@ users_role_id_idx / users_deleted_at_idx
 **残作業**: **実ブラウザでの手動疎通確認 11 手順**（計画書 §9）。実 OAuth アカウントと provider コンソールでの redirect URI 登録が必要なので保留。自動テストと e2e（実 HTTP での authorize リダイレクト）は green。
 
 ---
+
+## Phase 4-B 実装詳細（2026-10-18 / 実装完了）
+
+計画: `docs/phase4b-social-link-実装計画.md`（v1.1 / D-32-01〜D-32-17）
+
+実ブラウザ検証で見つかった 2 点を解消しました。
+
+| 問題 | 対応 |
+|---|---|
+| Google / GitHub でログインすると `link_required` に飛ばされ、**連携が完了できない** | callback で停止せず**確認画面**を出す。「新規登録」または「password でログインして連携」を選べる |
+| Discord の新規登録で **username が `___`** になった | 生成規則を修正（表示名を ASCII 化 → 無効なら email ローカル部 → 無効なら `user_` + hash8） |
+
+**乗っ取り防御は緩めていません。** §11 の「email 一致での自動統合禁止」を維持したまま、連携の証明を **password** に置き換えています。
+
+| 脅威 | 対策 |
+|---|---|
+| email 一致による自動乗っ取り | **password 必須**。`claim.emailOwnerId === user.id` をサーバー側で照合してからだけ `accounts` 行を作る |
+| 別アカウントでログインして連携 | `emailOwnerId !== user.id` なら**ログインするだけ**。連携しない（画面にも明示） |
+| claim の盗用 / replay | httpOnly + SameSite=Lax Cookie、10 分、1 回限り（`UPDATE ... WHERE consumed_at IS NULL`） |
+| TOCTOU | 完了時にも `(provider, provider_account_id)` を再確認して 409 |
+| password 総当たり | 既存の login 系レート制限 + reservation を再利用（account 単位・IP 単位） |
+| 列挙攻撃 | password 失敗は一律 `INVALID_CREDENTIALS` |
+
+追加: migration `0016`（`oauth_social_claims`）/ `social-claim.ts` / `username.ts` / `POST /api/auth/oauth/social-login` / `/login/social-confirm` / purge ジョブ。
+
+**テスト**: **68 files / 477 tests green**。`pnpm lint`（0 errors）/ `typecheck` / `build` も green。
 
 ---
 

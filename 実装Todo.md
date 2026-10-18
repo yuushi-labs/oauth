@@ -39,7 +39,7 @@
 | M2.5 認証元 | Phase 2.5 | §69 OIDC Provider + Authorization Code/PKCE + scope/consent + first-party RP相互運用 | **[x] 達成（2026-10-17）** — 29/29 タスク完了。DoD 6 項のうち 5 項を達成、6 項目（本番公開）は Phase 9 運用 DoD へ繰り越し。残るは「本番公開の運用確認」と「multi-process adapter 一致性の実測」の 2 点のみ。`docs/phase2.5-実装計画.md` §5.1 / `docs/phase2.5-closeout-実行Todo.md` |
 | M2.6 管理コンソール | Phase 2.6 | ログイン後の画面遷移＋OIDC/OAuth 2.0 アプリのセルフサービス作成・編集・secret 管理・接続テスト | **[x] 達成（2026-10-17）** — P26-A-01〜G-02 の全 33 タスク完了（PR #4 → `c82cd1c`）。DoD 4 項すべて達成。仕様書 v1.3 の §69.4-2 と整合。`docs/phase2.6-oidc-client-console-実装計画.md` |
 | M3 UI | Phase 3 | §64「UI」6項目＋セッション一覧/個別/全ログアウト | **[x] 達成（2026-10-17）** — 3-A〜3-D 全タスク完了。DoD は §64「UI」「セッション」全項目 green。残るのは**実ブラウザ viewport / スクリーンリーダー実機検証のみ**（Phase 8-B へ引継ぎ）。計画 `docs/phase3-ui-theme-notification-実装計画.md`、欠陥是正 `docs/bugfix-BUG1-7-修正計画.md` |
-| M4 ソーシャル | Phase 4 | Google/GitHub/Discord ログイン＋紐付け＋解除 | [x] 実装完了 2026-10-18（実 provider 疎通のみ未実施） |
+| M4 ソーシャル | Phase 4 | Google/GitHub/Discord ログイン＋紐付け＋解除 | [x] 実装完了 2026-10-18（Phase 4-B で連携確認画面を追加。実 provider 疎通のみ未実施） |
 | M5 2FA | Phase 5 | TOTP＋Recovery Codes＋atomic 1回限り | [ ] 未着手 |
 | M6 Passkey | Phase 6 | Passkey 登録/ログイン/削除＋Level3検証 | [ ] 未着手 |
 | M7 管理者 | Phase 7 | RBAC＋監査ログ＋secret非露出 | [ ] 未着手 |
@@ -369,6 +369,41 @@
 **BUG-12 の是正（2026-10-18）**: 実ブラウザで Google ログインを試すと callback が `403 CSRF_FAILED` になり、外部連携が成立しなかった。provider から戻る top-level GET の参照元は **provider 自身**なので、アプリ自身のオリジン判定に必ず失敗していた。**callback では `Origin` / `Referer` を検証しない**ことに改め、CSRF は `state`（1 回限り消費）＋ PKCE で担保する。
 
 **BUG-11 の是正（2026-10-18）**: `/login` で hydration mismatch が発生。`AuthForm`（`use client`）が `LoginButtons` を import していたため、サーバー専用モジュールがクライアントバンドルに取り込まれ、ブラウザ側で社会ログインボタンが 0 件になっていた（Phase 3 は registry が空で露見せず）。`LoginButtons` を**サーバーページから `ReactNode` として渡す**ように変更し、`src/test/unit/oauth-client-boundary.test.ts` で再発防止する。
+
+---
+
+## 6-B. Phase 4-B — ソーシャル連携の確認画面（2026-10-18 / 実装完了）
+
+> **詳細計画**: `docs/phase4b-social-link-実装計画.md`（v1.1 / 決定事項 D-32-01〜D-32-17）
+
+Phase 4 の本体内で未だった 2 点（BUG-12 後の実ブラウザ検証で判明）を解消。
+
+### 6-B-1 解消した問題
+
+| # | 問題 | 対応 |
+|---|---|---|
+| 1 | **Google / GitHub でログインすると `link_required` に飛ばされ、連携が完了できない** | callback で停止せず**確認画面**を出すように変更。画面で「新規登録」または「password でログインして連携」を選べる |
+| 2 | **Discord の新規登録で username が `___` になった** | username 生成規則を修正（表示名を ASCII 化 → 無効なら email ローカル部 → 無効なら `user_` + hash8） |
+
+### 6-B-2 乗っ取り防御（緩めていない）
+
+- **email 一致のみでは絶対に連携しない**（§11 の維持）。連携には `email_owner_id` の **password 証明**が必須
+- **別アカウントの password ではログインできるが、連携しない**（サーバー側で `email_ownerId === user.id` を照合）
+- claim は **10 分・1 回限り**、token は **Cookie のみ**（URL に載せない・DB には SHA-256）
+- 完了時にも `(provider, provider_account_id)` を再確認（TOCTOU 対策）
+
+### 6-B-3 追加したもの
+
+| 種別 | 内容 |
+|---|---|
+| migration | `0016_known_justin_hammer.sql` = `oauth_social_claims` |
+| lib | `auth/oauth/social-claim.ts` / `auth/oauth/username.ts` |
+| API | `POST /api/auth/oauth/social-login`（signup / password）、`POST /api/auth/oauth/social-login/cancel` |
+| 画面 | `/login/social-confirm` ＋ `SocialConfirmForm` |
+| パージ | `scripts/purge-expired.ts` に `social claim` ジョブを追加 |
+
+**DoD**: 仕様 §9・§11・§49 に対応。`pnpm lint`（0 errors）/ `typecheck` / `test`（**68 files / 477 tests**）/ `build` すべて green。
+**残作業**: 実ブラウザでの 3 provider 通し（既存の §9 の 11 手順）。
 
 ---
 

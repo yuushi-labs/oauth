@@ -269,12 +269,37 @@ export const messages = {
         linked: '連携しました',
         unlinked: '連携を解除しました',
       },
+      confirm: {
+        title: '{provider} の連携を確認',
+        intro: '認証された情報を確認し、何をするかを選んでください。',
+        emailLabel: '認証されたメールアドレス',
+        emailUnverifiedNotice:
+          'このメールアドレスは検証されていない、または公開されていません。そのため、このメールアドレスでアカウントを作ることはできません。',
+        existingAccountNotice:
+          'このメールアドレスは既に登録されています。パスワードを入力すると、そのアカウントにログインして {provider} を連携します。',
+        newAccountNotice: 'このメールアドレスはまだ使われていません。アカウントを作成できます。',
+        differentAccountNotice:
+          '別のアカウントのパスワードでもログインできます。その場合は {provider} が連携されないので、ログイン後に設定画面から連携してください。',
+        identifierLabel: 'メールアドレスまたはユーザー名',
+        passwordLabel: 'パスワード',
+        signupAction: 'このメールアドレスでアカウントを作る',
+        passwordAction: 'パスワードでログイン',
+        submitting: '処理中…',
+        cancel: '連携しない（ログイン画面へ）',
+        error: {
+          invalidState: '確認の有効期限が切れました。もう一度ログインし直してください。',
+          invalidCredentials: 'メールアドレスまたはパスワードが正しくありません。',
+          emailConflict: 'このメールアドレスは既に登録済みです。パスワードでログインして連携してください。',
+          linkedElsewhere: 'この認証情報は既に別のアカウントで使われています。',
+          notLinkable: 'この認証情報ではアカウントを作成できません。',
+          rateLimited: '試行回数が多すぎます。しばらくしてからお試しください。',
+          internal: '処理に失敗しました。もう一度お試しください。',
+        },
+      },
       errors: {
         cancelled: '認証をキャンセルしました。もう一度お試しください。',
         account_not_linkable:
           'このアカウントはメールアドレスが未確認、または公開されていないため、当サービスでは利用できません。',
-        link_required:
-          'このメールアドレスは既に当サービスに登録されています。パスワードでログインしてから、本人確認をして連携してください。',
         already_linked: 'このプロバイダーは既に連携されています。',
         already_linked_elsewhere: 'この認証情報は既に別のアカウントで使われています。',
         email_conflict: 'このメールアドレスは別のアカウントに登録済みです。',

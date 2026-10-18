@@ -100,7 +100,10 @@ describe('Security - OAuth authorize request (PKCE)', () => {
     const url = new URL(response.headers.get('location')!);
     const state = url.searchParams.get('state')!;
 
-    const [row] = await getDb().select().from(oauthStates);
+    const [row] = await getDb()
+      .select()
+      .from(oauthStates)
+      .where(sql`${oauthStates.stateHash} = ${sha256Hex(state)}`);
     expect(row).toBeDefined();
 
     const verifier = row!.codeVerifier;
@@ -146,14 +149,22 @@ describe('Security - OAuth redirect_uri', () => {
 /** `redirect_to` は同一オリジンの相対パスだけ（open redirect 対策）。 */
 describe('Security - OAuth redirect_to', () => {
   it('stores a relative path as-is', async () => {
-    await start('google', '?redirect_to=%2Fsettings%2Fappearance');
-    const [row] = await getDb().select().from(oauthStates);
+    const response = await start('google', '?redirect_to=%2Fsettings%2Fappearance');
+    const state = new URL(response.headers.get('location')!).searchParams.get('state')!;
+    const [row] = await getDb()
+      .select()
+      .from(oauthStates)
+      .where(sql`${oauthStates.stateHash} = ${sha256Hex(state)}`);
     expect(row!.redirectTo).toBe('/settings/appearance');
   });
 
   it('drops an absolute redirect_to before it reaches the database', async () => {
-    await start('google', '?redirect_to=https%3A%2F%2Fevil.example%2Fsteal');
-    const [row] = await getDb().select().from(oauthStates);
+    const response = await start('google', '?redirect_to=https%3A%2F%2Fevil.example%2Fsteal');
+    const state = new URL(response.headers.get('location')!).searchParams.get('state')!;
+    const [row] = await getDb()
+      .select()
+      .from(oauthStates)
+      .where(sql`${oauthStates.stateHash} = ${sha256Hex(state)}`);
     expect(row!.redirectTo).toBeNull();
   });
 });

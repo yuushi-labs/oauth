@@ -162,6 +162,38 @@ export const OAUTH_INTENTS = ['login', 'link'] as const;
 export type OAuthIntentValue = (typeof OAUTH_INTENTS)[number];
 
 /**
+ * ソーシャル連携の確認待ち（Phase 4-B / D-32-05）。
+ *
+ * callback の時点で「紐付きが無い」と分かったとき、完了に必要な情報を保持する。
+ * 利用者はここで「新規登録する」または「パスワードでログインして連携する」を選ぶ。
+ *
+ * - **生の token は保存しない**。Cookie に生 token、DB には SHA-256 だけ入れる。
+ * - **消費は UPDATE**（`consumed_at IS NULL` を条件に含める）。使い切りになる。
+ * - `email_owner_id` は**発行時点で確定**する。完了時に email を引き直すと、
+ *   発行と完了の間に所有者が変わった場合に判定が揺れる（D-32-07）。
+ * - URL には載せない。Cookie で運ぶので Referer や履歴から漏れない（D-32-05）。
+ */
+export const oauthSocialClaims = pgTable(
+  'oauth_social_claims',
+  {
+    stateHash: text('state_hash').primaryKey(),
+    provider: text('provider').notNull(),
+    providerAccountId: text('provider_account_id').notNull(),
+    providerEmail: text('provider_email'),
+    emailVerified: boolean('email_verified').notNull().default(false),
+    /** この email を持つ既存ユーザー。該当なしは NULL（= 新規登録できる） */
+    emailOwnerId: text('email_owner_id').references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  },
+  (table) => [
+    check('oauth_social_claims_provider_chk', sql`${table.provider} in (${SOCIAL_PROVIDER_SQL_LIST})`),
+    index('oauth_social_claims_expires_at_idx').on(table.expiresAt),
+  ],
+);
+
+/**
  * OAuth 認可リクエストの状態（§12.2 / D-31-05）。
  *
  * - **生の state は保存しない**。SHA-256 だけ stored し、`consumeOAuthState` で引く。
@@ -465,6 +497,8 @@ export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;
 export type OAuthState = typeof oauthStates.$inferSelect;
 export type NewOAuthState = typeof oauthStates.$inferInsert;
+export type OAuthSocialClaim = typeof oauthSocialClaims.$inferSelect;
+export type NewOAuthSocialClaim = typeof oauthSocialClaims.$inferInsert;
 export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
 export type NewEmailVerificationToken = typeof emailVerificationTokens.$inferInsert;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;

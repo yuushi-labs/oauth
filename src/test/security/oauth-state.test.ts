@@ -33,7 +33,10 @@ describe('Security - OAuth state', () => {
     const issuedState = await issueOAuthState({ provider: 'google', intent: 'login' });
     issued.push(issuedState.state);
 
-    const [row] = await getDb().select().from(oauthStates);
+    const [row] = await getDb()
+      .select()
+      .from(oauthStates)
+      .where(sql`${oauthStates.stateHash} = ${sha256Hex(issuedState.state)}`);
     expect(row).toBeDefined();
     expect(row!.stateHash).toBe(sha256Hex(issuedState.state));
     // 生 state は保存しない
