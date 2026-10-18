@@ -31,11 +31,12 @@ export const dynamic = 'force-dynamic';
  * `action: 'signup'`   … この email で social-only ユーザーを作る
  * `action: 'password'` … password でログインし、**email が claim と一致したときだけ**連携する
  *
- * ★ 乗っ取り防御の中核（D-32-03 / D-32-04）:
- * - **email 一致だけでは絶対に link しない**。`claim.emailOwnerId === user.id` を
- *   サーバー側で照合してからだけ `accounts` 行を作る。
- * - 別アカウントの password でログインできた場合、**ログインするだけで連携しない**。
- *   利用者には設定画面への導線を出す（画面側 §4.6）。
+ * ★ 乗っ取り防御の中核（D-32-03 / D-32-18）:
+ * - **password でログインできるのは `claim.emailOwnerId` のアカウントだけ**。
+ *   別の email / ユーザー名でも password が偶然一致してもログインさせない。
+ *   同じ password を使うユーザーがいると、email の入力を差し替えただけで
+ *   そのアカウントに入れてしまうため（D-32-18）。
+ * - つまり連携もログインも **「social の email を持つアカウント」で证明了場合だけ**。
  * - 完了時にも `(provider, provider_account_id)` を再確認する（TOCTOU・D-32-08）。
  */
 export async function POST(request: NextRequest) {
@@ -176,17 +177,27 @@ async function completePasswordLogin(
       reservations.push(result.reservation);
     }
 
+    // ★ ログイン対象を `claim.emailOwnerId` に固定する。
+    // 別の email / ユーザー名を指定されても、その password が一致してもログインさせない
+    // （D-32-18）。email の入力を差し替えるだけで別のアカウントに入れるのを防ぐ。
+    if (!claim.emailOwnerId) {
+      // この email を持つアカウントが存在しない = 連携の相手が無いので、
+      // この画面では password ログインできない（signup か /login へ誘導する）
+      throw new ApiError('ACCOUNT_LINK_OWNER_MISMATCH');
+    }
+
     const user = await findUserByEmailOrUsername(identifier);
     const valid = user ? await verifyPassword(password, user.passwordHash ?? '') : false;
 
-    if (!user || !valid) {
+    if (!user || !valid || user.id !== claim.emailOwnerId) {
       const reached = await Promise.all(
         reservations.map((reservation) => rateLimiter.finishFailedAttempt(reservation, false)),
       );
       if (reached.some(Boolean)) {
         await recordSecurityEvent('rate_limited', null, ip, userAgent, { scope: 'social_confirm_failed' });
       }
-      // 列挙攻撃対策：どの email のアカウントだったかは教えない
+      // 列挙攻撃対策：どの email のアカウントだったかは教えない。
+      // 「他のアカウントだった」という事実も返さない。
       await recordSecurityEvent('login_failed', null, ip, userAgent, { provider });
       throw new ApiError('INVALID_CREDENTIALS');
     }
@@ -198,26 +209,23 @@ async function completePasswordLogin(
       throw new ApiError('ACCOUNT_SUSPENDED');
     }
 
-    // ★ 連携は「email 所有者の password でログインできた」場合だけ。
-    // 別アカウントでログインできた場合は**ログインするだけ**で、連携しない（D-32-04）。
-    if (claim.emailOwnerId && claim.emailOwnerId === user.id) {
-      const account = await createAccount({
-        userId: user.id,
-        provider,
-        providerAccountId: claim.providerAccountId,
-        providerEmail: claim.providerEmail,
-      });
-      await touchAccountLastUsed(account.id);
-      await recordSecurityEvent('oauth_linked', user.id, ip, userAgent, { provider });
-      await notifyAccountChange({
-        userId: user.id,
-        userEmail: user.email,
-        action: 'link',
-        provider,
-        ip,
-        userAgent,
-      });
-    }
+    // 上で `user.id === claim.emailOwnerId` を確認済みなので、ここは常に連携になる
+    const account = await createAccount({
+      userId: user.id,
+      provider,
+      providerAccountId: claim.providerAccountId,
+      providerEmail: claim.providerEmail,
+    });
+    await touchAccountLastUsed(account.id);
+    await recordSecurityEvent('oauth_linked', user.id, ip, userAgent, { provider });
+    await notifyAccountChange({
+      userId: user.id,
+      userEmail: user.email,
+      action: 'link',
+      provider,
+      ip,
+      userAgent,
+    });
 
     await issueSession(args.request, user, ip, userAgent);
     return redirectToPath('/', true);

@@ -399,10 +399,10 @@ Phase 4 の本体内で未だった 2 点（BUG-12 後の実ブラウザ検証�
 | migration | `0016_known_justin_hammer.sql` = `oauth_social_claims` |
 | lib | `auth/oauth/social-claim.ts` / `auth/oauth/username.ts` |
 | API | `POST /api/auth/oauth/social-login`（signup / password）、`POST /api/auth/oauth/social-login/cancel` |
-| 画面 | `/login/social-confirm` ＋ `SocialConfirmForm` |
+| 画面 | `/login/social-confirm` ＋ `SocialConfirmForm`。**メールアドレスとパスワードの 2 欄**（email は明示入力させる） |
 | パージ | `scripts/purge-expired.ts` に `social claim` ジョブを追加 |
 
-**DoD**: 仕様 §9・§11・§49 に対応。`pnpm lint`（0 errors）/ `typecheck` / `test`（**68 files / 477 tests**）/ `build` すべて green。
+**DoD**: 仕様 §9・§11・§49 に対応。`pnpm lint`（0 errors）/ `typecheck` / `test`（**68 files / 479 tests**）/ `build` すべて green。
 **残作業**: 実ブラウザでの 3 provider 通し（既存の §9 の 11 手順）。
 
 ---

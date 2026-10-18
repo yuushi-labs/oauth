@@ -278,12 +278,14 @@ export const messages = {
         existingAccountNotice:
           'このメールアドレスは既に登録されています。パスワードを入力すると、そのアカウントにログインして {provider} を連携します。',
         newAccountNotice: 'このメールアドレスはまだ使われていません。アカウントを作成できます。',
-        differentAccountNotice:
-          '別のアカウントのパスワードでもログインできます。その場合は {provider} が連携されないので、ログイン後に設定画面から連携してください。',
-        identifierLabel: 'メールアドレスまたはユーザー名',
+        passwordNotice: '入力したメールアドレスとパスワードが一致すると、ログインして {provider} を連携します。',
+        identifierLabel: 'メールアドレス',
         passwordLabel: 'パスワード',
         signupAction: 'このメールアドレスでアカウントを作る',
-        passwordAction: 'パスワードでログイン',
+        passwordAction: 'このメールアドレスでログインして連携',
+        loginElsewhereAction: '別のアカウントでログインする',
+        ownerOnlyNotice:
+          '入力するメールアドレスは、上に表示されたものと同じである必要があります。別のアカウントにログインしたい場合は、ログイン画面からログインしてから設定画面で連携してください。',
         submitting: '処理中…',
         cancel: '連携しない（ログイン画面へ）',
         error: {
@@ -292,6 +294,8 @@ export const messages = {
           emailConflict: 'このメールアドレスは既に登録済みです。パスワードでログインして連携してください。',
           linkedElsewhere: 'この認証情報は既に別のアカウントで使われています。',
           notLinkable: 'この認証情報ではアカウントを作成できません。',
+          ownerMismatch:
+            'この認証情報は、上に表示されたメールアドレスのアカウントにだけ連携できます。別のアカウントを使う場合は、ログイン画面からログインしてください。',
           rateLimited: '試行回数が多すぎます。しばらくしてからお試しください。',
           internal: '処理に失敗しました。もう一度お試しください。',
         },

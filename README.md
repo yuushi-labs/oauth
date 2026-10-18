@@ -442,15 +442,18 @@ users_role_id_idx / users_deleted_at_idx
 | 脅威 | 対策 |
 |---|---|
 | email 一致による自動乗っ取り | **password 必須**。`claim.emailOwnerId === user.id` をサーバー側で照合してからだけ `accounts` 行を作る |
-| 別アカウントでログインして連携 | `emailOwnerId !== user.id` なら**ログインするだけ**。連携しない（画面にも明示） |
+| ★ 同じ password の別ユーザーに email 入力を差し替える | **password ログインは `emailOwnerId` のアカウントだけ**に限定。email 不一致・ユーザー名代用は 401、email を持つローカルアカウント無しは 409 |
+| 別アカウントでログインしたい | この画面では弾く。`/login` からログインし、`/settings/connected-accounts` で連携する（画面にも案内） |
 | claim の盗用 / replay | httpOnly + SameSite=Lax Cookie、10 分、1 回限り（`UPDATE ... WHERE consumed_at IS NULL`） |
 | TOCTOU | 完了時にも `(provider, provider_account_id)` を再確認して 409 |
 | password 総当たり | 既存の login 系レート制限 + reservation を再利用（account 単位・IP 単位） |
 | 列挙攻撃 | password 失敗は一律 `INVALID_CREDENTIALS` |
 
+確認画面は**メールアドレス + パスワード**の 2 欄構成（email は明示的に入力させる）。同じ password の別アカウントに入れてしまわないため、サーバー側で `claim.emailOwnerId === user.id` を強制する。
+
 追加: migration `0016`（`oauth_social_claims`）/ `social-claim.ts` / `username.ts` / `POST /api/auth/oauth/social-login` / `/login/social-confirm` / purge ジョブ。
 
-**テスト**: **68 files / 477 tests green**。`pnpm lint`（0 errors）/ `typecheck` / `build` も green。
+**テスト**: **68 files / 479 tests green**。`pnpm lint`（0 errors）/ `typecheck` / `build` も green。
 
 ---
 

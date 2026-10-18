@@ -225,7 +225,12 @@ describe('Security - social confirm links with the email owner password', () => 
     expect(linked!.userId).toBe(ownerId);
   });
 
-  it('does NOT link when the password belongs to a different account', async () => {
+  /**
+   * ★ D-32-18 の回帰。
+   * 同じ password を使う別ユーザーがいるとき、email 入力を差し替えるだけで
+   * そのアカウントに入れてしまうため、**別アカウントではログインもさせない**。
+   */
+  it('does NOT log in nor link when the email is swapped for another account', async () => {
     const socialEmail = `${uniq('v')}@example.com`;
     const otherEmail = `${uniq('a')}@example.com`;
     const ownerId = await makeUser(socialEmail, PASSWORD);
@@ -237,13 +242,52 @@ describe('Security - social confirm links with the email owner password', () => 
       complete({ action: 'password', identifier: otherEmail, password: PASSWORD }, token, null),
     );
 
-    // ログインは成功する（ユーザー指定の方針）
-    expect(response.status).toBe(303);
-    expect(issuedSessionTokens.length).toBe(1);
-    // ★ でも連携は起きない。email が一致していないので accounts は増えない
+    // どちらのアカウントにも入れない（列挙対策のため reason も返さない）
+    expect(response.status).toBe(401);
+    expect((await response.json()).error.code).toBe('INVALID_CREDENTIALS');
+    expect(issuedSessionTokens.length).toBe(0);
     expect(await countAccountsByUser(ownerId)).toBe(0);
     const rows = await getDb().select().from(accounts);
     expect(rows.filter((row) => row.providerEmail === socialEmail)).toHaveLength(0);
+  });
+
+  it('does NOT log in when the shared password matches but the username is used instead of the email', async () => {
+    const socialEmail = `${uniq('v')}@example.com`;
+    const otherUsername = `other_${uniq('u')}`;
+    const ownerId = await makeUser(socialEmail, PASSWORD);
+    await createUser({
+      id: `usr_${uniq('t')}`,
+      username: otherUsername,
+      email: `${uniq('o')}@example.com`,
+      emailVerified: true,
+      passwordHash: await hashPassword(PASSWORD),
+      status: 'active',
+      roleId: DEFAULT_ROLE_ID,
+    }).then((user) => createdUserIds.push(user.id));
+
+    const token = await issueFor({ email: socialEmail, emailVerified: true, emailOwnerId: ownerId });
+
+    const response = await COMPLETE(
+      complete({ action: 'password', identifier: otherUsername, password: PASSWORD }, token, null),
+    );
+
+    expect(response.status).toBe(401);
+    expect(issuedSessionTokens.length).toBe(0);
+    expect(await countAccountsByUser(ownerId)).toBe(0);
+  });
+
+  it('refuses a password login when the email has no local account at all', async () => {
+    const email = `${uniq('free')}@example.com`;
+    const token = await issueFor({ email, emailVerified: true, emailOwnerId: null });
+
+    const response = await COMPLETE(
+      complete({ action: 'password', identifier: email, password: PASSWORD }, token, null),
+    );
+
+    // 連携の相手がいないので、この画面では password ログインできない
+    expect(response.status).toBe(409);
+    expect((await response.json()).error.code).toBe('ACCOUNT_LINK_OWNER_MISMATCH');
+    expect(issuedSessionTokens.length).toBe(0);
   });
 
   it('does not link when the password is wrong', async () => {
