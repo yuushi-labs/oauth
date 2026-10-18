@@ -366,6 +366,8 @@
 - [x] `pnpm lint`（0 errors）/ `typecheck` / `test`（65 files / 446 tests）/ `build` green
 - [ ] **実ブラウザでの手動疎通確認 11 手順**（`docs/phase4-oauth-social-login-実装計画.md` §9）— 実 OAuth アカウントが必要なため保留
 
+**BUG-11 の是正（2026-10-18）**: `/login` で hydration mismatch が発生。`AuthForm`（`use client`）が `LoginButtons` を import していたため、サーバー専用モジュールがクライアントバンドルに取り込まれ、ブラウザ側で社会ログインボタンが 0 件になっていた（Phase 3 は registry が空で露見せず）。`LoginButtons` を**サーバーページから `ReactNode` として渡す**ように変更し、`src/test/unit/oauth-client-boundary.test.ts` で再発防止する。
+
 ---
 
 ## 7. Phase 5 — TOTP 2FA ＋ Recovery Codes（2〜3日）

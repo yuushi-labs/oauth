@@ -10,7 +10,6 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PasswordStrength } from '@/components/auth/password-strength';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
-import { LoginButtons } from '@/components/auth/login-buttons';
 import { apiClient, ApiClientError, resetCsrfCache } from '@/lib/api/client';
 import { APP_DESCRIPTION, APP_NAME } from '@/config/app';
 import { errorMessage, m } from '@/messages/ja';
@@ -29,11 +28,21 @@ export function AuthForm({
   mode,
   returnTo,
   oauthError,
+  socialSlot,
 }: {
   mode: AuthMode;
   returnTo?: string;
   /** OAuth コールバックから `?error=` で渡された利用者向けの文言（§12.2）。 */
   oauthError?: string;
+  /**
+   * 社会ログインボタンの差し込み口（§12）。
+   *
+   * **サーバーコンポーネントから `ReactNode` として受け取る**。このファイルを
+   * `import` するとクライアントバンドルに巻き込まれ、`process.env` を参照する
+   * registry がブラウザ側で 0 件になり、hydration mismatch になる（BUG-11）。
+   * そのため `LoginButtons` はここでは import せず、page 側で渡す。
+   */
+  socialSlot?: React.ReactNode;
 }) {
   const router = useRouter();
   const [password, setPassword] = useState('');
@@ -152,12 +161,9 @@ export function AuthForm({
           </Button>
         </form>
 
-        {/* 社会ログイン/passkey/2FA は registry から自動生成。0 件なら描画されない（D-30-21）*/}
-        {!isRegister && (
-          <div className="mt-4">
-            <LoginButtons />
-          </div>
-        )}
+        {/* 社会ログイン/passkey/2FA は registry から自動生成。0 件なら描画されない（D-30-21）。
+            描画内容はサーバーコンポーネントから渡された Node のため、server と client で一致する。*/}
+        {!isRegister && socialSlot && <div className="mt-4">{socialSlot}</div>}
 
         <div className="mt-6 flex flex-col gap-2 text-sm text-muted-fg">
           {!isRegister && (
