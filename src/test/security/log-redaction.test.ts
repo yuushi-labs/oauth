@@ -65,6 +65,48 @@ describe('Security - Log Redaction', () => {
     expect(result.token).toBe('***');
   });
 
+  it('redact masks OAuth secrets as object keys', () => {
+    const obj = {
+      code: 'auth-code',
+      state: 'state-value',
+      nonce: 'nonce-value',
+      code_verifier: 'verifier-value',
+      id_token: 'header.payload.signature',
+      access_token: 'at-value',
+      provider: 'google',
+    };
+    const result = redact(obj) as Record<string, unknown>;
+    expect(result.code).toBe('***');
+    expect(result.state).toBe('***');
+    expect(result.nonce).toBe('***');
+    expect(result.code_verifier).toBe('***');
+    expect(result.id_token).toBe('***');
+    expect(result.access_token).toBe('***');
+    // provider 名は機密値ではないので残る（観測可能性のため）
+    expect(result.provider).toBe('google');
+  });
+
+  it('redact masks OAuth query parameters inside a callback URL', () => {
+    const input =
+      '/api/auth/oauth/google/callback?code=abc123&state=st456&nonce=no789&code_verifier=v012&error_description=denied';
+    const result = redactText(input);
+    expect(result).not.toContain('abc123');
+    expect(result).not.toContain('st456');
+    expect(result).not.toContain('no789');
+    expect(result).not.toContain('v012');
+    expect(result).toContain('code=***');
+    expect(result).toContain('state=***');
+    expect(result).toContain('nonce=***');
+    expect(result).toContain('code_verifier=***');
+    // そのまま ternary 扱いしていた他の値は消さない
+    expect(result).toContain('error_description=denied');
+  });
+
+  it('redact masks id_token in a bare string', () => {
+    const result = redactText('id_token=eyJhbGciOiJSUzI1NiJ9.payload.sig');
+    expect(result).not.toContain('eyJhbGciOiJSUzI1NiJ9');
+  });
+
   it('redact handles arrays of objects', () => {
     const obj = { 
       users: [{ password: 'secret1', name: 'A' }, { password: 'secret2', name: 'B' }],

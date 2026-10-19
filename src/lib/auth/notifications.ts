@@ -1,7 +1,9 @@
 import { recordSecurityEvent } from '@/lib/auth/security-events';
 import { deliverEmailSafely } from '@/lib/auth/email/deliver';
-import { sendSecurityNotificationEmail } from '@/lib/auth/email/templates';
+import { sendChangeNotificationEmail, sendSecurityNotificationEmail } from '@/lib/auth/email/templates';
 import { listActiveSessionsByUser } from '@/lib/db/queries/sessions';
+import { OAUTH_PROVIDER_REGISTRY } from '@/lib/auth/oauth/registry';
+import { m } from '@/messages/ja';
 import type { Session } from '@/lib/db/schema';
 
 /**
@@ -61,4 +63,43 @@ export async function notifyNewDeviceLogin(params: NewDeviceLoginParams): Promis
     });
   }
   return delivered;
+}
+
+export type AccountChangeAction = 'link' | 'unlink';
+
+export type AccountChangeParams = {
+  userId: string;
+  userEmail: string;
+  action: AccountChangeAction;
+  provider: string;
+  ip: string;
+  userAgent: string;
+};
+
+/**
+ * 連携の追加・解除の通知（§11 / §45）。
+ *
+ * 本文には「どのプロバイダーを追加/解除したか」「日時」「masked IP」だけを含める。
+ * 認可コード・state・トークン・外部 ID は**絶対に入れない**（§45）。
+ * 送信失敗は握り、連携操作自体は失敗にしない（D-30-27 と同じ方針）。
+ */
+export async function notifyAccountChange(params: AccountChangeParams): Promise<boolean> {
+  const providerLabel = OAUTH_PROVIDER_REGISTRY.find((p) => p.id === params.provider)?.label ?? params.provider;
+  const change =
+    params.action === 'link'
+      ? m('oauth.result.linked')
+      : m('oauth.result.unlinked');
+
+  return deliverEmailSafely({
+    kind: 'change_notification',
+    userId: params.userId,
+    ip: params.ip,
+    userAgent: params.userAgent,
+    send: () =>
+      sendChangeNotificationEmail(params.userEmail, {
+        change: `${change}（${providerLabel}）`,
+        time: new Date().toISOString(),
+        ip: params.ip,
+      }),
+  });
 }

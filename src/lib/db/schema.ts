@@ -121,6 +121,111 @@ export const sessions = pgTable(
   ],
 );
 
+export const SOCIAL_PROVIDERS = ['google', 'github', 'discord'] as const;
+export type SocialProvider = (typeof SOCIAL_PROVIDERS)[number];
+
+const SOCIAL_PROVIDER_SQL_LIST = sql.raw(
+  SOCIAL_PROVIDERS.map((provider) => `'${provider}'::text`).join(', '),
+);
+
+/**
+ * 外部 ID との紐付け（§10 / §11）。
+ *
+ * - `UNIQUE (provider, provider_account_id)` は**論理削除後も保持**する。ユーザー削除は
+ *   `users.deleted_at` による論理削除なので `ON DELETE CASCADE` は発火せず、保持期間中は
+ *   同じ外部 ID の再登録を拒否し続ける（D-31-09）。解放は users のパージ時。
+ * - refresh token 列は**持たない**（D-06: refresh token を求めない・保存しない）。
+ */
+export const accounts = pgTable(
+  'accounts',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(),
+    /** provider ごとに独立した外部 ID。数値 ID も文字列で保存する（D-31-10）。 */
+    providerAccountId: text('provider_account_id').notNull(),
+    /** リンク時点の email。新規登録可否の判断材料（自動統合には使わない・§11）。 */
+    providerEmail: text('provider_email'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check('accounts_provider_chk', sql`${table.provider} in (${SOCIAL_PROVIDER_SQL_LIST})`),
+    uniqueIndex('accounts_provider_account_uniq').on(table.provider, table.providerAccountId),
+    index('accounts_user_id_idx').on(table.userId),
+  ],
+);
+
+export const OAUTH_INTENTS = ['login', 'link'] as const;
+export type OAuthIntentValue = (typeof OAUTH_INTENTS)[number];
+
+/**
+ * ソーシャル連携の確認待ち（Phase 4-B / D-32-05）。
+ *
+ * callback の時点で「紐付きが無い」と分かったとき、完了に必要な情報を保持する。
+ * 利用者はここで「新規登録する」または「パスワードでログインして連携する」を選ぶ。
+ *
+ * - **生の token は保存しない**。Cookie に生 token、DB には SHA-256 だけ入れる。
+ * - **消費は UPDATE**（`consumed_at IS NULL` を条件に含める）。使い切りになる。
+ * - `email_owner_id` は**発行時点で確定**する。完了時に email を引き直すと、
+ *   発行と完了の間に所有者が変わった場合に判定が揺れる（D-32-07）。
+ * - URL には載せない。Cookie で運ぶので Referer や履歴から漏れない（D-32-05）。
+ */
+export const oauthSocialClaims = pgTable(
+  'oauth_social_claims',
+  {
+    stateHash: text('state_hash').primaryKey(),
+    provider: text('provider').notNull(),
+    providerAccountId: text('provider_account_id').notNull(),
+    providerEmail: text('provider_email'),
+    emailVerified: boolean('email_verified').notNull().default(false),
+    /** この email を持つ既存ユーザー。該当なしは NULL（= 新規登録できる） */
+    emailOwnerId: text('email_owner_id').references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  },
+  (table) => [
+    check('oauth_social_claims_provider_chk', sql`${table.provider} in (${SOCIAL_PROVIDER_SQL_LIST})`),
+    index('oauth_social_claims_expires_at_idx').on(table.expiresAt),
+  ],
+);
+
+/**
+ * OAuth 認可リクエストの状態（§12.2 / D-31-05）。
+ *
+ * - **生の state は保存しない**。SHA-256 だけ stored し、`consumeOAuthState` で引く。
+ * - **消費は UPDATE で行う**（`consumed_at IS NULL` を条件に含める）。2 回目以降は 0 行更新に
+ *   なるので、認可コードの再利用（replay）は DB 側で 1 回限りとして強制される。
+ * - `code_verifier` は平文。TTL 10 分・1 回限りの使い捨てで、同じ時点の `code` も失効済み
+ *   なので、DB 侵害時に両方を揃えてもフロー完了には到達できない。暗号化の余地は Phase 5 の鍵に残す。
+ */
+export const oauthStates = pgTable(
+  'oauth_states',
+  {
+    stateHash: text('state_hash').primaryKey(),
+    provider: text('provider').notNull(),
+    intent: text('intent').notNull().default('login'),
+    /** link のときだけ入る。callback で現セッションの user と照合する（D-31-15）。 */
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    nonce: text('nonce').notNull(),
+    codeVerifier: text('code_verifier').notNull(),
+    /** 同一オリジンの相対パスのみ。絶対 URL は保存前に null へ落とす（open redirect 対策）。 */
+    redirectTo: text('redirect_to'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  },
+  (table) => [
+    check('oauth_states_provider_chk', sql`${table.provider} in (${SOCIAL_PROVIDER_SQL_LIST})`),
+    check('oauth_states_intent_chk', sql`${table.intent} in ('login', 'link')`),
+    index('oauth_states_expires_at_idx').on(table.expiresAt),
+    index('oauth_states_user_id_idx').on(table.userId),
+  ],
+);
+
 export const TOKEN_PURPOSES = [
   'email_verification',
   'password_reset',
@@ -388,6 +493,12 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
+export type Account = typeof accounts.$inferSelect;
+export type NewAccount = typeof accounts.$inferInsert;
+export type OAuthState = typeof oauthStates.$inferSelect;
+export type NewOAuthState = typeof oauthStates.$inferInsert;
+export type OAuthSocialClaim = typeof oauthSocialClaims.$inferSelect;
+export type NewOAuthSocialClaim = typeof oauthSocialClaims.$inferInsert;
 export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
 export type NewEmailVerificationToken = typeof emailVerificationTokens.$inferInsert;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;

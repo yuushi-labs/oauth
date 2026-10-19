@@ -3,6 +3,8 @@ import { findUserById } from '@/lib/db/queries/users';
 import { listActiveSessionsByUser } from '@/lib/db/queries/sessions';
 import { getUserPreferences } from '@/lib/db/queries/user-preferences';
 import { listRecentSecurityEventsByUser } from '@/lib/db/queries/security-events';
+import { listAccountsByUser } from '@/lib/auth/oauth/accounts';
+import { OAUTH_PROVIDER_REGISTRY } from '@/lib/auth/oauth/registry';
 import { resolveTimeZone } from '@/lib/util/datetime';
 import { deriveOsLabel } from '@/lib/util/device';
 import { SecurityOverview } from '@/components/settings/security-overview';
@@ -20,15 +22,20 @@ const EVENT_LIMIT = 10;
  */
 export default async function SettingsSecurityPage() {
   const settingsUser = await requireSettingsUser();
-  const [user, sessions, events, preferences] = await Promise.all([
+  const [user, sessions, events, preferences, linkedRows] = await Promise.all([
     findUserById(settingsUser.id),
     listActiveSessionsByUser(settingsUser.id),
     listRecentSecurityEventsByUser(settingsUser.id, EVENT_LIMIT),
     getUserPreferences(settingsUser.id),
+    listAccountsByUser(settingsUser.id),
   ]);
   if (!user) return null;
 
   const timezone = resolveTimeZone(preferences.timezone);
+  const providerLabels = new Map<string, string>(
+    OAUTH_PROVIDER_REGISTRY.map((p) => [p.id as string, p.label]),
+  );
+  const linkedAccountLabels = linkedRows.map((row) => providerLabels.get(row.provider) ?? row.provider);
   const passwordChangedAt = (user.passwordChangedAt ?? user.createdAt).toISOString();
   const deviceRows = sessions.slice(0, 3).map((row) => ({
     id: row.id,
@@ -57,6 +64,8 @@ export default async function SettingsSecurityPage() {
         }))}
         timezone={timezone}
         eventLimit={EVENT_LIMIT}
+        linkedAccounts={linkedRows.length}
+        linkedAccountLabels={linkedAccountLabels}
       />
     </main>
   );

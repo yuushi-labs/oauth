@@ -51,6 +51,14 @@ async function createSessionInternal(
   request: { headers: Headers },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: any,
+  /**
+   * 「このセッションはたった今、本人確認が終わった」印。
+   * OAuth ログインの完了時に true を渡すことで、**パスワード未設定の social-only ユーザーも**
+   * 再認証（reauth）を 5 分間使えるようにする。social-only ユーザーはパスワードが無いので
+   * `POST /api/auth/reauth` が原理的に成立せず、reauth 必須の操作（link / unlink）が
+   * 永久に実行できなくなるため（Phase 4）。
+   */
+  reauthVerified = false,
 ): Promise<{ token: string; session: SessionData }> {
   const token = `sess_${randomToken(32)}`;
   const env = getEnv();
@@ -80,6 +88,7 @@ async function createSessionInternal(
     absoluteExpiresAt,
     lastSeenAt: now,
     totpPending: false,
+    ...(reauthVerified ? { reauthVerifiedAt: now } : {}),
   };
   await db.insert(sessions).values(data);
 
@@ -95,7 +104,7 @@ async function createSessionInternal(
       ipMasked,
       ipHash,
       deviceName,
-      reauthVerifiedAt: null,
+      reauthVerifiedAt: reauthVerified ? now.toISOString() : null,
     },
   };
 }
@@ -103,9 +112,10 @@ async function createSessionInternal(
 export async function createSession(
   userId: string,
   request: { headers: Headers },
+  options: { reauthVerified?: boolean } = {},
 ): Promise<{ token: string; session: SessionData }> {
   const db = getDb();
-  return createSessionInternal(userId, request, db);
+  return createSessionInternal(userId, request, db, options.reauthVerified ?? false);
 }
 
 export async function getSession(token: string): Promise<SessionData | null> {

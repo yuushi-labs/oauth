@@ -17,6 +17,11 @@ export const messages = {
     INVALID_PROVIDER: '指定された認証プロバイダーは利用できません。',
     INVALID_STATE: '認証リクエストを検証できませんでした。もう一度お試しください。',
     INVALID_CODE: '認証コードが正しくありません。',
+    ACCOUNT_ALREADY_LINKED: 'このプロバイダーは既に連携されています。',
+    ACCOUNT_LINKED_ELSEWHERE: 'この認証情報は既に別のアカウントで使われています。',
+    ACCOUNT_NOT_LINKABLE: 'この認証情報ではログインも新規登録もできません。',
+    EMAIL_CONFLICT: 'このメールアドレスは別のアカウントに登録済みです。',
+    LAST_LOGIN_METHOD: '最後のログイン手段は解除できません。',
   },
   auth: {
     register: '確認メールを送信しました',
@@ -96,8 +101,10 @@ export const messages = {
       sessions: 'セッション',
       appearance: '外観',
       password: 'パスワード',
+      connectedAccounts: '連携アカウント',
     },
     common: {
+      or: 'または',
       cancel: 'キャンセル',
       close: '閉じる',
       copy: 'コピー',
@@ -236,6 +243,71 @@ export const messages = {
     },
     preferences: {
       timezone: 'タイムゾーン',
+    },
+    oauth: {
+      title: '連携アカウント',
+      description:
+        '外部アカウントでログインできるようにします。連携すると、パスワードなしでそのアカウントを使って入れます。',
+      securityNotice:
+        '連携しても既存のパスワードはそのまま使えます。どちらの手段でもログインできます。',
+      providerLabel: '{provider} で続行',
+      linkAction: '連携する',
+      unlinkAction: '連携を解除',
+      unlinkConfirmTitle: '連携を解除しますか？',
+      unlinkConfirmBody:
+        'この連携を解除すると、{provider} でのログインが使えなくなります。別のログイン手段が残っていることを確認してください。',
+      linkedAt: '連携日: {date}',
+      lastUsedAt: '最終利用: {date}',
+      providerEmail: '連携時のメールアドレス: {email}',
+      neverUsed: '最終利用: まだ利用していません',
+      empty: '連携中のアカウントはありません。',
+      emptyHint: '下のボタンから外部アカウントを追加できます。',
+      availableNone: '利用できる外部アカウントが設定されていません。',
+      count: '連携中: {count} 件',
+      viewAll: '連携を管理する',
+      result: {
+        linked: '連携しました',
+        unlinked: '連携を解除しました',
+      },
+      confirm: {
+        title: '{provider} の連携を確認',
+        intro: '認証された情報を確認し、何をするかを選んでください。',
+        emailLabel: '認証されたメールアドレス',
+        emailUnverifiedNotice:
+          'このメールアドレスは検証されていない、または公開されていません。そのため、このメールアドレスでアカウントを作ることはできません。',
+        existingAccountNotice:
+          'このメールアドレスは既に登録されています。パスワードを入力すると、そのアカウントにログインして {provider} を連携します。',
+        newAccountNotice: 'このメールアドレスはまだ使われていません。アカウントを作成できます。',
+        passwordNotice: '入力したメールアドレスとパスワードが一致すると、ログインして {provider} を連携します。',
+        identifierLabel: 'メールアドレス',
+        passwordLabel: 'パスワード',
+        signupAction: 'このメールアドレスでアカウントを作る',
+        passwordAction: 'このメールアドレスでログインして連携',
+        loginElsewhereAction: '別のアカウントでログインする',
+        ownerOnlyNotice:
+          '入力するメールアドレスは、上に表示されたものと同じである必要があります。別のアカウントにログインしたい場合は、ログイン画面からログインしてから設定画面で連携してください。',
+        submitting: '処理中…',
+        cancel: '連携しない（ログイン画面へ）',
+        error: {
+          invalidState: '確認の有効期限が切れました。もう一度ログインし直してください。',
+          invalidCredentials: 'メールアドレスまたはパスワードが正しくありません。',
+          emailConflict: 'このメールアドレスは既に登録済みです。パスワードでログインして連携してください。',
+          linkedElsewhere: 'この認証情報は既に別のアカウントで使われています。',
+          notLinkable: 'この認証情報ではアカウントを作成できません。',
+          ownerMismatch:
+            'この認証情報は、上に表示されたメールアドレスのアカウントにだけ連携できます。別のアカウントを使う場合は、ログイン画面からログインしてください。',
+          rateLimited: '試行回数が多すぎます。しばらくしてからお試しください。',
+          internal: '処理に失敗しました。もう一度お試しください。',
+        },
+      },
+      errors: {
+        cancelled: '認証をキャンセルしました。もう一度お試しください。',
+        account_not_linkable:
+          'このアカウントはメールアドレスが未確認、または公開されていないため、当サービスでは利用できません。',
+        already_linked: 'このプロバイダーは既に連携されています。',
+        already_linked_elsewhere: 'この認証情報は既に別のアカウントで使われています。',
+        email_conflict: 'このメールアドレスは別のアカウントに登録済みです。',
+      },
     },
     applications: {
       listTitle: 'アプリケーション',

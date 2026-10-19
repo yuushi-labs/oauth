@@ -5,8 +5,11 @@ import { timingSafeEqualStr } from '@/lib/util/crypto';
 
 const SESSION_COOKIE = '__Host-auth_session';
 const ANON_COOKIE = '__Host-auth_anon';
+const SOCIAL_CLAIM_COOKIE = '__Host-auth_social_claim';
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60; // 30日
 const ANON_MAX_AGE = 30 * 60; // 30分
+/** 連携の確認待ちの TTL。`oauth_social_claims` の expires_at と同じ 10 分。 */
+const SOCIAL_CLAIM_MAX_AGE = 10 * 60;
 
 function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';
@@ -20,6 +23,67 @@ export function getSessionCookieName(): string {
 
 export function getAnonCookieName(): string {
   return isProduction() ? ANON_COOKIE : 'auth_anon';
+}
+
+/**
+ * 連携の確認待ち token は **Cookie で運ぶ**（D-32-05）。
+ *
+ * URL のクエリに載せると Referer やブラウザ履歴から漏れるため。DB には
+ * SHA-256 だけ保存しているので、漏らしても claim の消費はできない。
+ * provider からの top-level GET 遷移でセットし、アプリ内の POST でも送られる
+ * （SameSite=Lax は top-level GET と同一オリジンのリクエストでは送る）。
+ */
+export function getSocialClaimCookieName(): string {
+  return isProduction() ? SOCIAL_CLAIM_COOKIE : 'auth_social_claim';
+}
+
+/**
+ * Route Handler からは `cookies()`（request scope）ではなく **レスポンスヘッダ** で
+ * 書き込む。request scope が無い状態でルートを直接呼ぶテストでも使える。
+ * 読む側はリクエストから直接読む（`cookies()` に依存しない）。
+ */
+export function buildSocialClaimCookie(token: string): string {
+  const attributes = [
+    `${getSocialClaimCookieName()}=${token}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${SOCIAL_CLAIM_MAX_AGE}`,
+  ];
+  if (isProduction()) attributes.push('Secure');
+  return attributes.join('; ');
+}
+
+/**
+ * anon Cookie をレスポンスヘッダで書くための値（Route Handler 用・BUG-15）。
+ *
+ * Next.js 15 では Server Component の描画中は Cookie を**変更**できない。
+ * そのため anon Cookie の発行は callback（Route Handler）で行い、
+ * 確認画面は「既に存在する secret を読む」だけにする。
+ */
+export function buildAnonCookie(secret: string): string {
+  const signature = createHmac('sha256', getEnv().CSRF_SECRET).update(secret).digest('hex');
+  const attributes = [
+    `${getAnonCookieName()}=${secret}.${signature}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${ANON_MAX_AGE}`,
+  ];
+  if (isProduction()) attributes.push('Secure');
+  return attributes.join('; ');
+}
+
+/** claim を消すための Set-Cookie 値（Max-Age=0）。 */
+export function buildClearedSocialClaimCookie(): string {
+  const attributes = [`${getSocialClaimCookieName()}=`, 'Path=/', 'HttpOnly', 'SameSite=Lax', 'Max-Age=0'];
+  if (isProduction()) attributes.push('Secure');
+  return attributes.join('; ');
+}
+
+export async function readSocialClaimCookie(): Promise<string | null> {
+  const cookieStore = await cookies();
+  return cookieStore.get(getSocialClaimCookieName())?.value ?? null;
 }
 
 export async function setSessionCookie(token: string): Promise<void> {

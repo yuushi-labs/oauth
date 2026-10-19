@@ -228,6 +228,30 @@ pnpm dev
 
 ---
 
+## 6. 実装後の状況（2026-10-18 更新）
+
+Phase 4 の実装が完了し、client ID / secret は `.env` に設定済みです。自動テストと e2e（実 HTTP での authorize リダイレクトまで）は green です。
+
+**残っているのは「実際にブラウザで 3 provider を踏む」ことだけ**です。手順は `docs/phase4-oauth-social-login-実装計画.md` §9 の 11 手順です。着手前に確認:
+- [ ] 3 provider のコンソールに redirect URI を登録済み（§1〜§2 の手順）
+- [ ] `pnpm dev` を起動し、`/login` に社会ログインボタンが 3 個出ている
+- [ ] Google / GitHub / Discord のそれぞれで承認 → `/` に戻り、連携アカウントが 1 件増える
+- [ ] 同じ provider でもう一度ログイン → 新規登録增やさず、連携アカウントの件数が増えない
+- [ ] 未連携の別 provider でログイン → `link_required` が出て自動統合されない
+- [ ] `/api/auth/oauth/google/callback` を code 無で叩く → `400 INVALID_STATE`
+
+### 実 provider で詰まりやすい点（実装して分かったこと）
+
+| 症状 | 原因 | 対処 |
+|---|---|---|
+| Google で `redirect_uri_mismatch` | コンソール側の URI と `.env` の `NEXT_PUBLIC_APP_URL` がずれている | 両方を `http://localhost:3000` にそろえる（末尾スラッシュ差も不一致） |
+| GitHub で `account_not_linkable` | `/user/emails` に `primary && verified` の組が無い（メール非公開） | GitHub のメール設定を公開にするか、テストアカウントを別のものにする |
+| Discord で `account_not_linkable` | scope に `email` が無く、`verified` も `false` | Discord のアプリ設定で `email` scope を確認して認可し直す |
+| 同じauthorize URL を 2 回踏んだ | `state` は 1 回限りで消費される（設計通り） | ログイン画面から開き直す |
+| callback で 403 `CSRF_FAILED` | リクエスト元が別オリジン | 正常使用では起きない。`Origin` / `Referer` が**存在する**場合にだけ検証するため、通常の遷移では通る |
+
+---
+
 ## 関連ドキュメント
 
 - 実装計画: `docs/phase4-oauth-social-login-実装計画.md`

@@ -277,7 +277,7 @@ oauth/
 | M2 | Phase 2 | Webセキュリティ・CSRF・レート制限・期限切れデータ削除 | **完了（2026-10-12）** |
 | M2.5 | Phase 2.5 | 自作サービス向けOAuth 2.0 / OIDC Provider、scope・同意管理・client registry | **実装中** |
 | M3 | Phase 3 | UI / テーマ / 通知メール / デバイス管理 | **完了（2026-10-17）**（共通UI・テーマ・設定画面・セッション管理・通知メール。実ブラウザ viewport 検証のみ Phase 8-B へ） |
-| M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | 未着手（計画: `docs/phase4-oauth-social-login-実装計画.md`。**着手前に `interop/README.md` で client ID を取得する**） |
+| M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | **実装完了（2026-10-18）**（+ Phase 4-B で連携確認画面を追加。**実ブラウザでの手動疎通 11 手順のみ未実施**） |
 | M5 | Phase 5 | TOTP 2FA + Recovery Codes | 未着手 |
 | M6 | Phase 6 | Passkey / WebAuthn | 未着手 |
 | M7 | Phase 7 | 管理者 / RBAC / 監査ログ | 未着手 |
@@ -368,7 +368,7 @@ users_role_id_idx / users_deleted_at_idx
 - Docker 権限が無い環境では `sg docker -c "docker compose ..."` のようにグループを明示する必要がある
 - `docker compose` の DB は `127.0.0.1:5432` にのみバインドしている。外部公開しないこと
 
-## Phase 3 実装詳細（2026-10-17 / 実施中）
+## Phase 3 実装詳細（2026-10-17 / 完了）
 
 | 領域 | 内容 |
 |---|---|
@@ -386,6 +386,76 @@ users_role_id_idx / users_deleted_at_idx
 **実ブラウザ検証で判明した欠陥の是正**: `nonce` の hydration mismatch（warning のみ。DOM/CSP は正しく `suppressHydrationWarning` で解消）／`favicon.ico` 404（`src/app/favicon.ico` を追加）／RootLayout の不要な DB 往復（`findUserById` を削除）
 
 **テスト**: 58 files / 365 tests green（Phase 3 で +9 files / +68 tests）
+
+## Phase 4 実装詳細（2026-10-18 / 実装完了）
+
+計画: `docs/phase4-oauth-social-login-実装計画.md`（v1.1 / D-31-01〜D-31-18）／credential 取得手順: `interop/README.md`
+
+| 領域 | 内容 |
+|---|---|
+| registry | `src/lib/auth/oauth/types.ts` で型を全面再設計（`exchangeCode` / `fetchIdentity` / `verifyIdToken?`）。`registry.ts` に **Google / GitHub / Discord のエントリ 3 件**を追加。UI は自動でボタンが出る（`social-login-buttons.tsx` を `<a>` 化） |
+| provider | `google.ts`（`jose` の `jwtVerify`・**alg=RS256 固定**・`aud`=client_id・`iss` 2 形式・`nonce` 照合）、`github.ts`（**`Accept: application/json` 必須**・`primary && verified` のみ採用）、`discord.ts`（`verified === true` のみ採用） |
+| state | `state.ts`。`state`/`nonce`/`code_verifier` を **`oauth_states`** に保存し、消費時に `UPDATE` して **1 回限りを DB 側で強制**（replay 防止）。`state` は SHA-256 で引くので生値は保存しない |
+| intent | `oauth_states.intent`（`login` / `link`）+ `user_id` で **login と link の判定を分離**。link は `POST /api/auth/oauth/link`（**再認証必須**）から別々に state を発行する |
+| API | `GET /api/auth/oauth/{provider}`（303・PKCE S256）、`GET .../callback`（intent で分岐）、`POST /api/auth/oauth/link`、`GET /api/auth/accounts`、`DELETE /api/auth/accounts/{id}` |
+| migration | `drizzle/0015_milky_captain_marvel.sql` = `accounts` ＋ `oauth_states`。`accounts` は `UNIQUE(provider, provider_account_id)`、**refresh token 列は持たない** |
+| 画面 | `/settings/connected-accounts`（一覧・追加・解除）。`security-overview.tsx` の連携カードを「件数＋導線」に変更 |
+| パージ | `scripts/purge-expired.ts` に `oauth state` ジョブを追加（期限切れは即削除、消費済みは 1 時間後） |
+
+**セキュリティ上の要点**
+
+| 脅威 | 対策 |
+|---|---|
+| ★ link による乗っ取り | `(provider, provider_account_id)` が既に存在する時点で **409 で拒否**（他人のものを奪わない）。email 一致による自動 link も禁止 |
+| email 一致の自動統合 | **しない**。login では「停止して link を誘導」、link では「409 で拒否」（片方を他方の抜け穴にしない） |
+| 認可コードの再利用 | `consumeOAuthState` の `UPDATE ... WHERE consumed_at IS NULL` で 2 回目は必ず失敗 |
+| ID token の alg=none | `algorithms: ['RS256']` を明示 + `aud` / `iss` / `exp` / `nonce` を照合 |
+| 未検証 email での登録 | `emailVerified === false` または `email === null` では新規登録も紐付けもしない |
+| redirect 窃取 | `redirect_uri` は `NEXT_PUBLIC_APP_URL` から組み立て（**Host ヘッダに依存しない**）。`redirect_to` は同一オリジンの相対パスのみ受理 |
+| 最後の認証手段の消失 | パスワード未設定 ＋ 連携 0 件の状態での解除は 409 |
+
+**social-only ユーザーと再認証**: パスワードが無いユーザーは `POST /api/auth/reauth` が原理的に成立しないため、OAuth ログインで発行するセッションには `reauth_verified_at` を最初から立てる。これで 5 分の猶予が通常ユーザーと同じ挙動になる（`session.ts` の `createSession({ reauthVerified: true })`）。
+
+**DoD**: 仕様 §64「ソーシャルログイン」6項目 green。`pnpm lint`（0 errors）/ `typecheck` / `test`（**65 files / 446 tests**、Phase 3 比 +7 files / +81 tests）/ `build` すべて green。
+
+**BUG-12 の是正**: 実ブラウザで Google ログインを試すと callback が `403 CSRF_FAILED` になった。provider から戻る top-level GET の参照元は provider 自身なので、アプリ自身のオリジン判定に必ず失敗していた。**callback では `Origin` / `Referer` を検証せず**、CSRF は `state`（1 回限り消費）＋ PKCE で担保する（OAuth 仕様が定める防御）。
+
+**BUG-15 の是正**: 連携確認画面で「403 → 400、内部的には連携済み」という症状。原因は 2 つ。(1) claim を password 検証より前に消費していたため(password 検証や再送で失敗すると claim を使い切り)、(2) CSRF トークンをクライアントの `/api/auth/csrf` 取得に依存させていたため(ブラウザが anon Cookie を保存する前に送信すると 403)。**peek → 検証 → 成功確定直前で消費**し、**callback が claim と anon Cookie を 1 つの応答に書き出す**よう変更した（Next.js 15 では Server Component の描画中は Cookie を変更できないため）。
+
+**BUG-11 の是正**: `/login` で hydration mismatch が発生。`AuthForm`（`use client`）が `LoginButtons` を import していたことで**サーバー専用モジュールがクライアントバンドルに取り込まれていた**。サーバーでは 3 provider が読めてボタンが出るが、ブラウザでは `process.env` が無く 0 件になり描画が食い違っていた（Phase 3 は registry が空で露見せず）。`LoginButtons` をサーバーページから `ReactNode` として渡すように変更し、`src/test/unit/oauth-client-boundary.test.ts` で静的検査による再発防止を追加。
+
+**残作業**: **実ブラウザでの手動疎通確認 11 手順**（計画書 §9）。実 OAuth アカウントと provider コンソールでの redirect URI 登録が必要なので保留。自動テストと e2e（実 HTTP での authorize リダイレクト）は green。
+
+---
+
+## Phase 4-B 実装詳細（2026-10-18 / 実装完了）
+
+計画: `docs/phase4b-social-link-実装計画.md`（v1.1 / D-32-01〜D-32-17）
+
+実ブラウザ検証で見つかった 2 点を解消しました。
+
+| 問題 | 対応 |
+|---|---|
+| Google / GitHub でログインすると `link_required` に飛ばされ、**連携が完了できない** | callback で停止せず**確認画面**を出す。「新規登録」または「password でログインして連携」を選べる |
+| Discord の新規登録で **username が `___`** になった | 生成規則を修正（表示名を ASCII 化 → 無効なら email ローカル部 → 無効なら `user_` + hash8） |
+
+**乗っ取り防御は緩めていません。** §11 の「email 一致での自動統合禁止」を維持したまま、連携の証明を **password** に置き換えています。
+
+| 脅威 | 対策 |
+|---|---|
+| email 一致による自動乗っ取り | **password 必須**。`claim.emailOwnerId === user.id` をサーバー側で照合してからだけ `accounts` 行を作る |
+| ★ 同じ password の別ユーザーに email 入力を差し替える | **password ログインは `emailOwnerId` のアカウントだけ**に限定。email 不一致・ユーザー名代用は 401、email を持つローカルアカウント無しは 409 |
+| 別アカウントでログインしたい | この画面では弾く。`/login` からログインし、`/settings/connected-accounts` で連携する（画面にも案内） |
+| claim の盗用 / replay | httpOnly + SameSite=Lax Cookie、10 分、1 回限り（`UPDATE ... WHERE consumed_at IS NULL`） |
+| TOCTOU | 完了時にも `(provider, provider_account_id)` を再確認して 409 |
+| password 総当たり | 既存の login 系レート制限 + reservation を再利用（account 単位・IP 単位） |
+| 列挙攻撃 | password 失敗は一律 `INVALID_CREDENTIALS` |
+
+確認画面は**メールアドレス + パスワード**の 2 欄構成（email は明示的に入力させる）。同じ password の別アカウントに入れてしまわないため、サーバー側で `claim.emailOwnerId === user.id` を強制する。
+
+追加: migration `0016`（`oauth_social_claims`）/ `social-claim.ts` / `username.ts` / `POST /api/auth/oauth/social-login` / `/login/social-confirm` / purge ジョブ。
+
+**テスト**: **68 files / 482 tests green**。`pnpm lint`（0 errors）/ `typecheck` / `build` も green。
 
 ---
 

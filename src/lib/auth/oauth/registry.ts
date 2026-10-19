@@ -1,40 +1,20 @@
 /**
- * 社会ログイン provider の registry（計画 P4-A-01 / D-30-21）。
+ * 社会ログイン provider の registry（計画 P4-A-01 / D-31-xx）。
  *
- * **1 エントリ追加で有効化し、UI は registry から自動生成する**。
- * Phase 3 では空なので、ログイン画面の社会ログインボタンは描画されない。
- * Phase 4 で Google / GitHub / Discord を追加すると自動的にボタンが現れる。
+ * **1 エントリ追加で有効化し、UI は registry から自動生成する**（D-30-21）。
+ * 未設定の provider は `isConfigured` が false を返すので、ログイン画面のボタンも出ない。
  *
- * ここで定義するのは「表示に必要なメタデータと検証関数」だけ。実際のトークン交換は
- * Phase 4 の `lib/auth/oauth/*` が担う（秘密値をこのファイルには書かない）。
+ * registry は「どの provider があり、どういう検証をするか」だけを持つ。
+ * client_id / client_secret の**値**はここには書かない。実行時に `envKeys` の環境変数から読む（§62）。
  */
-export type OAuthProviderId = 'google' | 'github' | 'discord';
+import { discord } from './discord';
+import { github } from './github';
+import { google } from './google';
+import type { OAuthProviderEntry, OAuthProviderId } from './types';
 
-export type OAuthProviderEntry = {
-  id: OAuthProviderId;
-  /** ボタンに表示する表示名 */
-  label: string;
-  /** client_id が設定されているかどうか。未設定ならボタンを描画しない */
-  isConfigured: (env: Record<string, string | undefined>) => boolean;
-  /** authorize エンドポイント（検証用の正本。実行時に導出しない） */
-  authorizationEndpoint: string;
-  /** 要求する scope（最小権限・D-06） */
-  scope: string;
-  /** OIDC provider の場合は nonce / signature 検証が要る */
-  protocol: 'oidc' | 'oauth2';
-};
+export type { OAuthProviderEntry, OAuthProviderId, OAuthIntent, TokenSet, Identity } from './types';
 
-export const OAUTH_PROVIDER_REGISTRY: readonly OAuthProviderEntry[] = [
-  // Phase 4 で以下のようにエントリを追加する（client ID の取得手順は interop/README.md）:
-  // {
-  //   id: 'google',
-  //   label: 'Google',
-  //   isConfigured: (env) => Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
-  //   authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-  //   scope: 'openid email profile',
-  //   protocol: 'oidc',
-  // },
-] as const;
+export const OAUTH_PROVIDER_REGISTRY: readonly OAuthProviderEntry[] = [google, github, discord] as const;
 
 /** 設定済みの provider だけを返す。0 件なら UI は領域ごと描画しない（D-30-21）。 */
 export function configuredOAuthProviders(
@@ -43,6 +23,22 @@ export function configuredOAuthProviders(
   return OAUTH_PROVIDER_REGISTRY.filter((provider) => provider.isConfigured(env));
 }
 
+/**
+ * id から provider を引く。**未登録と未設定はどちらも null を返す**。
+ * callback 側は「どちらだったか」を利用者へ教えない（D-31-xx・404 INVALID_PROVIDER で統一）。
+ */
+export function getProvider(id: string, env?: Record<string, string | undefined>): OAuthProviderEntry | null {
+  const provider = OAUTH_PROVIDER_REGISTRY.find((entry) => entry.id === id);
+  if (!provider) return null;
+  if (env && !provider.isConfigured(env)) return null;
+  return provider;
+}
+
 export function isEmptyRegistry(): boolean {
   return OAUTH_PROVIDER_REGISTRY.length === 0;
+}
+
+/** registry が持つ env キーを全部集める（UI 側で process.env を渡すときの手書きを避ける）。 */
+export function oauthEnvKeys(): readonly string[] {
+  return OAUTH_PROVIDER_REGISTRY.flatMap((provider) => [provider.envKeys.clientId, provider.envKeys.clientSecret]);
 }

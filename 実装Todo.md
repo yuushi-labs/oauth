@@ -39,7 +39,7 @@
 | M2.5 認証元 | Phase 2.5 | §69 OIDC Provider + Authorization Code/PKCE + scope/consent + first-party RP相互運用 | **[x] 達成（2026-10-17）** — 29/29 タスク完了。DoD 6 項のうち 5 項を達成、6 項目（本番公開）は Phase 9 運用 DoD へ繰り越し。残るは「本番公開の運用確認」と「multi-process adapter 一致性の実測」の 2 点のみ。`docs/phase2.5-実装計画.md` §5.1 / `docs/phase2.5-closeout-実行Todo.md` |
 | M2.6 管理コンソール | Phase 2.6 | ログイン後の画面遷移＋OIDC/OAuth 2.0 アプリのセルフサービス作成・編集・secret 管理・接続テスト | **[x] 達成（2026-10-17）** — P26-A-01〜G-02 の全 33 タスク完了（PR #4 → `c82cd1c`）。DoD 4 項すべて達成。仕様書 v1.3 の §69.4-2 と整合。`docs/phase2.6-oidc-client-console-実装計画.md` |
 | M3 UI | Phase 3 | §64「UI」6項目＋セッション一覧/個別/全ログアウト | **[x] 達成（2026-10-17）** — 3-A〜3-D 全タスク完了。DoD は §64「UI」「セッション」全項目 green。残るのは**実ブラウザ viewport / スクリーンリーダー実機検証のみ**（Phase 8-B へ引継ぎ）。計画 `docs/phase3-ui-theme-notification-実装計画.md`、欠陥是正 `docs/bugfix-BUG1-7-修正計画.md` |
-| M4 ソーシャル | Phase 4 | Google/GitHub/Discord ログイン＋紐付け＋解除 | [ ] 未着手 |
+| M4 ソーシャル | Phase 4 | Google/GitHub/Discord ログイン＋紐付け＋解除 | [x] 実装完了 2026-10-18（Phase 4-B で連携確認画面を追加。実 provider 疎通のみ未実施） |
 | M5 2FA | Phase 5 | TOTP＋Recovery Codes＋atomic 1回限り | [ ] 未着手 |
 | M6 Passkey | Phase 6 | Passkey 登録/ログイン/削除＋Level3検証 | [ ] 未着手 |
 | M7 管理者 | Phase 7 | RBAC＋監査ログ＋secret非露出 | [ ] 未着手 |
@@ -320,45 +320,94 @@
 
 ## 6. Phase 4 — OAuth（2〜3日）: Google / GitHub / Discord（Apple 除外 C-01）
 
-> **詳細計画**: `docs/phase4-oauth-social-login-実装計画.md`（工数 30h / 3.5〜4日。決定事項 D-31-01〜D-31-14）
-> **着手の前提**: `interop/README.md` の手順で **3 provider の client ID / client secret を取得**し `.env` に記入すること（未取得では実フローの疎通確認ができない）
+> **詳細計画**: `docs/phase4-oauth-social-login-実装計画.md`（v1.1 / 決定事項 D-31-01〜D-31-18）
+> **credential**: 2026-10-17 に 3 provider の client ID / client secret を取得し `.env` に記入済み
+> **残作業**: 実ブラウザでの手動疎通確認 11 手順（`docs/phase4-oauth-social-login-実装計画.md` §9）のみ未実施。自動テスト・e2e は green
 
 ### 6-A プロバイダー接続
 
-- [ ] **P4-A-01** `lib/auth/oauth/registry.ts`（型: provider定義、検証関数、**1エントリ追加で有効化**／UIも registry から自動生成）
-- [ ] **P4-A-02** Google（OIDC、`openid-client`、nonce検証、iss/aud/exp/alg(RS256固定)/signature）
-- [ ] **P4-A-03** GitHub（OAuth2、**`/user/emails` で `verified && primary` を採用**、nullなら signup 不可／D-10）
-- [ ] **P4-A-04** Discord（OAuth2、`identify email` scope、`verified=true` のみ採用／D-11）
-- [ ] **P4-A-05** `env.ts` に各 credential（`secret` は env、**Front へ露出しない**）。`client_id` / `client_secret` / `redirect_uri` は provider ごとに**明示設定**（実行環境からの自動導出はしない）
-- [ ] **P4-A-06** `accounts` マイグレーション（`UNIQUE(provider, provider_account_id)`、refresh token 列を持たない／D-06）
-- [ ] **P4-A-07** **OAuth 機密値の redact 配線を完了**（Phase 1-C の P1-C-09a で追加したキーを使う／§12.4／★）
-  - [ ] `code` / `state` / `nonce` / `code_verifier` / `access_token` / `refresh_token` / `id_token` / `client_secret` をログ・API 応答・例外出力へ出さない
-  - [ ] `security_events.metadata` には `provider` / `error` / `state_present` 等の**真偽値・文脈のみ**（生値なし）
-  - [ ] 通知・セキュリティ通知メールにも認証フローの値を載せない（§18）
-  - [ ] テスト: `src/test/unit/log-redaction.test.ts` に OAuth 機密値のケースを追加
+- [x] **P4-A-01** `lib/auth/oauth/registry.ts`（型: provider定義、検証関数、**1エントリ追加で有効化**／UIも registry から自動生成）
+- [x] **P4-A-02** Google（OIDC、`openid-client`、nonce検証、iss/aud/exp/alg(RS256固定)/signature）
+- [x] **P4-A-03** GitHub（OAuth2、**`/user/emails` で `verified && primary` を採用**、nullなら signup 不可／D-10）
+- [x] **P4-A-04** Discord（OAuth2、`identify email` scope、`verified=true` のみ採用／D-11）
+- [x] **P4-A-05** `env.ts` に各 credential（`secret` は env、**Front へ露出しない**）。`client_id` / `client_secret` / `redirect_uri` は provider ごとに**明示設定**（実行環境からの自動導出はしない）
+- [x] **P4-A-06** `accounts` マイグレーション（`UNIQUE(provider, provider_account_id)`、refresh token 列を持たない／D-06）
+- [x] **P4-A-07** **OAuth 機密値の redact 配線を完了**（Phase 1-C の P1-C-09a で追加したキーを使う／§12.4／★）
+  - [x] `code` / `state` / `nonce` / `code_verifier` / `access_token` / `refresh_token` / `id_token` / `client_secret` をログ・API 応答・例外出力へ出さない
+  - [x] `security_events.metadata` には `provider` / `error` / `state_present` 等の**真偽値・文脈のみ**（生値なし）
+  - [x] 通知・セキュリティ通知メールにも認証フローの値を載せない（§18）
+  - [x] テスト: `src/test/security/log-redaction.test.ts` に OAuth 機密値のケースを追加
 
 ### 6-B フロー
 
-- [ ] **P4-B-01** `GET /api/auth/oauth/{provider}`（未登録は404、`state`=base64url(32B random)、`nonce`、`code_verifier`(S256) を anonCookie/Redis へ TTL10分・1回限り、scope最小）
-- [ ] **P4-B-02** `redirect_uri` は env 駆動の**登録済みURL完全一致**（DB保存の任意URL禁止／§62）
-- [ ] **P4-B-03** `GET /api/auth/oauth/{provider}/callback` — 計画12.2 の判定フローを**全実装**
-  - [ ] **P4-B-03a** state 不一致/期限切れ → `INVALID_STATE`（`login_failed` 記録）
-  - [ ] **P4-B-03b** token exchange 成功後に `state` を消費（**認可コード再利用防止**・★）
-  - [ ] **P4-B-03c** `status` が suspended/deleted → 403
-  - [ ] **P4-B-03d** **セッションローテーション**（callback後も必ず新セッション）
-  - [ ] **P4-B-03e** 新規デバイスなら通知メール
-- [ ] **P4-B-04** レート制限: `oauth-start` / `oauth-callback`
+- [x] **P4-B-01** `GET /api/auth/oauth/{provider}`（未登録は404、`state`=base64url(32B random)、`nonce`、`code_verifier`(S256) を anonCookie/Redis へ TTL10分・1回限り、scope最小）
+- [x] **P4-B-02** `redirect_uri` は env 駆動の**登録済みURL完全一致**（DB保存の任意URL禁止／§62）
+- [x] **P4-B-03** `GET /api/auth/oauth/{provider}/callback` — 計画12.2 の判定フローを**全実装**
+  - [x] **P4-B-03a** state 不一致/期限切れ → `INVALID_STATE`（`login_failed` 記録）
+  - [x] **P4-B-03b** token exchange 成功後に `state` を消費（**認可コード再利用防止**・★）
+  - [x] **P4-B-03c** `status` が suspended/deleted → 403
+  - [x] **P4-B-03d** **セッションローテーション**（callback後も必ず新セッション）
+  - [x] **P4-B-03e** 新規デバイスなら通知メール
+- [x] **P4-B-04** レート制限: `oauth-start` / `oauth-callback`
 
 ### 6-C 連携（account linking）
 
-- [ ] **P4-C-01** **email一致での自動統合を禁止**（§11）→ ログイン誘導 → `POST /api/auth/oauth/link`（**再認証必須**）
-- [ ] **P4-C-02** `DELETE /api/auth/accounts/{id}`（再認証必須、**最後の認証手段なら削除拒否**・★、通知）
-- [ ] **P4-C-03** `settings/connected-accounts` 一覧/追加/解除UI
-- [ ] **P4-C-04** 連携追加/削除の通知メール
+- [x] **P4-C-01** **email一致での自動統合を禁止**（§11）→ ログイン誘導 → `POST /api/auth/oauth/link`（**再認証必須**）
+- [x] **P4-C-02** `DELETE /api/auth/accounts/{id}`（再認証必須、**最後の認証手段なら削除拒否**・★、通知）
+- [x] **P4-C-03** `settings/connected-accounts` 一覧/追加/解除UI
+- [x] **P4-C-04** 連携追加/削除の通知メール
 
 **DoD（Phase 4）**
-- [ ] 仕様64章「ソーシャルログイン」（3 provider ＋ 紐付け/解除、Apple除く）完了
-- [ ] `src/test/security/{oauth-state,oauth-pkce,oauth-nonce,oauth-redirect,oauth-replay,account-linking}.test.ts` green
+- [x] 仕様64章「ソーシャルログイン」（3 provider ＋ 紐付け/解除、Apple除く）完了
+- [x] `src/test/security/{oauth-state,oauth-pkce,oauth-nonce,account-linking}.test.ts` green
+- [x] 認可コードが 2 回使えない（replay 固定・`oauth-state.test.ts` / `oauth-nonce.test.ts`）
+- [x] link で他人の SNS アカウントを乗っ取れない（`oauth-login-flow.test.ts` の T1〜T5）
+- [x] 未検証 email・`email: null` で自動登録されない
+- [x] `pnpm lint`（0 errors）/ `typecheck` / `test`（65 files / 446 tests）/ `build` green
+- [ ] **実ブラウザでの手動疎通確認 11 手順**（`docs/phase4-oauth-social-login-実装計画.md` §9）— 実 OAuth アカウントが必要なため保留
+
+**BUG-12 の是正（2026-10-18）**: 実ブラウザで Google ログインを試すと callback が `403 CSRF_FAILED` になり、外部連携が成立しなかった。provider から戻る top-level GET の参照元は **provider 自身**なので、アプリ自身のオリジン判定に必ず失敗していた。**callback では `Origin` / `Referer` を検証しない**ことに改め、CSRF は `state`（1 回限り消費）＋ PKCE で担保する。
+
+**BUG-11 の是正（2026-10-18）**: `/login` で hydration mismatch が発生。`AuthForm`（`use client`）が `LoginButtons` を import していたため、サーバー専用モジュールがクライアントバンドルに取り込まれ、ブラウザ側で社会ログインボタンが 0 件になっていた（Phase 3 は registry が空で露見せず）。`LoginButtons` を**サーバーページから `ReactNode` として渡す**ように変更し、`src/test/unit/oauth-client-boundary.test.ts` で再発防止する。
+
+---
+
+## 6-B. Phase 4-B — ソーシャル連携の確認画面（2026-10-18 / 実装完了）
+
+> **詳細計画**: `docs/phase4b-social-link-実装計画.md`（v1.1 / 決定事項 D-32-01〜D-32-17）
+
+Phase 4 の本体内で未だった 2 点（BUG-12 後の実ブラウザ検証で判明）を解消。
+
+### 6-B-1 解消した問題
+
+| # | 問題 | 対応 |
+|---|---|---|
+| 1 | **Google / GitHub でログインすると `link_required` に飛ばされ、連携が完了できない** | callback で停止せず**確認画面**を出すように変更。画面で「新規登録」または「password でログインして連携」を選べる |
+| 2 | **Discord の新規登録で username が `___` になった** | username 生成規則を修正（表示名を ASCII 化 → 無効なら email ローカル部 → 無効なら `user_` + hash8） |
+
+### 6-B-2 乗っ取り防御（緩めていない）
+
+- **email 一致のみでは絶対に連携しない**（§11 の維持）。連携には `email_owner_id` の **password 証明**が必須
+- **別アカウントの password ではログインできるが、連携しない**（サーバー側で `email_ownerId === user.id` を照合）
+- claim は **10 分・1 回限り**、token は **Cookie のみ**（URL に載せない・DB には SHA-256）
+- 完了時にも `(provider, provider_account_id)` を再確認（TOCTOU 対策）
+
+### 6-B-3 追加したもの
+
+| 種別 | 内容 |
+|---|---|
+| migration | `0016_known_justin_hammer.sql` = `oauth_social_claims` |
+| lib | `auth/oauth/social-claim.ts` / `auth/oauth/username.ts` |
+| API | `POST /api/auth/oauth/social-login`（signup / password）、`POST /api/auth/oauth/social-login/cancel` |
+| 画面 | `/login/social-confirm` ＋ `SocialConfirmForm`。**メールアドレスとパスワードの 2 欄**（email は明示入力させる） |
+| CSRF | **callback が claim と anon Cookie を 1 つの応答に**書き出し、確認画面が読み取る（D-32-20）。クライアントに `/api/auth/csrf` を叩かせない |
+| claim 消費 | **peek → 検証 → 成功確定直前で消費**（D-32-19）。password 誤りでも claim を失わない |
+| パージ | `scripts/purge-expired.ts` に `social claim` ジョブを追加 |
+
+**BUG-15 の是正（2026-10-18）**: 実ブラウザで「403 → 400、内部的には連携済み」という症状が出た。原因は (1) claim を password 検証前に消費していた、(2) CSRF トークンをクライアント再取得に依存させていた、の 2 つ。どちらも解消し、実 HTTP で再現・修正を確認した。
+
+**DoD**: 仕様 §9・§11・§49 に対応。`pnpm lint`（0 errors）/ `typecheck` / `test`（**68 files / 482 tests**）/ `build` すべて green。
+**残作業**: 実ブラウザでの 3 provider 通し（既存の §9 の 11 手順）。
 
 ---
 

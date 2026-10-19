@@ -35,6 +35,8 @@ export function SecurityOverview({
   events,
   timezone,
   eventLimit,
+  linkedAccounts,
+  linkedAccountLabels,
 }: {
   email: string;
   emailVerified: boolean;
@@ -43,6 +45,8 @@ export function SecurityOverview({
   events: EventRow[];
   timezone: string;
   eventLimit: number;
+  linkedAccounts: number;
+  linkedAccountLabels: string[];
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -113,7 +117,7 @@ export function SecurityOverview({
         </CardContent>
       </Card>
 
-      {/* 5. 連携アカウント（未実装）*/}
+      {/* 5. 連携アカウント（Phase 4 で実装済み・実際の件数と導線を出す）*/}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
@@ -121,9 +125,21 @@ export function SecurityOverview({
             {m('security.linkedAccounts')}
           </CardTitle>
         </CardHeader>
-        <CardContent className="pt-0">
-          <p className="text-sm text-fg">{m('security.notLinked')}</p>
-          <p className="text-xs text-muted-fg">{m('security.notAvailable')}</p>
+        <CardContent className="flex flex-wrap items-center gap-3 pt-0">
+          <p className="text-sm text-fg">
+            {linkedAccounts > 0
+              ? m('oauth.count', { count: linkedAccounts })
+              : m('security.notLinked')}
+          </p>
+          {linkedAccountLabels.length > 0 && (
+            <span className="text-xs text-muted-fg">{linkedAccountLabels.join('、')}</span>
+          )}
+          <Link
+            className="inline-flex h-8 items-center justify-center rounded-md border border-border-strong px-3 text-xs font-medium text-fg hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            href="/settings/connected-accounts"
+          >
+            {m('oauth.viewAll')}
+          </Link>
         </CardContent>
       </Card>
 

@@ -53,6 +53,18 @@ export async function purgeExpired(db: Pick<DbClient, 'execute'> = getDb()): Pro
       SELECT id FROM oidc_user_grants WHERE revoked_at < NOW() - INTERVAL '30 days'
       ORDER BY revoked_at ASC LIMIT ${BATCH_SIZE} FOR UPDATE SKIP LOCKED
     ) RETURNING id`],
+    // 期限切れは即削除。消費済みは 1 時間だけ残す（直後のデバッグ用・D-31-17）。
+    ['oauth state', sql`DELETE FROM oauth_states WHERE state_hash IN (
+      SELECT state_hash FROM oauth_states
+      WHERE expires_at < NOW() OR consumed_at < NOW() - INTERVAL '1 hour'
+      ORDER BY expires_at ASC LIMIT ${BATCH_SIZE} FOR UPDATE SKIP LOCKED
+    ) RETURNING state_hash`],
+    // 連携の確認待ち。期限切れは即削除、消費済みは 1 時間だけ残す（D-32-14）。
+    ['social claim', sql`DELETE FROM oauth_social_claims WHERE state_hash IN (
+      SELECT state_hash FROM oauth_social_claims
+      WHERE expires_at < NOW() OR consumed_at < NOW() - INTERVAL '1 hour'
+      ORDER BY expires_at ASC LIMIT ${BATCH_SIZE} FOR UPDATE SKIP LOCKED
+    ) RETURNING state_hash`],
   ] as const;
   const results = await Promise.all(jobs.map(async ([label, statement]) => [label, await deleteInBatches(db, statement)] as const));
   return Object.fromEntries(results);
