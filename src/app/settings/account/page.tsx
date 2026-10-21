@@ -4,7 +4,6 @@ import { findUserById } from '@/lib/db/queries/users';
 import { formatLocalDateTime, resolveTimeZone } from '@/lib/util/datetime';
 import { getUserPreferences } from '@/lib/db/queries/user-preferences';
 import { Card, CardContent } from '@/components/ui/card';
-import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { m } from '@/messages/ja';
 
 export const dynamic = 'force-dynamic';
@@ -20,12 +19,9 @@ export default async function AccountSettingsPage() {
 
   return (
     <main className="flex flex-col gap-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">{m('settings.account')}</h1>
-          <p className="mt-2 text-sm text-muted-fg">アカウントの基本情報を確認します。</p>
-        </div>
-        <ThemeToggle />
+      <header>
+        <h1 className="text-2xl font-bold">{m('settings.account')}</h1>
+        <p className="mt-2 text-sm text-muted-fg">アカウントの基本情報を確認します。</p>
       </header>
 
       <Card>
