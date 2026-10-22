@@ -45,6 +45,11 @@ export async function POST(request: NextRequest) {
       const userId = result.userId;
       const newEmail = result.newEmail;
 
+      // §14 step 6 の通知先は**旧アドレス**。`users.email` を先に更新してから読み直すと
+      // 常に新アドレスが返り、通知が送られないまま変更だけが確定してしまう。
+      const user = await findUserById(userId);
+      const oldEmail = user?.email ?? null;
+
       const db = getDb();
       await db.transaction(async (tx) => {
         await tx
@@ -61,10 +66,9 @@ export async function POST(request: NextRequest) {
       );
 
       // 旧メールアドレスへ通知送信
-      const user = await findUserById(userId);
-      if (user && user.email !== newEmail) {
+      if (oldEmail && oldEmail !== newEmail) {
         try {
-          await sendChangeNotificationEmail(user.email, {
+          await sendChangeNotificationEmail(oldEmail, {
             change: 'メールアドレス変更',
             time: new Date().toISOString(),
             ip: getRequestClientIp(request),
@@ -77,7 +81,7 @@ export async function POST(request: NextRequest) {
             userId,
             getRequestClientIp(request),
             request.headers.get('user-agent') ?? '',
-            { oldEmail: user.email },
+            { oldEmail },
           );
         }
       }
