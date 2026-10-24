@@ -71,10 +71,22 @@ vi.mock('next/headers', () => {
   };
 });
 
-vi.mock('@/lib/db/client', () => ({
-  getPool: () => ({ query: vi.fn(async () => ({ rows: [], rowCount: 0 })) }),
-  getDb: () => ({ insert: () => ({ values: async () => undefined }) }),
-}));
+// login は 2FA 状態を `findTotpByUserId`（db.select）で読む。このテストは通知だけを見るので
+// 「TOTP 無効」を返す最小の db スタブを与える（D-33-07 の 2 段階ログインを通さない）。
+vi.mock('@/lib/db/client', () => {
+  const selectChain = () => {
+    const chain = {
+      from: () => chain,
+      where: () => chain,
+      limit: async () => [],
+    };
+    return chain;
+  };
+  return {
+    getPool: () => ({ query: vi.fn(async () => ({ rows: [], rowCount: 0 })) }),
+    getDb: () => ({ insert: () => ({ values: async () => undefined }), select: selectChain }),
+  };
+});
 
 type FakeSessionRow = { id: string; ipHash: string | null; deviceName: string | null };
 const activeSessions: FakeSessionRow[] = [];

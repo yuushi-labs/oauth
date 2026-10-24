@@ -129,11 +129,20 @@ describe('Security - deleted accounts cannot log in (spec 23/24)', () => {
     expect(response.status).toBe(403);
   });
 
-  it('email 未認証（pending_email）は確認メール再送のためログインできる', async () => {
+  it('email 未認証は 403 EMAIL_NOT_VERIFIED で止まる（D-33-21）', async () => {
     const password = 'Strong-Password-2026!';
-    const { email } = await makeUser(password, 'pending_email');
+    const { id, email } = await makeUser(password, 'pending_email');
 
     const response = await login(loginRequest(email, password));
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(403);
+
+    const payload = await response.json();
+    expect(payload.error.code).toBe('EMAIL_NOT_VERIFIED');
+    // 再送導線のために email を返す（列挙対策としてこの経路では password 検証を通っている）
+    expect(payload.data.email).toBe(email);
+
+    // セッションを発行していないこと（未確認のままログイン状態にしない）
+    const issued = await getDb().select().from(sessions).where(eq(sessions.userId, id));
+    expect(issued).toHaveLength(0);
   });
 });
