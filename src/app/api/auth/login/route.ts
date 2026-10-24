@@ -87,7 +87,10 @@ export async function POST(request: NextRequest) {
 
       await Promise.all(reservations.map((reservation) => rateLimiter.finishFailedAttempt(reservation, true)));
 
-      if (user.status === 'suspended') {
+      // 停止・論理削除はログインさせない（§23・§24）。削除は全セッションと連携を無効化するので、
+      // 同じ資格情報で新セッションを発行すると削除を無言で取り消してしまう。
+      // `pending_email` は残す（確認メールを再送するにはログイン状態が要るため）。
+      if (user.status === 'suspended' || user.status === 'deleted') {
         await recordSecurityEvent('login_failed', user.id, ip, request.headers.get('user-agent') ?? '');
         return failResponse('ACCOUNT_SUSPENDED', 'このアカウントは利用できません', 403);
       }

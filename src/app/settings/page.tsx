@@ -21,13 +21,13 @@ export default async function SettingsHomePage() {
         <h1 className="text-2xl font-bold">{m('settings.title')}</h1>
         <p className="mt-2 text-sm text-muted-fg">{user.username} さんの設定メニューです。</p>
       </header>
-      <ul className="grid gap-4">
+      <ul className="grid gap-3 sm:grid-cols-2">
         {sections.map((section) => (
-          <li key={section.href} className="rounded-lg border border-border bg-card p-6">
-            <h2 className="text-lg font-semibold">
+          <li key={section.href} className="rounded-lg border border-border bg-card p-4">
+            <h2 className="text-base font-semibold">
               <Link className="underline" href={section.href}>{section.title}</Link>
             </h2>
-            <p className="mt-2 text-sm text-muted-fg">{section.description}</p>
+            <p className="mt-1 text-sm text-muted-fg">{section.description}</p>
           </li>
         ))}
       </ul>

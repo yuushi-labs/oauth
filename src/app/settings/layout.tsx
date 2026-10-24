@@ -1,7 +1,11 @@
 import { cookies } from 'next/headers';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { cache } from 'react';
 import { SettingsNav } from '@/app/settings/settings-nav';
+import { LogoutButton } from '@/app/logout-button';
+import { ThemeToggle } from '@/components/theme/theme-toggle';
+import { APP_NAME } from '@/config/app';
 import { getSessionCookieName } from '@/lib/auth/cookie';
 import { getSession } from '@/lib/auth/session';
 import { findUserById } from '@/lib/db/queries/users';
@@ -22,9 +26,20 @@ export const requireSettingsUser = cache(async (): Promise<SettingsUser> => {
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
   await requireSettingsUser();
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-6 py-12">
-      <SettingsNav />
-      {children}
+    <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <Link className="text-lg font-bold" href="/">
+          {APP_NAME}
+        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <ThemeToggle />
+          <LogoutButton />
+        </div>
+      </header>
+      <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
+        <SettingsNav />
+        <div className="min-w-0 flex-1">{children}</div>
+      </div>
     </div>
   );
 }
