@@ -18,6 +18,8 @@ export const requireSettingsUser = cache(async (): Promise<SettingsUser> => {
   const token = (await cookies()).get(getSessionCookieName())?.value;
   const session = token ? await getSession(token) : null;
   if (!session) redirect('/login');
+  // 2FA 保留セッションは画面遷移でも弾く（API だけだと画面が出てから 403 が連発する・D-33-08）。
+  if (session.totpPending) redirect('/login');
   const user: User | null = await findUserById(session.userId);
   if (!user) redirect('/login');
   return { id: user.id, username: user.username, email: user.email, roleId: user.roleId };

@@ -8,7 +8,8 @@ import { getRequestClientIp } from '@/lib/auth/session';
 export async function POST(request: NextRequest) {
   return withAuthPipeline(
     request,
-    { requireAuth: true },
+    // 保留セッションでも「抜けられる」必要がある（共有端末対策・§9.4）。
+    { requireAuth: true, denyTotpPending: false },
     async ({ user, session }) => {
       if (session) {
         await revokeSession(session.id, 'logout');

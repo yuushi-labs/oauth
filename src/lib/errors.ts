@@ -22,6 +22,9 @@ export const ERROR_CODES = [
   'CAPTCHA_INVALID',
   'CAPTCHA_UNCONFIGURED',
   'CAPTCHA_PROVIDER_ERROR',
+  'TOTP_REQUIRED',
+  'TOTP_ALREADY_ENABLED',
+  'EMAIL_NOT_VERIFIED',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -50,6 +53,9 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   CAPTCHA_INVALID: 400,
   CAPTCHA_UNCONFIGURED: 500,
   CAPTCHA_PROVIDER_ERROR: 503,
+  TOTP_REQUIRED: 403,
+  TOTP_ALREADY_ENABLED: 409,
+  EMAIL_NOT_VERIFIED: 403,
 };
 
 const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
@@ -76,6 +82,9 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   CAPTCHA_INVALID: '確認に失敗しました。もう一度お試しください。',
   CAPTCHA_UNCONFIGURED: '追加確認の設定が完了していません。',
   CAPTCHA_PROVIDER_ERROR: '追加確認サービスを利用できません。',
+  TOTP_REQUIRED: '2 段階認証を完了してください。',
+  TOTP_ALREADY_ENABLED: '2 段階認証は既に有効です。',
+  EMAIL_NOT_VERIFIED: 'メールアドレスの確認が必要です。',
 };
 
 export function defaultMessage(code: ErrorCode): string {

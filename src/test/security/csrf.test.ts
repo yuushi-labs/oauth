@@ -21,6 +21,7 @@ describe('Security - CSRF Protection (validateCsrfToken)', () => {
     ipHash: null,
     deviceName: 'Unknown',
     reauthVerifiedAt: null,
+    totpPending: false,
   };
 
   beforeEach(() => {

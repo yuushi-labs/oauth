@@ -51,6 +51,8 @@ export function rateLimitResponse(resetAt: number): NextResponse {
 export type PipelineOptions = {
   requireAuth?: boolean;
   requireReauth?: boolean;
+  /** 2FA 保留セッションの拒否（既定 true・D-33-08）。`false` はホワイトリスト 5 経路のみ。 */
+  denyTotpPending?: boolean;
 };
 
 export type PipelineContext = {

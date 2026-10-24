@@ -90,6 +90,7 @@ function sessionFor(userId: string, options: { reauthed?: boolean } = {}): Sessi
     ipHash: null,
     deviceName: 'vitest',
     reauthVerifiedAt: options.reauthed ? new Date().toISOString() : null,
+    totpPending: false,
   };
 }
 

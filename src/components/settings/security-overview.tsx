@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { CircleCheck, ShieldAlert } from 'lucide-react';
 import { BadgeCheck, KeyRound, Link2, MonitorSmartphone, Fingerprint, Plug } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { TwoFactorPanel } from '@/components/settings/two-factor-panel';
 import { formatLocalDateTime } from '@/lib/util/datetime';
 import type { SessionRow } from '@/components/settings/session-list';
 import { m } from '@/messages/ja';
@@ -37,6 +38,7 @@ export function SecurityOverview({
   eventLimit,
   linkedAccounts,
   linkedAccountLabels,
+  twoFactor,
 }: {
   email: string;
   emailVerified: boolean;
@@ -47,6 +49,7 @@ export function SecurityOverview({
   eventLimit: number;
   linkedAccounts: number;
   linkedAccountLabels: string[];
+  twoFactor: { enabled: boolean; recovery_codes_remaining: number; strong_reauth_methods: string[] };
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -86,22 +89,8 @@ export function SecurityOverview({
         </CardContent>
       </Card>
 
-      {/* 3. 2 段階認証（未実装）*/}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2">
-            <ShieldAlert aria-hidden className="size-4 text-muted-fg" />
-            {m('security.twoFactor')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-2 pt-0">
-          <span className="inline-flex items-center gap-1 text-sm text-fg">
-            <ShieldAlert aria-hidden className="size-3.5 text-muted-fg" />
-            {m('security.disabled')}
-          </span>
-          <span className="text-xs text-muted-fg">{m('security.notAvailable')}</span>
-        </CardContent>
-      </Card>
+      {/* 3. 2 段階認証（Phase 5 で実装済み）*/}
+      <TwoFactorPanel initial={twoFactor} />
 
       {/* 4. Passkey（未実装）*/}
       <Card>

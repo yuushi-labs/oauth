@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withAuthPipeline, failResponse, handleSuccess, rateLimitResponse } from '@/lib/api/utils';
 import { verifyPassword } from '@/lib/auth/password';
 import { createSession } from '@/lib/auth/session';
@@ -12,6 +12,7 @@ import { verifyCaptchaIfRequired } from '@/lib/auth/captcha';
 import { ApiError } from '@/lib/errors';
 import type { FailedAttemptReservation } from '@/lib/auth/rate-limit';
 import { findUserByEmailOrUsername } from '@/lib/db/queries/users';
+import { findTotpByUserId } from '@/lib/db/queries/totp';
 import { isFirstSessionFromDevice, notifyNewDeviceLogin } from '@/lib/auth/notifications';
 import { z } from 'zod';
 
@@ -89,13 +90,39 @@ export async function POST(request: NextRequest) {
 
       // 停止・論理削除はログインさせない（§23・§24）。削除は全セッションと連携を無効化するので、
       // 同じ資格情報で新セッションを発行すると削除を無言で取り消してしまう。
-      // `pending_email` は残す（確認メールを再送するにはログイン状態が要るため）。
       if (user.status === 'suspended' || user.status === 'deleted') {
         await recordSecurityEvent('login_failed', user.id, ip, request.headers.get('user-agent') ?? '');
         return failResponse('ACCOUNT_SUSPENDED', 'このアカウントは利用できません', 403);
       }
 
+      // 未確認 email はログインさせない（D-33-21）。セッションを発行せず、再送導線を応答に含める。
+      // `register` はセッションを発行しないため、ここで止めても `resend-verification`（未認証対応）で復帰できる。
+      if (!user.emailVerified) {
+        await recordSecurityEvent('login_failed', user.id, ip, request.headers.get('user-agent') ?? '', {
+          reason: 'email_unverified',
+        });
+        return NextResponse.json(
+          {
+            success: false,
+            error: { code: 'EMAIL_NOT_VERIFIED', message: 'メールアドレスの確認が必要です。' },
+            data: { email: user.email, resend_available: true },
+          },
+          { status: 403, headers: { 'Cache-Control': 'no-store' } },
+        );
+      }
+
       const userAgent = request.headers.get('user-agent') ?? '';
+
+      // 2FA 有効なら保留セッションを発行する（D-33-07）。ログイン完了は昇格時（challenge/verify）。
+      const totpRow = await findTotpByUserId(user.id);
+      if (totpRow?.enabled) {
+        const { token, session } = await createSession(user.id, request, { totpPending: true });
+        await setSessionCookie(token);
+        await setAnonCookie(session.csrfSecret);
+        // login_success も新規デバイス通知も**まだ記録しない**（2FA 未完了・T14）。
+        return handleSuccess({ twoFactorRequired: true });
+      }
+
       const { token, session } = await createSession(user.id, request);
       await setSessionCookie(token);
       await setAnonCookie(session.csrfSecret);

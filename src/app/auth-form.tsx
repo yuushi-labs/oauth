@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PasswordStrength } from '@/components/auth/password-strength';
+import { TotpLoginStep } from '@/components/auth/totp-login-step';
+import { EmailUnverifiedNotice } from '@/components/auth/email-unverified-notice';
 import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { apiClient, ApiClientError, resetCsrfCache } from '@/lib/api/client';
 import { APP_DESCRIPTION, APP_NAME } from '@/config/app';
@@ -48,6 +50,8 @@ export function AuthForm({
   const [password, setPassword] = useState('');
   const [error, setError] = useState(oauthError ?? '');
   const [submitting, setSubmitting] = useState(false);
+  const [twoFactorRequired, setTwoFactorRequired] = useState(false);
+  const [unverified, setUnverified] = useState<{ email: string; resendAvailable: boolean } | null>(null);
   const isRegister = mode === 'register';
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -66,7 +70,7 @@ export function AuthForm({
       const payload = isRegister
         ? { email: form.get('email'), username: form.get('username'), password: nextPassword }
         : { email_or_username: form.get('email_or_username'), password: nextPassword };
-      const result = await apiClient.post<{ message: string }>(`/api/auth/${mode}`, payload);
+      const result = await apiClient.post<{ message: string; twoFactorRequired?: boolean }>(`/api/auth/${mode}`, payload);
 
       if (isRegister) {
         setError('');
@@ -74,11 +78,21 @@ export function AuthForm({
         router.refresh();
         return;
       }
+      if (result.twoFactorRequired) {
+        // 2FA 有効。同じページ内で TOTP ステップへ切り替える（§12.3）。
+        resetCsrfCache();
+        setTwoFactorRequired(true);
+        return;
+      }
       resetCsrfCache();
       router.replace(returnTo?.startsWith('/oauth2/interaction/') ? returnTo : '/');
       router.refresh();
-      void result;
     } catch (caught) {
+      // 未確認 email は専用の案内（再送導線つき）を出す（D-33-21）。`data.email` が無ければ通常のエラー。
+      if (caught instanceof ApiClientError && caught.code === 'EMAIL_NOT_VERIFIED' && caught.email) {
+        setUnverified({ email: caught.email, resendAvailable: caught.resendAvailable });
+        return;
+      }
       // 失敗はすべて既定メッセージで提示し、列挙攻撃に材料を渡さない（§46）
       setError(caught instanceof ApiClientError ? caught.message : errorMessage('INTERNAL_ERROR'));
     } finally {
@@ -97,6 +111,16 @@ export function AuthForm({
       </header>
 
       <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
+        {twoFactorRequired ? (
+          <TotpLoginStep returnTo={returnTo} onBack={() => setTwoFactorRequired(false)} />
+        ) : unverified ? (
+          <EmailUnverifiedNotice
+            email={unverified.email}
+            resendAvailable={unverified.resendAvailable}
+            onBack={() => { setUnverified(null); setError(''); }}
+          />
+        ) : (
+        <>
         <h1 className="mb-6 text-xl font-semibold">
           {isRegister ? m('auth.registerTitle') : m('auth.loginTitle')}
         </h1>
@@ -176,6 +200,8 @@ export function AuthForm({
             </Link>
           </p>
         </div>
+        </>
+        )}
       </section>
     </main>
   );

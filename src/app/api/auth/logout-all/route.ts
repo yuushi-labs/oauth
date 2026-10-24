@@ -19,7 +19,7 @@ import { m } from '@/messages/ja';
 export async function POST(request: NextRequest) {
   return withAuthPipeline(
     request,
-    { requireAuth: true, requireReauth: true },
+    { requireAuth: true, requireReauth: true, denyTotpPending: false },
     async ({ user }) => {
       if (!user) throw new Error('unreachable');
 

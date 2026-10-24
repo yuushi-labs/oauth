@@ -9,9 +9,21 @@ export class ApiClientError extends Error {
     readonly code: string,
     message: string,
     readonly status: number,
+    /** 失敗応答の `data`（未確認 email の `email` / `resend_available` など）。 */
+    readonly data?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'ApiClientError';
+  }
+
+  /** 未確認 email の案内に使う email（`data.email`）。無ければ undefined。 */
+  get email(): string | undefined {
+    const value = this.data?.email;
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  get resendAvailable(): boolean {
+    return this.data?.resend_available === true;
   }
 }
 
@@ -71,15 +83,17 @@ export async function apiRequest<T>(path: string, init: ApiRequest = {}): Promis
 
   const payload = (await response.json().catch(() => null)) as
     | { success: true; data: T }
-    | { success: false; error?: { code?: string; message?: string } }
+    | { success: false; error?: { code?: string; message?: string }; data?: Record<string, unknown> }
     | null;
 
   if (!response.ok || !payload?.success) {
     const error = payload && 'error' in payload ? payload.error : undefined;
+    const data = payload && 'data' in payload && payload.data ? payload.data : undefined;
     throw new ApiClientError(
       error?.code ?? 'INTERNAL_ERROR',
       error?.message ?? '処理に失敗しました。時間をおいて再度お試しください。',
       response.status,
+      data,
     );
   }
   return payload.data;

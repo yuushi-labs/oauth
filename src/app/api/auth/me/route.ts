@@ -5,7 +5,8 @@ import { findUserById } from '@/lib/db/queries/users';
 export async function GET(request: NextRequest) {
   return withAuthPipeline(
     request,
-    { requireAuth: false },
+    // 画面が「保留中」を判定するために読む（secret を返さない・§9.4）。
+    { requireAuth: false, denyTotpPending: false },
     async ({ user, session }) => {
       if (!session || !user) {
         return failResponse('SESSION_EXPIRED', 'セッションの有効期限が切れました', 401);

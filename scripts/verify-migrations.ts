@@ -256,6 +256,16 @@ async function main(): Promise<void> {
       ['論理削除を許容する partial unique index がある',
         Object.values(afterUp.indexes).flat().includes('users_username_lower_uniq')
         && Object.values(afterUp.indexes).flat().includes('users_email_lower_uniq')],
+      ['totp テーブルが存在する（migration 0017）', afterUp.tables.includes('totp')],
+      ['recovery_codes テーブルが存在する（migration 0017）', afterUp.tables.includes('recovery_codes')],
+      ['totp に secret_encrypted / enabled / last_used_counter 列がある',
+        ['secret_encrypted', 'enabled', 'last_used_counter', 'confirmed_at'].every((column) =>
+          (afterUp.columns.totp ?? []).includes(column))],
+      ['totp は users への外部キーを持つ',
+        Object.values(afterUp.foreignKeys).flat().includes('totp_user_id_users_id_fk')],
+      ['recovery_codes は users への外部キーと code_hash の一意インデックスを持つ',
+        Object.values(afterUp.foreignKeys).flat().includes('recovery_codes_user_id_users_id_fk')
+        && (afterUp.indexes.recovery_codes ?? []).includes('recovery_codes_code_hash_uniq')],
     ];
     for (const [label, ok] of expectations) {
       process.stdout.write(`- ${ok ? '✅' : '❌'} ${label}\n`);

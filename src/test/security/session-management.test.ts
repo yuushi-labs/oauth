@@ -12,7 +12,7 @@ const SAFARI_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleW
 const session = {
   id: 'ses_current', userId: 'usr_owner', sessionHash: 'hash', csrfSecret: 'csrf-secret',
   userAgent: CHROME_UA, ip: '203.0.113.10', ipMasked: '203.0.113.xxx', ipHash: 'iphash-owner',
-  deviceName: 'Chrome on Windows', reauthVerifiedAt: null,
+  deviceName: 'Chrome on Windows', reauthVerifiedAt: null, totpPending: false,
 };
 
 /** DB 行（sessions テーブルの形状）。Date を持つのでそのまま serialize できる。 */

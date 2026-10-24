@@ -19,6 +19,8 @@ export type SessionData = {
   ipHash: string | null;
   deviceName: string;
   reauthVerifiedAt: string | null;
+  /** 2FA の保留セッション（パスワード認証済み・コード未検証）。昇格まで封じ込める（D-33-07）。 */
+  totpPending: boolean;
 };
 
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60; // 30日
@@ -59,6 +61,7 @@ async function createSessionInternal(
    * 永久に実行できなくなるため（Phase 4）。
    */
   reauthVerified = false,
+  totpPending = false,
 ): Promise<{ token: string; session: SessionData }> {
   const token = `sess_${randomToken(32)}`;
   const env = getEnv();
@@ -87,7 +90,7 @@ async function createSessionInternal(
     expiresAt,
     absoluteExpiresAt,
     lastSeenAt: now,
-    totpPending: false,
+    totpPending,
     ...(reauthVerified ? { reauthVerifiedAt: now } : {}),
   };
   await db.insert(sessions).values(data);
@@ -105,6 +108,7 @@ async function createSessionInternal(
       ipHash,
       deviceName,
       reauthVerifiedAt: reauthVerified ? now.toISOString() : null,
+      totpPending,
     },
   };
 }
@@ -112,10 +116,16 @@ async function createSessionInternal(
 export async function createSession(
   userId: string,
   request: { headers: Headers },
-  options: { reauthVerified?: boolean } = {},
+  options: { reauthVerified?: boolean; totpPending?: boolean } = {},
 ): Promise<{ token: string; session: SessionData }> {
   const db = getDb();
-  return createSessionInternal(userId, request, db, options.reauthVerified ?? false);
+  return createSessionInternal(
+    userId,
+    request,
+    db,
+    options.reauthVerified ?? false,
+    options.totpPending ?? false,
+  );
 }
 
 export async function getSession(token: string): Promise<SessionData | null> {
@@ -148,7 +158,14 @@ export async function getSession(token: string): Promise<SessionData | null> {
     ipHash: row.ipHash ?? null,
     deviceName: row.deviceName ?? 'その他のデバイス',
     reauthVerifiedAt: row.reauthVerifiedAt ? row.reauthVerifiedAt.toISOString() : null,
+    totpPending: row.totpPending,
   };
+}
+
+/** 2FA の保留セッションを昇格させる（同じ行を更新する・D-33-10）。 */
+export async function markSessionTotpVerified(id: string): Promise<void> {
+  const db = getDb();
+  await db.update(sessions).set({ totpPending: false }).where(eq(sessions.id, id));
 }
 
 export async function rotateSession(

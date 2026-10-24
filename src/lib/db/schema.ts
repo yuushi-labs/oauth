@@ -487,6 +487,35 @@ export const oidcUserSubjects = pgTable(
   ],
 );
 
+export const totp = pgTable('totp', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  secretEncrypted: text('secret_encrypted').notNull(),
+  enabled: boolean('enabled').default(false).notNull(),
+  lastUsedCounter: bigint('last_used_counter', { mode: 'number' }).default(-1).notNull(),
+  confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const recoveryCodes = pgTable(
+  'recovery_codes',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    codeHash: text('code_hash').notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('recovery_codes_code_hash_uniq').on(table.codeHash),
+    index('recovery_codes_user_id_idx').on(table.userId),
+  ],
+);
+
 export type Role = typeof roles.$inferSelect;
 export type NewRole = typeof roles.$inferInsert;
 export type User = typeof users.$inferSelect;
@@ -510,3 +539,7 @@ export type UserPreferences = typeof userPreferences.$inferSelect;
 export type NewSecurityEvent = typeof securityEvents.$inferInsert;
 export type RateLimitHit = typeof rateLimitHits.$inferSelect;
 export type RateLimitReservation = typeof rateLimitReservations.$inferSelect;
+export type Totp = typeof totp.$inferSelect;
+export type NewTotp = typeof totp.$inferInsert;
+export type RecoveryCode = typeof recoveryCodes.$inferSelect;
+export type NewRecoveryCode = typeof recoveryCodes.$inferInsert;

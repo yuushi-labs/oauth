@@ -56,6 +56,11 @@ export async function checkReauthRequired(session: SessionData | null): Promise<
 export type PipelineOptions = {
   requireAuth?: boolean;
   requireReauth?: boolean;
+  /**
+   * 2FA 保留セッション（`totpPending`）を拒否するか。既定は `true`（fail closed・D-33-08）。
+   * `false` を渡してよいのはホワイトリストの 5 経路のみ（§9.4）。
+   */
+  denyTotpPending?: boolean;
 };
 
 export type PipelineContext = {
@@ -106,6 +111,11 @@ export async function runCorePipeline(
 
   if (options.requireAuth && !session) {
     throw new ApiError('SESSION_EXPIRED', 'セッションの有効期限が切れました');
+  }
+
+  // 2FA 保留セッションの封じ込め（D-33-08）。既定で拒否し、ホワイトリストの経路だけが false を渡す。
+  if (session && session.totpPending && options.denyTotpPending !== false) {
+    throw new ApiError('TOTP_REQUIRED', '2 段階認証を完了してください');
   }
 
   let body: unknown = undefined;

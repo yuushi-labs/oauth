@@ -25,6 +25,7 @@ export async function currentOidcAppSession(req: IncomingMessage): Promise<OidcA
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.session_hash = $1 AND s.revoked_at IS NULL
        AND s.expires_at > now() AND s.absolute_expires_at > now()
+       AND s.totp_pending = false
        AND u.status = 'active' AND u.email_verified = true AND u.deleted_at IS NULL
      LIMIT 1`,
     [sessionHash],

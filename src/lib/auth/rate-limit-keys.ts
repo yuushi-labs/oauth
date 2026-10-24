@@ -41,6 +41,7 @@ export const rateLimitKeys = {
   forgotEmail: (email: string) => `rl:forgot:email:${hashRateLimitEmail(email)}`,
   forgotIp: (ip: string) => `rl:forgot:ip:${hashRateLimitIp(ip)}`,
   resendUser: (userId: string) => `rl:resend:user:${userId}`,
+  resendEmail: (email: string) => `rl:resend:email:${hashRateLimitEmail(email)}`,
   resendIp: (ip: string) => `rl:resend:ip:${hashRateLimitIp(ip)}`,
   oauthStart: (ip: string) => `rl:oauth:start:${hashRateLimitIp(ip)}`,
   oauthCallback: (ip: string) => `rl:oauth:callback:${hashRateLimitIp(ip)}`,

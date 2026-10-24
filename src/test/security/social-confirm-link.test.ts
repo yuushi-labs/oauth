@@ -105,6 +105,7 @@ function sessionFor(userId: string): SessionData {
     ipHash: null,
     deviceName: 'vitest',
     reauthVerifiedAt: new Date().toISOString(),
+    totpPending: false,
   };
 }
 
