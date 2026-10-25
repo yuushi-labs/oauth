@@ -43,3 +43,33 @@ describe('Phase 2 security event coverage', () => {
     }));
   });
 });
+
+describe('Phase 5 security event coverage (2fa/**)', () => {
+  it('2FA ルートが期待どおりのイベントを記録する', () => {
+    const routeEvents: Array<[string, string[]]> = [
+      ['2fa/verify/route.ts', ['2fa_enabled', 'login_failed', 'rate_limited']],
+      ['2fa/challenge/verify/route.ts', ['login_failed', 'login_success', 'rate_limited']],
+      ['2fa/disable/route.ts', ['2fa_disabled', 'rate_limited']],
+      ['2fa/recovery-codes/regenerate/route.ts', ['2fa_enabled', 'rate_limited']],
+    ];
+    for (const [relativePath, eventTypes] of routeEvents) {
+      const source = readFileSync(resolve(process.cwd(), 'src/app/api/auth', relativePath), 'utf8');
+      expect(source, `${relativePath} should record security events`).toContain('recordSecurityEvent');
+      for (const eventType of eventTypes) {
+        expect(source, `${relativePath} should record ${eventType}`).toContain(`'${eventType}'`);
+      }
+    }
+  });
+
+  it('login は email 未確認の遮断で login_failed（reason=email_unverified）を記録する', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/app/api/auth/login/route.ts'), 'utf8');
+    expect(source).toContain("reason: 'email_unverified'");
+  });
+
+  it('resend-verification は未認証経路で user_id が無い場合 null を渡す', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/app/api/auth/resend-verification/route.ts'), 'utf8');
+    // eventUserId = user?.id ?? null
+    expect(source).toMatch(/const eventUserId = user\?\.id \?\? null/);
+    expect(source).toContain('recordSecurityEvent');
+  });
+});

@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
         send: () => sendVerificationEmail(new_email, url),
       });
 
-      return handleSuccess({ message: '変更通知-email を送信しました' });
+      return handleSuccess({ message: '変更通知メールを送信しました' });
     },
   );
 }

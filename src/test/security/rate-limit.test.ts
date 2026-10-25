@@ -31,4 +31,9 @@ describe('Security - Rate Limiting Configuration', () => {
     expect(RATE_LIMITS.resend.ip.limit).toBe(10);
     expect(RATE_LIMITS.resend.ip.window).toBe(3600_000);
   });
+
+  it('2FA は 10/5 分（D-33-14）', () => {
+    expect(RATE_LIMITS.twoFactor.limit).toBe(10);
+    expect(RATE_LIMITS.twoFactor.window).toBe(300_000);
+  });
 });

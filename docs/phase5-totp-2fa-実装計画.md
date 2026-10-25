@@ -172,6 +172,7 @@
 | **D-33-23★** | **2FA の無効化・リカバリーコード再生成**に要求する「強い再認証」は、次の**いずれか**とする。<br>**(A) パスワード ＋ 現在の TOTP コードまたはリカバリーコード**（Phase 5 で実装する唯一の経路）<br>**(B) Passkey 認証**（Phase 6 で追加。Phase 5 では未提供） | ユーザー指示（2026-10-24）。**(A)** は「知っているもの（パスワード）＋ 持っているもの（コード）」の 2 要素で、セッション窃取者が単独では突破できない。**(B)** の Passkey は所持＋生体で**単独でも強い**ため、コードを重ねて要求しない（UX を損なう）。§8 が挙げる再認証 3 手段のうち、Phase 5 はパスワード＋コードを実装し、Passkey は Phase 6 が同じ入口に差し込む |
 | **D-33-24★** | 「強い再認証」は **`src/lib/auth/strong-reauth.ts`** の 1 関数（`requireStrongReauth`）に閉じ込め、**検証器（verifier）の配列**として実装する。Phase 5 の配列は `[passwordAndCodeVerifier]` の 1 件。Phase 6 が `passkeyVerifier` を足すだけで、**API ルートは無変更** | D-33-23 の (A)/(B) を if 文で各ルートに書くと、Phase 6 で 3 ルートを書き換えることになる。**入口を 1 つに固定**すれば、Phase 6 は「検証器を 1 つ追加」で済む。Passkey の有無で UI を出し分けるため、`/api/auth/2fa` の応答に `strong_reauth_methods: ['password']`（Phase 6 で `+ 'passkey'`）を含める |
 | **D-33-25** | Phase 5 の `strong_reauth_methods` は **`['password']` 固定**。`POST /api/auth/2fa/disable` と `.../regenerate` は **`{ code }` を必須**とし、**`requireStrongReauth` に再認証判定を委ねる**（ルート側で `requireReauth: true` を**重ねない**）。**再認証が無ければ 401 `REAUTH_REQUIRED`、`code` が誤りなら 400 `INVALID_CODE`** | D-33-23(A)。既存の `checkReauth`（5 分の猶予）を `requireStrongReauth` の**内側で**呼ぶ。判定点を 1 つに保つため、パイプラインの `requireReauth` と二重に課さない（順序は「再認証 → コード」で、**再認証が無ければコードを消費しない**・R14） |
+| **D-33-26** | 保留セッションの封じ込め（D-33-08）のソース走査は **`denyTotpPending: false` を持つ 4 経路**（`2fa/challenge/verify` / `logout` / `logout-all` / `me`）を固定する。**`csrf` は許可経路だが `denyTotpPending` を書かない**（`withAuthPipeline` を通らず `getSession` を直接読むため判定自体が無い）。§11.3 の「5 つ」は許可経路の数を指す | 計画 §9.4 の表は「保留でも通す経路」を列挙したもので、コード上の `false` の個数とは一致しない。`csrf` に `withAuthPipeline` を無理に通すと、保留セッションでも CSRF トークンが要る POST の前提が壊れる。テストは「`false` の個数」ではなく「許可集合の完全一致」で固定する |
 
 ### 5.1 却下した代替案（なぜ採らなかったか）
 
@@ -834,7 +835,9 @@ runCorePipeline(deps, { requireAuth: true }, handler)
 - これ以外の認証済み操作（設定変更、セッション一覧、OIDC クライアント操作、`settings/*` 画面）は **403**。
 - **`settings/layout.tsx` のサーバ側ガードにも同じ判定を入れる**（画面遷移でも弾く。API だけだと画面が表示されてから 403 が連発して混乱する）。
 
-> **注意**: `denyTotpPending` を `false` にするのは上記のうち **`requireAuth: true` の 5 経路のみ**（`challenge/verify` / `logout` / `logout-all` / `csrf` / `me`）。**他の API で明示的に `false` を渡してはいけない**（テストで「`false` を渡すルートはホワイトリストのみ」を静的に検査する。§11.3）。`resend-verification` は `requireAuth: false` なので、そもそも判定に入らない。
+> **注意**: `denyTotpPending` を `false` にするのは **`requireAuth: true` の 4 経路のみ**（`challenge/verify` / `logout` / `logout-all` / `me`）。**他の API で明示的に `false` を渡してはいけない**（テストで「`false` を渡すルートはホワイトリストのみ」を静的に検査する。§11.3）。`resend-verification` は `requireAuth: false` なので、そもそも判定に入らない。
+>
+> **実装との差（D-33-26）**: 上表の `csrf` は**許可経路ではあるが `denyTotpPending` を書かない**。`csrf` ルートは `withAuthPipeline` を通らず `getSession` を直接読む（保留セッションでもトークンを返す必要があるため）ので、封じ込めの判定自体が無い。したがってソース走査で見つかる `denyTotpPending: false` は **4 箇所**（`challenge/verify` / `logout` / `logout-all` / `me`）で、`2fa-static-checks.test.ts` はこの 4 経路を固定する。§11.3 の「5 つ」は「許可経路が 5 つ（`csrf` を含む）」の意味であり、コード上の `false` は 4 つである。
 
 ---
 
@@ -917,7 +920,7 @@ runCorePipeline(deps, { requireAuth: true }, handler)
 
 | 検査 | 内容 |
 |---|---|
-| `denyTotpPending: false` の使用箇所 | `2fa/challenge/verify` / `logout` / `logout-all` / `csrf` / `me` の **5 つだけ**であることをソース走査で固定（新ルートが抜け穴を作るのを防ぐ） |
+| `denyTotpPending: false` の使用箇所 | `2fa/challenge/verify` / `logout` / `logout-all` / `me` の **4 つだけ**であることをソース走査で固定（新ルートが抜け穴を作るのを防ぐ）。許可経路は `csrf` を含む 5 つだが、`csrf` は `withAuthPipeline` を通らないため `false` を書かない（D-33-26） |
 | TOTP secret の応答 | `secret` を含む JSON を返すルートが `2fa/setup` だけであること |
 | クライアントバンドル | `otpauth` / `qrcode` / `totp-crypto` がクライアントコンポーネントから import されていないこと（BUG-11 の再発防止。`oauth-client-boundary.test.ts` と同じ方式）。**`qrcode` はサーバ専用**（`setup` ルートでのみ使う） |
 | **未確認ログインの遮断** | `login/route.ts` に `emailVerified` の判定があること（将来の改修で抜けないよう固定） |
@@ -1100,37 +1103,37 @@ twoFactor: {
 
 ### 14.1 機能
 
-- [ ] 利用者が `/settings/security` から TOTP を有効化できる（setup → QR → verify）
-- [ ] 有効化時にリカバリーコード 10 個が**表示され**、DB にはハッシュのみ保存される
-- [ ] 2FA 有効ユーザーのログインが 2 段階になる（パスワード → 保留セッション → 昇格）
-- [ ] リカバリーコードで昇格でき、**使用したコードは即無効**になる
-- [ ] 無効化・再生成が**パスワード ＋ 現在のコード**でできる（D-33-23）
-- [ ] 残数 <3 で再生成を促す表示が出る
-- [ ] **未確認 email のログインが 403 `EMAIL_NOT_VERIFIED` で止まり**、その場で確認メールを再送できる（D-33-21 / D-33-22）
-- [ ] **未確認 email のユーザーが、ログインせずに確認メールを再送できる**（締め出されない）
+- [x] 利用者が `/settings/security` から TOTP を有効化できる（setup → QR → verify）
+- [x] 有効化時にリカバリーコード 10 個が**表示され**、DB にはハッシュのみ保存される
+- [x] 2FA 有効ユーザーのログインが 2 段階になる（パスワード → 保留セッション → 昇格）
+- [x] リカバリーコードで昇格でき、**使用したコードは即無効**になる
+- [x] 無効化・再生成が**パスワード ＋ 現在のコード**でできる（D-33-23）
+- [x] 残数 <3 で再生成を促す表示が出る
+- [x] **未確認 email のログインが 403 `EMAIL_NOT_VERIFIED` で止まり**、その場で確認メールを再送できる（D-33-21 / D-33-22）
+- [x] **未確認 email のユーザーが、ログインせずに確認メールを再送できる**（締め出されない）
 
 ### 14.2 セキュリティ（§48 / §64）
 
-- [ ] **同一 TOTP コードの並行送信で成功が 1 件のみ**（`2fa-concurrent-replay.test.ts`）
-- [ ] 2FA 無効化に**パスワード ＋ コード**が必要（`2fa-disable-reauth.test.ts`）
-- [ ] **無効化の失敗時にコードが消費されない**（T23）
-- [ ] リカバリーコードが 1 回限り（`recovery-code-reuse.test.ts`）
-- [ ] 2FA 入力が 10/5分で制限される（`2fa-bruteforce.test.ts`）
-- [ ] TOTP secret がログ / 管理画面 / API 応答に 1 件も現れない（`2fa-secret-leak.test.ts`）
-- [ ] 保留セッションが他の認証済み操作を通さない（`2fa-pending-session.test.ts`）
-- [ ] DB に平文 secret が無い（`totp-crypto.test.ts` ＋ `2fa.test.ts`）
-- [ ] **未確認ログインでセッションが発行されない**（`email-unverified-login.test.ts`）
-- [ ] **再送 API の応答が、存在しない / 確認済み / 停止中 / 削除済みで同一**（列挙耐性・`resend-unauthenticated.test.ts`）
-- [ ] **再送 API に 2 重のレート制限**（`resendEmail` 5/1h ＋ `resend.ip` 10/1h）
+- [x] **同一 TOTP コードの並行送信で成功が 1 件のみ**（`2fa-concurrent-replay.test.ts`）
+- [x] 2FA 無効化に**パスワード ＋ コード**が必要（`2fa-disable-reauth.test.ts`）
+- [x] **無効化の失敗時にコードが消費されない**（T23）
+- [x] リカバリーコードが 1 回限り（`recovery-code-reuse.test.ts`）
+- [x] 2FA 入力が 10/5分で制限される（`2fa-bruteforce.test.ts`）
+- [x] TOTP secret がログ / 管理画面 / API 応答に 1 件も現れない（`2fa-secret-leak.test.ts`）
+- [x] 保留セッションが他の認証済み操作を通さない（`2fa-pending-session.test.ts`）
+- [x] DB に平文 secret が無い（`totp-crypto.test.ts` ＋ `2fa.test.ts`）
+- [x] **未確認ログインでセッションが発行されない**（`email-unverified-login.test.ts`）
+- [x] **再送 API の応答が、存在しない / 確認済み / 停止中 / 削除済みで同一**（列挙耐性・`resend-unauthenticated.test.ts`）
+- [x] **再送 API に 2 重のレート制限**（`resendEmail` 5/1h ＋ `resend.ip` 10/1h）
 
 ### 14.3 品質ゲート（各 PR）
 
-- [ ] `pnpm lint`（0 errors）
-- [ ] `pnpm typecheck`
-- [ ] `pnpm test`（既存 482 + Phase 5 の新規が green）
-- [ ] `pnpm build`
-- [ ] `pnpm db:verify-migrations`（0017 の up/down/往復）
-- [ ] §20.3 の DoD チェックリスト（計画書）を全項目確認
+- [x] `pnpm lint`（0 errors）
+- [x] `pnpm typecheck`
+- [x] `pnpm test`（既存 482 + Phase 5 の新規が green）
+- [x] `pnpm build`
+- [x] `pnpm db:verify-migrations`（0017 の up/down/往復）
+- [x] §20.3 の DoD チェックリスト（計画書）を全項目確認
   - 新規 API が `withAuthPipeline` / レート制限 / `require*` ガードを通っているか
   - 秘密情報がログ・応答・metadata に漏れていないか（§45）
   - 認可をサーバー側で行っているか（§49）
@@ -1140,7 +1143,9 @@ twoFactor: {
   - **「1 回限り」の値が atomic 更新か（read-then-write していないか）**
   - エラーが統一形式（§58）か
 
-### 14.4 実機での手動確認（実装後に実施）
+### 14.4 実機での手動確認（実装後に実施）— **実施済み（2026-10-24）**
+
+> **実施方法**: 1 は QR の SVG を PNG 化して OpenCV で実デコードし、得た `secret` で有効化まで通した（`otpauth://` URI と一致）。9・10 は実ブラウザ＋実 API。2〜8・11 は実 HTTP ハーネス（実 PostgreSQL・実 Route Handler）で確認した。11 項目すべて PASS。
 
 1. 認証アプリ（Google Authenticator / 1Password 等）で QR を読み取り、有効化できる
 2. ログアウト → ログイン → 6 桁入力で入れる
@@ -1153,6 +1158,10 @@ twoFactor: {
 9. **未確認のユーザーでログイン → 「メールアドレスの確認が必要です」が出る → 再送ボタンが押せる → メールが届く**（D-33-21 / D-33-22）
 10. **未確認のユーザーがログアウト状態（セッション無し）でも、ログイン画面から再送できる**（締め出されない）
 11. **無効化ダイアログで、まずコードを誤って入力 → エラーになり、2FA は有効のまま**（T23）
+
+> **§14.4 の確認中に発見した既存欠陥**（本フェーズで修正）:
+> - 重複登録（email / username）が **500** になっていた。Drizzle 0.45 は driver エラーを `DrizzleQueryError` で包み SQLSTATE が `err.cause.code` に入るため、`err.code` だけを見る `register` の捕捉が効いていなかった。`src/lib/db/sql-state.ts#isUniqueViolation` で修正。
+> - 応答文言に **`-email`** が混入（`register` 成功時 / `password/forgot` / `email/change`）。`register` は重複経路と成功経路で文言が異なり**列挙オラクル**になっていた。正典（`src/messages/ja.ts`）に合わせて修正。
 
 ---
 

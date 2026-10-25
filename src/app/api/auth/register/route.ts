@@ -6,6 +6,7 @@ import { checkBreached } from '@/lib/auth/breached';
 import { generateToken } from '@/lib/auth/tokens/generate';
 import { insertEmailVerificationToken } from '@/lib/db/queries/tokens';
 import { createUser } from '@/lib/db/queries/users';
+import { isUniqueViolation } from '@/lib/db/sql-state';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
 import { rateLimiter } from '@/lib/auth/rate-limit';
 import { RATE_LIMITS } from '@/config/rate-limits';
@@ -69,8 +70,7 @@ export async function POST(request: NextRequest) {
           roleId: 'role_user',
         });
       } catch (e: unknown) {
-        const err = e as { code?: string };
-        if (err?.code === '23505') {
+        if (isUniqueViolation(e)) {
           // 列挙攻撃対策: 成功時と同じメッセージを返す
           return handleSuccess({ message: '確認メールを送信しました' });
         }
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
 
       await recordSecurityEvent('register', userId, ip, request.headers.get('user-agent') ?? '');
 
-      return handleSuccess({ message: '確認-email を送信しました' });
+      return handleSuccess({ message: '確認メールを送信しました' });
     },
   );
 }

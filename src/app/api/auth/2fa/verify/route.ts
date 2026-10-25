@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       return rateLimitResponse(reservation.resetAt);
     }
 
-    const result = await verifyAndConsumeTotp({ userId: user.id, code });
+    const result = await verifyAndConsumeTotp({ userId: user.id, code, allowPending: true });
     if (!result.ok) {
       await rateLimiter.finishFailedAttempt(reservation.reservation, false);
       await recordSecurityEvent('login_failed', user.id, ip, userAgent, { scope: '2fa' });

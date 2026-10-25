@@ -2,6 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
 import { rateLimitHits, rateLimitReservations } from '@/lib/db/schema';
 import { protectRateLimitKey } from '@/lib/auth/rate-limit-keys';
+import { getSqlState } from '@/lib/db/sql-state';
 
 export type RateLimitResult = {
   allowed: boolean;
@@ -23,13 +24,6 @@ export type FailedAttemptReservation = {
 export type ReservationResult =
   | { allowed: true; reservation: FailedAttemptReservation }
   | { allowed: false; count: number; resetAt: number; logRateLimited: boolean };
-
-function getSqlState(error: unknown): string | null {
-  if (!error || typeof error !== 'object') return null;
-  if ('code' in error && typeof error.code === 'string') return error.code;
-  if ('cause' in error) return getSqlState(error.cause);
-  return null;
-}
 
 const SERIALIZABLE_MAX_ATTEMPTS = 5;
 

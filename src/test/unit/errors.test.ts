@@ -40,6 +40,13 @@ describe('ApiError', () => {
     expect(new ApiError('INTERNAL_ERROR').status).toBe(500);
     expect(new ApiError('ACCOUNT_SUSPENDED').status).toBe(ERROR_STATUS.ACCOUNT_SUSPENDED);
   });
+
+  it('Phase 5 の新コードは §8 の status を持つ（D-33-25）', () => {
+    expect(new ApiError('INVALID_CODE').status).toBe(400);
+    expect(new ApiError('TOTP_REQUIRED').status).toBe(403);
+    expect(new ApiError('TOTP_ALREADY_ENABLED').status).toBe(409);
+    expect(new ApiError('EMAIL_NOT_VERIFIED').status).toBe(403);
+  });
 });
 
 describe('normalizeError', () => {

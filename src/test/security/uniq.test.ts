@@ -232,7 +232,7 @@ describe('Security - Unique Constraint (Enforcement)', () => {
         emailVerified: false,
         roleId: 'role_user',
       });
-      message = '確認-email を送信しました';
+      message = '確認メールを送信しました';
     } catch (e: unknown) {
       const err = e as { code?: string };
       if (err?.code === '23505') {

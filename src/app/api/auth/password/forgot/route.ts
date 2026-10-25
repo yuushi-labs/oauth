@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
 
       // The message is identical whether or not the address exists (and even if the
       // delivery failed), so this endpoint cannot be used for account enumeration (§46).
-      return handleSuccess({ message: 'リセット-email を送信しました（存在する場合）' });
+      return handleSuccess({ message: 'リセットメールを送信しました（存在する場合）' });
     },
   );
 }

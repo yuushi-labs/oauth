@@ -8,7 +8,7 @@ const appUrl = 'http://localhost:3000';
 const session = {
   id: 'ses_1', userId: 'usr_1', sessionHash: 'hash', csrfSecret: 'csrf-secret',
   userAgent: 'Chrome', ip: '203.0.113.10', ipMasked: '203.0.113.xxx', ipHash: 'iphash-1',
-  deviceName: 'Chrome on Windows', reauthVerifiedAt: null,
+  deviceName: 'Chrome on Windows', reauthVerifiedAt: null, totpPending: false,
 };
 
 vi.mock('@/lib/auth/session', async () => {
@@ -73,7 +73,11 @@ vi.mock('next/headers', () => {
 
 vi.mock('@/lib/db/client', () => ({
   getPool: () => ({ query: vi.fn(async () => ({ rows: [], rowCount: 0 })) }),
-  getDb: () => ({ insert: () => ({ values: async () => undefined }) }),
+  getDb: () => ({
+    insert: () => ({ values: async () => undefined }),
+    // login は 2FA 有効判定で totp 行を引く（Phase 5）。このテストのユーザーは 2FA 無効なので空を返す。
+    select: () => ({ from: () => ({ where: () => ({ limit: async () => [] }) }) }),
+  }),
 }));
 
 type FakeSessionRow = { id: string; ipHash: string | null; deviceName: string | null };

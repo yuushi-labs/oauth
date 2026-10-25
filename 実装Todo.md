@@ -129,12 +129,12 @@
 
 - [x] **P1-D-01** `POST /api/auth/register`（**8〜128文字**＋breached、username/email一意は partial unique index に委譲、23505捕捉→§46統一メッセージ、`status=pending_email`、確認メール、レート制限、CSRF）
 - [x] **P1-D-02** `POST /api/auth/login`（email/username 受理、統一メッセージ、Argon2 verify、**必ず新セッション発行**、レート3種キー、`login_success`/`login_failed`）
-  - [ ] **P5 で変更**: 未確認 email（`email_verified=false`）は **403 `EMAIL_NOT_VERIFIED`** で止め、セッションを発行しない（計画 D-33-21 / §8.7）。`pending_email` の `status` は残す
+  - [x] **P5 で変更**: 未確認 email（`email_verified=false`）は **403 `EMAIL_NOT_VERIFIED`** で止め、セッションを発行しない（計画 D-33-21 / §8.7）。`pending_email` の `status` は残す
 - [x] **P1-D-03** `POST /api/auth/logout`（現行revoke＋Cookie削除）
 - [x] **P1-D-04** `GET /api/auth/me`
 - [x] **P1-D-05** `POST /api/auth/verify-email`（token照合→`email_verified=true`→`status=active`、通知）
 - [x] **P1-D-06** `POST /api/auth/resend-verification`（§4.3上限: email 5/時, ip 10/時）
-  - [ ] **P5 で変更**: **`requireAuth: false`** にし、`body.email` で対象を決める（未確認ユーザーがログインせずに再送できるようにする。計画 D-33-22）。応答は常に同一（§46）
+  - [x] **P5 で変更**: **`requireAuth: false`** にし、`body.email` で対象を決める（未確認ユーザーがログインせずに再送できるようにする。計画 D-33-22）。応答は常に同一（§46）
 - [x] **P1-D-07** `POST /api/auth/password/forgot`（**存在有無を返さない**、リセットメール、レート制限）
 - [x] **P1-D-08** `POST /api/auth/password/reset`（token無効化＋**全セッションrevoke（現行含む）**＋通知）
 - [x] **P1-D-09** `POST /api/auth/password/change`（**再認証必須**、旧PW検証、`password_changed_at` 更新、他セッションrevoke、通知）
@@ -413,51 +413,55 @@ Phase 4 の本体内で未だった 2 点（BUG-12 後の実ブラウザ検証�
 
 ---
 
-## 7. Phase 5 — TOTP 2FA ＋ Recovery Codes（3〜4日）
+## 7. Phase 5 — TOTP 2FA ＋ Recovery Codes（3〜4日）**完了**
 
 > **詳細設計**: `docs/phase5-totp-2fa-実装計画.md`（v1.1 / D-33-01〜D-33-25）
 > **実行手順**: `docs/phase5-実行Todo.md`
 > 以下は概要。実装単位の分解・完了条件・テスト一覧は上記 2 文書を正とする。
 > **v1.1 で追加された 3 要件**: (1) 無効化・再生成は「パスワード＋現在のコード」の**強い再認証**（D-33-23〜25）、(2) **`qrcode` を採用**（D-33-02 を反転）、(3) **未確認 email はログインを 403 で止め、未認証でも再送できる**（D-33-21 / D-33-22）。
 > **既存仕様の変更**: 未確認ログインを許可していた `deleted-account-login.test.ts` の期待値を反転（計画 §5.2）。
+>
+> **完了 (2026-10-24)**: API 6 本（`GET /2fa` / `setup` / `verify` / `disable` / `recovery-codes/regenerate` / `challenge/verify`）＋ UI（`two-factor-panel` / `recovery-codes-display` / `strong-reauth-dialog` / `totp-login-step` / `email-unverified-notice`）を実装。
+> **`challenge` 単体の API は作らない**（保留セッションは `login` が発行する）。`resend-verification` は D-33-22 で `requireAuth: false` に変更。
+> テスト: 新規 **14 ファイル** ＋ 既存追記。`pnpm lint`（0 errors）/ `typecheck` / `test`（**87 files / 614 tests**）green。
 
 ### 7-A 秘密鍵管理（§13.1）
 
-- [ ] **P5-A-01** `src/lib/auth/totp-crypto.ts`（新設）: AES-256-GCM（envelope key、`TOTP_ENCRYPTION_KEY` は env/Secret Manager、**DBに無し**）。`util/crypto.ts` は無変更（計画 §7.1 の差分参照）
-- [ ] **P5-A-02** `lib/auth/totp.ts`（`otpauth`、6桁、drift ±1、**同一timestep再利用拒否** via `last_used_counter`）
-- [ ] **P5-A-03** **`last_used_counter` の更新を atomic に**（D-16）
-  - [ ] **P5-A-03a** `UPDATE ... WHERE last_used_counter < :c` の更新件数で判定（`SELECT ... FOR UPDATE` は採らない・計画 D-33-04）
-  - [ ] **P5-A-03b** **read → 判定 → write の素の2段書きは禁止**
-- [ ] **P5-A-04** `src/test/security/2fa-concurrent-replay.test.ts`: 同一TOTPコードを2並行送信 → **成功1件のみ**・他方 `INVALID_CODE`
-- [ ] **P5-A-05** `lib/auth/totp-qr.ts`: QR は **`qrcode`**（`^1.5.4`）でサーバ側 SVG 生成（**`otpauth` のみ追加、の旧方針は撤回**。計画 D-33-02）
-- [ ] **P5-A-06** 依存追加: `otpauth@^9.5.2` ＋ **`qrcode@^1.5.4`**（dependencies）／`@types/qrcode`（devDependencies）
+- [x] **P5-A-01** `src/lib/auth/totp-crypto.ts`（新設）: AES-256-GCM（envelope key、`TOTP_ENCRYPTION_KEY` は env/Secret Manager、**DBに無し**）。`util/crypto.ts` は無変更（計画 §7.1 の差分参照）
+- [x] **P5-A-02** `lib/auth/totp.ts`（`otpauth`、6桁、drift ±1、**同一timestep再利用拒否** via `last_used_counter`）
+- [x] **P5-A-03** **`last_used_counter` の更新を atomic に**（D-16）
+  - [x] **P5-A-03a** `UPDATE ... WHERE last_used_counter < :c` の更新件数で判定（`SELECT ... FOR UPDATE` は採らない・計画 D-33-04）
+  - [x] **P5-A-03b** **read → 判定 → write の素の2段書きは禁止**
+- [x] **P5-A-04** `src/test/security/2fa-concurrent-replay.test.ts`: 同一TOTPコードを2並行送信 → **成功1件のみ**・他方 `INVALID_CODE`
+- [x] **P5-A-05** `lib/auth/totp-qr.ts`: QR は **`qrcode`**（`^1.5.4`）でサーバ側 SVG 生成（**`otpauth` のみ追加、の旧方針は撤回**。計画 D-33-02）
+- [x] **P5-A-06** 依存追加: `otpauth@^9.5.2` ＋ **`qrcode@^1.5.4`**（dependencies）／`@types/qrcode`（devDependencies）
 
 ### 7-B フロー
 
-- [ ] **P5-B-01** `POST /api/auth/2fa/setup`（secret＋QR `otpauth://`、`enabled=false`、`email_verified` 必須）
-- [ ] **P5-B-02** `POST /api/auth/2fa/verify`（検証成功で enabled、**backup codes 10個をこの時のみ表示**／以後再取得不可）
-- [ ] **P5-B-03** ログイン時 `totp_pending=true` のセッション発行 → `/login` の2FA入力UI → `POST /api/auth/2fa/challenge/verify` で昇格（**`challenge` 単体の API は作らない**。保留セッションは login が発行する。計画 §7.1 / §8.7）
-- [ ] **P5-B-04** `recovery_codes`: hash保存・1回限り・使用即無効化・**残数<3で再生成を促す**（§13.2）
-- [ ] **P5-B-05** `POST /api/auth/2fa/disable`（**強い再認証**: パスワード＋現在のコード、secret削除、`2fa_disabled`、通知。計画 D-33-23）
-- [ ] **P5-B-06** `POST /api/auth/2fa/recovery-codes/regenerate`（**強い再認証**必須、既存無効→新10個）
-- [ ] **P5-B-07** レート制限: 2FA入力 **10/5分**（総当たり対策）
-- [ ] **P5-B-08** `src/lib/auth/strong-reauth.ts`（新設）: 無効化・再生成の**共通入口**（検証器配列。Phase 6 が Passkey を 1 件足すだけ・計画 D-33-24）
+- [x] **P5-B-01** `POST /api/auth/2fa/setup`（secret＋QR `otpauth://`、`enabled=false`、`email_verified` 必須）
+- [x] **P5-B-02** `POST /api/auth/2fa/verify`（検証成功で enabled、**backup codes 10個をこの時のみ表示**／以後再取得不可）
+- [x] **P5-B-03** ログイン時 `totp_pending=true` のセッション発行 → `/login` の2FA入力UI → `POST /api/auth/2fa/challenge/verify` で昇格（**`challenge` 単体の開始 API は作らない**。保留セッションは login が発行する。計画 §7.1 / §8.7）
+- [x] **P5-B-04** `recovery_codes`: hash保存・1回限り・使用即無効化・**残数<3で再生成を促す**（§13.2）
+- [x] **P5-B-05** `POST /api/auth/2fa/disable`（**強い再認証**: パスワード＋現在のコード、secret削除、`2fa_disabled`、通知。計画 D-33-23）
+- [x] **P5-B-06** `POST /api/auth/2fa/recovery-codes/regenerate`（**強い再認証**必須、既存無効→新10個）
+- [x] **P5-B-07** レート制限: 2FA入力 **10/5分**（総当たり対策）
+- [x] **P5-B-08** `src/lib/auth/strong-reauth.ts`（新設）: 無効化・再生成の**共通入口**（検証器配列。Phase 6 が Passkey を 1 件足すだけ・計画 D-33-24）
 
 ### 7-B2 未確認 email と再送（v1.1 追加）
 
-- [ ] **P5-B2-01** `POST /api/auth/login`: **未確認 email は 403 `EMAIL_NOT_VERIFIED`**（セッション非発行）。応答に `{ email, resend_available: true }`（計画 D-33-21）
-- [ ] **P5-B2-02** `POST /api/auth/resend-verification`: **`requireAuth: false` 化**し `body.email` で対象を決める。応答は常に同一（列挙対策）。`resendEmail` 5/1h ＋ `resend.ip` 10/1h（計画 D-33-22）
-- [ ] **P5-B2-03** `/login` に `EmailUnverifiedNotice`（「メールアドレスの確認が必要です」＋再送ボタン）
-- [ ] **P5-B2-04** `deleted-account-login.test.ts` の**期待値を反転**（未確認ログイン 200 → 403。計画 §5.2）
+- [x] **P5-B2-01** `POST /api/auth/login`: **未確認 email は 403 `EMAIL_NOT_VERIFIED`**（セッション非発行）。応答に `{ email, resend_available: true }`（計画 D-33-21）
+- [x] **P5-B2-02** `POST /api/auth/resend-verification`: **`requireAuth: false` 化**し `body.email` で対象を決める。応答は常に同一（列挙対策）。`resendEmail` 5/1h ＋ `resend.ip` 10/1h（計画 D-33-22）
+- [x] **P5-B2-03** `/login` に `EmailUnverifiedNotice`（「メールアドレスの確認が必要です」＋再送ボタン）
+- [x] **P5-B2-04** `deleted-account-login.test.ts` の**期待値を反転**（未確認ログイン 200 → 403。計画 §5.2）
 
 **DoD（Phase 5）**
-- [ ] 仕様64章「高度な認証」TOTP / Recovery Codes 完了
-- [ ] `src/test/security/{2fa-bruteforce,2fa-disable-reauth,recovery-code-reuse,2fa-concurrent-replay,2fa-pending-session,2fa-secret-leak,email-unverified-login,resend-unauthenticated}.test.ts` green
-- [ ] 同一TOTPコードの並行送信で成功1件のみ（atomic 更新）をテストで固定
-- [ ] ログ/管理画面/API応答に **TOTP secret が1件も現れない**
-- [ ] **未確認 email のログインが 403 で止まり、セッションが発行されない**（`email-unverified-login.test.ts`）
-- [ ] **未確認ユーザーがログインせずに確認メールを再送できる**（`resend-unauthenticated.test.ts`。締め出されない）
-- [ ] **2FA 無効化・再生成に「パスワード＋コード」が必要**（`2fa-disable-reauth.test.ts`）
+- [x] 仕様64章「高度な認証」TOTP / Recovery Codes 完了
+- [x] `src/test/security/{2fa-bruteforce,2fa-disable-reauth,recovery-code-reuse,2fa-concurrent-replay,2fa-pending-session,2fa-secret-leak,email-unverified-login,resend-unauthenticated}.test.ts` green
+- [x] 同一TOTPコードの並行送信で成功1件のみ（atomic 更新）をテストで固定
+- [x] ログ/管理画面/API応答に **TOTP secret が1件も現れない**
+- [x] **未確認 email のログインが 403 で止まり、セッションが発行されない**（`email-unverified-login.test.ts`）
+- [x] **未確認ユーザーがログインせずに確認メールを再送できる**（`resend-unauthenticated.test.ts`。締め出されない）
+- [x] **2FA 無効化・再生成に「パスワード＋コード」が必要**（`2fa-disable-reauth.test.ts`）
 
 ---
 

@@ -86,6 +86,27 @@ describe('Security - Log Redaction', () => {
     expect(result.provider).toBe('google');
   });
 
+  it('redact masks TOTP / recovery secrets as object keys (D-33-20)', () => {
+    const obj = {
+      secret: 'JBSWY3DPEHPK3PXP',
+      secret_encrypted: 'v1.abc.def.ghi',
+      otpauth_uri: 'otpauth://totp/x?secret=JBSWY3DPEHPK3PXP',
+      recovery_codes: ['AAAAA-BBBBB-CCCCC-DDDDD'],
+      recovery_code: 'AAAAA-BBBBB-CCCCC-DDDDD',
+      qr_svg: '<svg/>',
+      enabled: true,
+    };
+    const result = redact(obj) as Record<string, unknown>;
+    expect(result.secret).toBe('***');
+    expect(result.secret_encrypted).toBe('***');
+    expect(result.otpauth_uri).toBe('***');
+    expect(result.recovery_codes).toBe('***');
+    expect(result.recovery_code).toBe('***');
+    expect(result.qr_svg).toBe('***');
+    // 機密でないフラグは残る
+    expect(result.enabled).toBe(true);
+  });
+
   it('redact masks OAuth query parameters inside a callback URL', () => {
     const input =
       '/api/auth/oauth/google/callback?code=abc123&state=st456&nonce=no789&code_verifier=v012&error_description=denied';

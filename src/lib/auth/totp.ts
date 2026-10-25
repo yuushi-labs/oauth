@@ -29,14 +29,19 @@ export function buildOtpauthUri(args: { issuer: string; label: string; secretBas
  *
  * 消費は `last_used_counter < c` の単文 UPDATE の更新行数で判定する。read → 判定 → write の
  * 2 段書きをしないため、同一コードの並行送信でも成功するのは 1 リクエストだけになる（T3）。
+ *
+ * `allowPending` は有効化前（`enabled = false` の保留行）の検証を許可する。setup → verify の
+ * 有効化フロー（§8.3）は、まだ `enabled = false` の行に対してコードを検証する。
  */
 export async function verifyAndConsumeTotp(args: {
   userId: string;
   code: string;
   now?: Date;
+  allowPending?: boolean;
 }): Promise<{ ok: true } | { ok: false; reason: 'invalid' | 'replayed' }> {
   const row = await findTotpByUserId(args.userId);
-  if (!row || !row.enabled) return { ok: false, reason: 'invalid' };
+  if (!row) return { ok: false, reason: 'invalid' };
+  if (!row.enabled && !args.allowPending) return { ok: false, reason: 'invalid' };
 
   let secretBase32: string;
   try {
@@ -59,6 +64,8 @@ export async function verifyAndConsumeTotp(args: {
 
   // delta は「一致した counter が基準 counter からどれだけずれたか」。基準 + delta が実際に一致した counter。
   const matchedCounter = TOTP.counter({ period: TOTP_PERIOD_SECONDS, timestamp }) + delta;
-  const consumed = await consumeTotpCounter(args.userId, matchedCounter);
+  const consumed = await consumeTotpCounter(args.userId, matchedCounter, {
+    allowPending: args.allowPending,
+  });
   return consumed ? { ok: true } : { ok: false, reason: 'replayed' };
 }

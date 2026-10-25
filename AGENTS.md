@@ -58,5 +58,24 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
 
 ## 現在の到達点（2026-10-24 時点）
 
-M0〜M4 完了（Phase 0 / 1 / 2 / 2.5 / 2.6 / 3 / 4 / 4-B）。**次は Phase 5（M5）: TOTP 2FA + Recovery Codes**。
-計画は `docs/phase5-totp-2fa-実装計画.md`、実行タスクは `docs/phase5-実行Todo.md`（いずれも実装前の設計）。
+M0〜M5 完了（Phase 0 / 1 / 2 / 2.5 / 2.6 / 3 / 4 / 4-B / **5**）。**次は Phase 6（M6）: Passkey / WebAuthn**。
+計画は `docs/phase6-passkey-webauthn-実装計画.md`、実行タスクは `docs/phase6-実行Todo.md`。
+
+Phase 5 で得た知見（次フェーズでも効くもの）:
+- 2FA 有効化（`setup` → `verify`）は `enabled=false` の保留行に対してコード検証する。
+  `consumeTotpCounter` / `verifyAndConsumeTotp` の `allowPending` を忘れると `verify` が常に 400 になる。
+- `totp_pending = true` の保留セッションは既定で全 API を 403 `TOTP_REQUIRED`。例外を作るのは
+  `challenge/verify` / `logout` / `logout-all` / `csrf` / `me` の 5 経路だけで、`2fa-static-checks.test.ts` が固定する。
+- 無効化・再生成は「強い再認証（パスワード＋コード）」。判定順は**再認証 → コード**で、失敗時にコードを消費しない。
+  検証器は `src/lib/auth/strong-reauth.ts` の配列に足す（Phase 6 の Passkey は 1 件足すだけ）。
+- 未確認 email は 403 `EMAIL_NOT_VERIFIED` でログインさせない（D-33-21）。再送は未認証の
+  `POST /api/auth/resend-verification`（`requireAuth: false`・応答は常に同一・D-33-22）。
+- 2FA 系のレート制限キーは `rateLimitKeys.twoFactorUser`、値は `RATE_LIMITS.twoFactor`（10/5 分）。
+- **Drizzle は driver エラーを `DrizzleQueryError` で包む**ので SQLSTATE は `err.cause.code` にある。
+  `err.code` だけを見ると `23505`（一意制約違反）を取り逃し、重複登録が 500 になる。
+  `src/lib/db/sql-state.ts` の `getSqlState` / `isUniqueViolation` を使う。
+- **応答文言は `src/messages/ja.ts` が正典**。ルートに直書きした文言が正典とずれると、
+  成功経路と重複経路で応答が割れ、それ自体が列挙オラクルになる（§46）。`register-duplicate.test.ts` が固定する。
+- 保留セッションの封じ込めのソース走査は **`denyTotpPending: false` の 4 経路**
+  （`challenge/verify` / `logout` / `logout-all` / `me`）。`csrf` は許可経路だが `withAuthPipeline` を通らないため
+  `false` を書かない（D-33-26）。「許可経路 5 つ」と「コード上の `false` 4 つ」は一致しない。

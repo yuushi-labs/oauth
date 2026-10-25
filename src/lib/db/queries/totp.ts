@@ -40,12 +40,20 @@ export async function enableTotp(userId: string): Promise<void> {
  * 戻り値が false なら「既に誰かがその counter を消費した」= replay。
  *
  * 単文 UPDATE の更新行数で判定する（read → 判定 → write の 2 段書き禁止・D-16）。
+ *
+ * `allowPending` は有効化前（`enabled = false` の保留行）の消費を許可する。setup → verify の
+ * 有効化フローは、まだ `enabled = false` の行に対してコード検証・counter 消費を行うため（§8.3）。
+ * 既定は `false`（有効行のみ）。
  */
-export async function consumeTotpCounter(userId: string, counter: number): Promise<boolean> {
+export async function consumeTotpCounter(
+  userId: string,
+  counter: number,
+  options: { allowPending?: boolean } = {},
+): Promise<boolean> {
   const result = await getPool().query(
     `UPDATE totp SET last_used_counter = $2, updated_at = now()
-     WHERE user_id = $1 AND enabled = true AND last_used_counter < $2`,
-    [userId, counter],
+     WHERE user_id = $1 AND last_used_counter < $2 AND (enabled = true OR $3 = true)`,
+    [userId, counter, options.allowPending ?? false],
   );
   return result.rowCount === 1;
 }

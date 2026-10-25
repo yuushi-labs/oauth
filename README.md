@@ -278,7 +278,7 @@ oauth/
 | M2.5 | Phase 2.5 | 自作サービス向けOAuth 2.0 / OIDC Provider、scope・同意管理・client registry | **実装中** |
 | M3 | Phase 3 | UI / テーマ / 通知メール / デバイス管理 | **完了（2026-10-17）**（共通UI・テーマ・設定画面・セッション管理・通知メール。実ブラウザ viewport 検証のみ Phase 8-B へ） |
 | M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | **実装完了（2026-10-18）**（+ Phase 4-B で連携確認画面を追加。**実ブラウザでの手動疎通 11 手順のみ未実施**） |
-| M5 | Phase 5 | TOTP 2FA + Recovery Codes | 未着手 |
+| M5 | Phase 5 | TOTP 2FA + Recovery Codes | **完了（2026-10-24）**（API 6 本 ＋ UI。実機手動確認 11 項目も同日に実施済み） |
 | M6 | Phase 6 | Passkey / WebAuthn | 未着手 |
 | M7 | Phase 7 | 管理者 / RBAC / 監査ログ | 未着手 |
 | M8 | Phase 8-9 | リスク検知 / セキュリティテスト完成 / 運用デプロイ | 未着手 |
@@ -456,6 +456,41 @@ users_role_id_idx / users_deleted_at_idx
 追加: migration `0016`（`oauth_social_claims`）/ `social-claim.ts` / `username.ts` / `POST /api/auth/oauth/social-login` / `/login/social-confirm` / purge ジョブ。
 
 **テスト**: **68 files / 482 tests green**。`pnpm lint`（0 errors）/ `typecheck` / `build` も green。
+
+---
+
+## Phase 5 実装詳細（2026-10-24 / 実装完了）
+
+計画: `docs/phase5-totp-2fa-実装計画.md`（v1.1 / D-33-01〜D-33-25）、実行手順: `docs/phase5-実行Todo.md`
+
+TOTP 2 段階認証（RFC 6238）とリカバリーコードを実装しました。有効化は **setup → verify の 2 段**で、`enabled=true` にするのとリカバリーコード 10 個の保存は**同一トランザクション**です（片方だけ成功すると復旧不能になるため）。
+
+| API | 役割 |
+|---|---|
+| `GET /api/auth/2fa` | 状態・残数・`strong_reauth_methods` |
+| `POST /api/auth/2fa/setup` | secret 発行 ＋ QR（`secret` を返すのはこの 1 回だけ） |
+| `POST /api/auth/2fa/verify` | コード検証で有効化 ＋ リカバリーコード 10 個を表示 |
+| `POST /api/auth/2fa/challenge/verify` | 保留セッションの昇格（TOTP or リカバリーコード） |
+| `POST /api/auth/2fa/disable` | 強い再認証（パスワード＋コード）で無効化 |
+| `POST /api/auth/2fa/recovery-codes/regenerate` | 強い再認証で再生成（旧コードは無効化） |
+
+**DoD**: 仕様 §64「高度な認証」TOTP / Recovery Codes 完了。`pnpm lint`（0 errors）/ `typecheck` / `test`（**88 files / 618 tests**、Phase 4-B 比 +20 files / +136 tests）/ `test:e2e`（9 files / 51 tests）/ `build` / `db:verify-migrations` すべて green。計画 §14.4 の実機手動確認 11 項目も実施済み。
+
+| 脅威 | 対策 |
+|---|---|
+| 同一 TOTP コードの並行 replay | `last_used_counter < :c` の**単文 UPDATE の更新行数**で消費を判定（read → 判定 → write 禁止・D-16 / D-33-04）。一致した counter を消費するので時計ずれでも次のコードは通る |
+| リカバリーコードの再利用 | `used_at IS NULL` の単文 UPDATE の更新行数で消費（D-33-12） |
+| secret の漏洩 | secret は AES-256-GCM で暗号化して保存（`TOTP_ENCRYPTION_KEY` は env）。API が `secret` を返すのは `setup` のみ。`logger` の `SENSITIVE_KEYS` に `secret` / `secretEncrypted` / `otpauthUri` / `recoveryCodes` 等を追加（D-33-20） |
+| 総当たり | 2FA 入力は `twoFactor` レート制限（10/5 分・D-33-14） |
+| セッション窃取だけでの 2FA 解除 | 無効化・再生成は「パスワード再認証 ＋ 現在のコード」を要求（D-33-23）。判定順は「再認証 → コード」で、**失敗時にコードを消費しない**（T23） |
+| 保留セッションの横断利用 | `totp_pending = true` のセッションは既定で全 API を 403 `TOTP_REQUIRED`。例外は `challenge/verify` / `logout` / `logout-all` / `csrf` / `me` の 5 経路のみ（D-33-08 / D-33-26）。OIDC 認可も `totp_pending = false` を要求（D-33-09） |
+| 未確認 email のログイン | 403 `EMAIL_NOT_VERIFIED` でセッションを発行しない（D-33-21）。再送導線は未認証の `resend-verification` で確保（D-33-22） |
+
+UI: `/settings/security` の 2FA カード（`two-factor-panel` / `recovery-codes-display` / `strong-reauth-dialog`）、`/login` の 2 段階（`totp-login-step`）、未確認 email の案内（`email-unverified-notice`）。QR は `qrcode` によるサーバ側 SVG 生成で、クライアントから `otpauth` / `qrcode` / `totp-crypto` を import しないことを静的テストで固定。
+
+**実装で見つけた欠陥の修正**: (1) `INVALID_CODE` が 401 だったのを §8.8 どおり 400 に修正、(2) 有効化フローが `enabled=false` の保留行に対してコード検証できず `verify` が常に失敗していたため `allowPending` を追加、(3) 重複登録（email / username の一意制約違反）が 500 になっていた（Drizzle が driver エラーを `DrizzleQueryError` で包み SQLSTATE が `err.cause.code` に入るため `err.code` の判定が効かず）のを `src/lib/db/sql-state.ts#isUniqueViolation` で修正、(4) 応答文言に `-email` が混入し `register` の成功経路と重複経路で応答が異なる列挙オラクルになっていたのを正典（`src/messages/ja.ts`）に合わせて修正。
+
+**実機手動確認（計画 §14.4・11 項目）**: 2026-10-24 に実施済み。QR は SVG→PNG→OpenCV デコードで実検証（得た `secret` で有効化まで通した）、9・10 は実ブラウザ＋実 API、他は実 HTTP ハーネスで確認。
 
 ---
 

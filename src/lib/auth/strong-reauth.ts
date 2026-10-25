@@ -13,7 +13,7 @@ export function availableStrongReauthMethods(_user: User): StrongReauthMethod[] 
   return ['password'];
 }
 
-type StrongReauthVerifier = (args: {
+export type StrongReauthVerifier = (args: {
   user: User;
   session: SessionData;
   code: string;
@@ -35,20 +35,19 @@ const passwordAndCodeVerifier: StrongReauthVerifier = async ({ user, session, co
 };
 
 /**
- * Phase 5 は 1 件。Phase 6 は `passkeyVerifier` を足すだけで、API ルートは無変更（D-33-24）。
+ * 検証器の配列（D-33-24）。Phase 5 は 1 件。Phase 6 は `passkeyVerifier` を足すだけで、
+ * API ルートは無変更。`requireStrongReauth` の第 2 引数で差し替え・追加できる。
  */
-const verifiers: StrongReauthVerifier[] = [passwordAndCodeVerifier];
+export const strongReauthVerifiers: readonly StrongReauthVerifier[] = [passwordAndCodeVerifier];
 
 /**
  * 強い再認証を要求する。検証器を順に試し、1 つでも通れば成功。
  * 再認証未了は 401 `REAUTH_REQUIRED`、再認証済みでコード誤りは 400 `INVALID_CODE`。
  */
-export async function requireStrongReauth(args: {
-  user: User;
-  session: SessionData;
-  code: string;
-}): Promise<{ method: StrongReauthMethod }> {
-  checkReauth(args.session);
+export async function requireStrongReauth(
+  args: { user: User; session: SessionData; code: string },
+  verifiers: readonly StrongReauthVerifier[] = strongReauthVerifiers,
+): Promise<{ method: StrongReauthMethod }> {
   for (const verify of verifiers) {
     if (await verify(args)) {
       return { method: availableStrongReauthMethods(args.user)[0] ?? 'password' };

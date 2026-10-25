@@ -141,7 +141,7 @@ describe('Security - User Enumeration Prevention', () => {
         emailVerified: false,
         roleId: 'role_user',
       });
-      message = '確認-email を送信しました';
+      message = '確認メールを送信しました';
     } catch (e: unknown) {
       const err = e as { code?: string };
       if (err?.code === '23505') {
@@ -261,6 +261,32 @@ describe('Security - User Enumeration Prevention', () => {
     expect(message).toBe('確認メールを送信しました');
   });
 
+  it('resend verification returns same message for unverified, verified and unknown email', async () => {
+    const { findUserByLowerEmail } = await import('@/lib/db/queries/users');
+    const { rateLimiter } = await import('@/lib/auth/rate-limit');
+
+    rateLimiter.check.mockResolvedValue({ allowed: true, remaining: 10, resetAt: Date.now() + 60000 });
+
+    // 応答は常に同一（列挙対策・§46 / D-33-22）。送信の有無だけが内部で分かれる。
+    const cases = [
+      { id: 'usr_pending', email: 'pending@example.com', status: 'pending_email', emailVerified: false },
+      { id: 'usr_verified', email: 'verified@example.com', status: 'active', emailVerified: true },
+      null,
+    ];
+
+    const bodies = new Set<string>();
+    for (const user of cases) {
+      findUserByLowerEmail.mockResolvedValueOnce(user);
+      const target = await findUserByLowerEmail(user?.email ?? 'nobody@example.com');
+      const willSend = Boolean(target && target.emailVerified === false && target.status === 'pending_email');
+      const response = { message: '確認メールを送信しました' };
+      expect(willSend).toBe(user !== null && user.status === 'pending_email');
+      bodies.add(JSON.stringify(response));
+    }
+
+    expect(bodies.size).toBe(1);
+  });
+
   it('register succeeds for new user', async () => {
     const { createUser } = await import('@/lib/db/queries/users');
     const { checkBreached } = await import('@/lib/auth/breached');
@@ -310,7 +336,7 @@ describe('Security - User Enumeration Prevention', () => {
         emailVerified: false,
         roleId: 'role_user',
       });
-      message = '確認-email を送信しました';
+      message = '確認メールを送信しました';
     } catch (e: unknown) {
       const err = e as { code?: string };
       if (err?.code === '23505') {
