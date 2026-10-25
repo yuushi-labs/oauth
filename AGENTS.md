@@ -54,7 +54,13 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
   CSRF は `state` 1 回限り消費 + PKCE で担保。BUG-12）。
 - 一意性は **partial unique index**（`deleted_at IS NULL`）のみ。通常 UNIQUE は付けない（D-04）。
 - 「1 回限り」の値（token / state / claim）は **`UPDATE ... WHERE <未消費>` の更新行数**で消費する。
-  read → 判定 → write の 2 段書きは禁止（D-16）。
+  read → 判定 → write の 2 段書きは禁止（D-16）。`tokens/verify.ts` もこの形に統一済み（モックで
+  原子性を模擬すると競合を検出できないため、この種のテストは**実 PostgreSQL** で書く）。
+- 2FA の有効化は setup（`enabled=false` の保留行）→ verify の 2 段。`verifyAndConsumeTotp` は
+  既定で有効行のみを対象にするが、有効化フローは `allowPending: true` で保留行を検証する
+  （`consumeTotpCounter` の `requireEnabled: false`）。ここを誤ると有効化が必ず失敗する。
+- 通知メール送信は必ず `deliverEmailSafely` で包む（best-effort）。直接 await すると送信失敗で
+  操作成功後も 500 になる（password/reset・change・set・account で過去に発生）。
 
 ## 現在の到達点（2026-10-24 時点）
 

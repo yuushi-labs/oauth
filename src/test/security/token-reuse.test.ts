@@ -1,116 +1,135 @@
-// @ts-nocheck
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { verifyAndConsumeToken } from '@/lib/auth/tokens/verify';
+import { afterEach, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
+import { verifyAndConsumeToken } from '@/lib/auth/tokens/verify';
+import {
+  emailVerificationTokens,
+  passwordResetTokens,
+  emailChangeRequests,
+} from '@/lib/db/schema';
+import { generateToken } from '@/lib/auth/tokens/generate';
+import { createUser, softDeleteUser } from '@/lib/db/queries/users';
 
-vi.mock('@/lib/db/client', async () => {
-  const actual = await vi.importActual('@/lib/db/client');
-  return {
-    ...actual,
-    getDb: vi.fn(() => ({
-      transaction: vi.fn(async (fn) => fn({
-        select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn(() => Promise.resolve([])) })) })) })),
-        update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve()) })) })),
-      })),
-    })),
-  };
+/**
+ * Security - Token Reuse Prevention（実 PostgreSQL）
+ *
+ * 使い切りは「単文の条件付き UPDATE の更新行数」で判定する（D-16）。モックで
+ * 原子性を模擬すると競合を検出できないため、実 DB に対して検証する。
+ */
+
+const createdUsers: string[] = [];
+
+let seq = 0;
+async function newUser(tag: string): Promise<string> {
+  const id = `usr_${tag}${Date.now().toString(36)}${(seq += 1)}`;
+  await createUser({
+    id,
+    email: `${id}@example.com`,
+    username: id,
+    emailVerified: true,
+    status: 'active',
+    roleId: 'role_user',
+  });
+  createdUsers.push(id);
+  return id;
+}
+
+afterEach(async () => {
+  const db = getDb();
+  for (const userId of createdUsers) {
+    await db.delete(emailVerificationTokens).where(eq(emailVerificationTokens.userId, userId));
+    await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, userId));
+    await db.delete(emailChangeRequests).where(eq(emailChangeRequests.userId, userId));
+    await softDeleteUser(userId);
+  }
+  createdUsers.length = 0;
 });
 
 describe('Security - Token Reuse Prevention', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
+  it('verifyAndConsumeToken consumes valid token', async () => {
+    const userId = await newUser('consume');
+    const { raw, hash, id } = generateToken();
+    await getDb().insert(emailVerificationTokens).values({
+      id, userId, tokenHash: hash, purpose: 'email_verification',
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
+
+    const result = await verifyAndConsumeToken(hash, 'email_verification');
+    expect(result.valid).toBe(true);
+    expect(result.userId).toBe(userId);
+    expect(raw.length).toBeGreaterThanOrEqual(43);
   });
 
   it('verifyAndConsumeToken rejects already consumed token', async () => {
-    const { getDb } = await import('@/lib/db/client');
-    getDb.mockReturnValueOnce({
-      transaction: vi.fn(async (fn) => fn({
-        select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn(() => Promise.resolve([{ 
-          id: 'tok_123', userId: 'usr_test123', tokenHash: 'hashed-token', usedAt: new Date(), expiresAt: new Date(Date.now() + 3600000) 
-        }])) })) })) })),
-        update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve()) })) })),
-      })),
+    const userId = await newUser('reuse');
+    const { hash, id } = generateToken();
+    await getDb().insert(emailVerificationTokens).values({
+      id, userId, tokenHash: hash, purpose: 'email_verification',
+      expiresAt: new Date(Date.now() + 3_600_000),
     });
 
-    const result = await verifyAndConsumeToken('hashed-token', 'email_verification');
-    expect(result.valid).toBe(false);
-    expect(result.reason).toBe('already_used');
+    expect((await verifyAndConsumeToken(hash, 'email_verification')).valid).toBe(true);
+    expect((await verifyAndConsumeToken(hash, 'email_verification')).valid).toBe(false);
   });
 
   it('verifyAndConsumeToken rejects expired token', async () => {
-    const { getDb } = await import('@/lib/db/client');
-    getDb.mockReturnValueOnce({
-      transaction: vi.fn(async (fn) => fn({
-        select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn(() => Promise.resolve([{ 
-          id: 'tok_123', userId: 'usr_test123', tokenHash: 'hashed-token', usedAt: null, expiresAt: new Date(Date.now() - 3600000) 
-        }])) })) })) })),
-        update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve()) })) })),
-      })),
+    const userId = await newUser('expired');
+    const { hash, id } = generateToken();
+    await getDb().insert(emailVerificationTokens).values({
+      id, userId, tokenHash: hash, purpose: 'email_verification',
+      expiresAt: new Date(Date.now() - 3_600_000),
     });
 
-    const result = await verifyAndConsumeToken('hashed-token', 'email_verification');
-    expect(result.valid).toBe(false);
-    expect(result.reason).toBe('expired');
-  });
-
-  it('verifyAndConsumeToken consumes valid token', async () => {
-    const { getDb } = await import('@/lib/db/client');
-    getDb.mockReturnValueOnce({
-      transaction: vi.fn(async (fn) => fn({
-        select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn(() => Promise.resolve([{ 
-          id: 'tok_123', userId: 'usr_test123', tokenHash: 'hashed-token', usedAt: null, expiresAt: new Date(Date.now() + 3600000) 
-        }])) })) })) })),
-        update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve()) })) })),
-      })),
-    });
-
-    const result = await verifyAndConsumeToken('hashed-token', 'email_verification');
-    expect(result.valid).toBe(true);
-    expect(result.userId).toBe('usr_test123');
+    expect((await verifyAndConsumeToken(hash, 'email_verification')).valid).toBe(false);
   });
 
   it('verifyAndConsumeToken returns invalid for non-existent token', async () => {
-    const { getDb } = await import('@/lib/db/client');
-    getDb.mockReturnValueOnce({
-      transaction: vi.fn(async (fn) => fn({
-        select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ limit: vi.fn(() => Promise.resolve([])) })) })) })),
-        update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve()) })) })),
-      })),
-    });
-
-    const result = await verifyAndConsumeToken('hashed-nonexistent', 'email_verification');
+    const result = await verifyAndConsumeToken('deadbeef'.repeat(8), 'email_verification');
     expect(result.valid).toBe(false);
-    expect(result.reason).toBe('not_found');
   });
 
   it('concurrent consume attempts only succeed once', async () => {
-    let callCount = 0;
-    const { getDb } = await import('@/lib/db/client');
-    getDb.mockImplementation(() => ({
-      transaction: vi.fn(async (fn) => fn({
-        select: vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ 
-          limit: vi.fn(() => {
-            callCount++;
-            if (callCount === 1) {
-              return Promise.resolve([{ 
-                id: 'tok_123', userId: 'usr_test123', tokenHash: 'hashed-token', usedAt: null, expiresAt: new Date(Date.now() + 3600000) 
-              }]);
-            }
-            return Promise.resolve([{ 
-              id: 'tok_123', userId: 'usr_test123', tokenHash: 'hashed-token', usedAt: new Date(), expiresAt: new Date(Date.now() + 3600000) 
-            }]);
-          })
-        })) })) })),
-        update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve()) })) })),
-      })),
-    }));
+    const userId = await newUser('race');
+    const { hash, id } = generateToken();
+    await getDb().insert(emailVerificationTokens).values({
+      id, userId, tokenHash: hash, purpose: 'email_verification',
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
 
-    const [result1, result2] = await Promise.all([
-      verifyAndConsumeToken('hashed-token', 'email_verification'),
-      verifyAndConsumeToken('hashed-token', 'email_verification'),
-    ]);
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () => verifyAndConsumeToken(hash, 'email_verification')),
+    );
+    expect(results.filter((r) => r.valid)).toHaveLength(1);
+  });
 
-    const validResults = [result1, result2].filter(r => r.valid);
-    expect(validResults.length).toBe(1);
+  it('concurrent password_reset consume attempts only succeed once', async () => {
+    const userId = await newUser('race-pr');
+    const { hash, id } = generateToken();
+    await getDb().insert(passwordResetTokens).values({
+      id, userId, tokenHash: hash, purpose: 'password_reset',
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
+
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () => verifyAndConsumeToken(hash, 'password_reset')),
+    );
+    expect(results.filter((r) => r.valid)).toHaveLength(1);
+  });
+
+  it('concurrent email_change consume attempts only succeed once and return newEmail', async () => {
+    const userId = await newUser('race-ec');
+    const { hash, id } = generateToken();
+    await getDb().insert(emailChangeRequests).values({
+      id, userId, tokenHash: hash, purpose: 'email_change',
+      newEmail: 'changed@example.com',
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
+
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () => verifyAndConsumeToken(hash, 'email_change')),
+    );
+    const valid = results.filter((r) => r.valid);
+    expect(valid).toHaveLength(1);
+    expect(valid[0]!.newEmail).toBe('changed@example.com');
   });
 });

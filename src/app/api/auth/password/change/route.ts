@@ -9,6 +9,7 @@ import { revokeAllSessions } from '@/lib/auth/session';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
 import { getRequestClientIp } from '@/lib/auth/session';
 import { sendChangeNotificationEmail } from '@/lib/auth/email/templates';
+import { deliverEmailSafely } from '@/lib/auth/email/deliver';
 import { z } from 'zod';
 
 const changeSchema = z.object({
@@ -55,10 +56,17 @@ export async function POST(request: NextRequest) {
 
       await recordSecurityEvent('password_changed', user.id, ip, request.headers.get('user-agent') ?? '');
 
-      await sendChangeNotificationEmail(fullUser.email, {
-        change: 'パスワード変更',
-        time: new Date().toISOString(),
+      await deliverEmailSafely({
+        kind: 'change_notification',
+        userId: user.id,
         ip,
+        userAgent: request.headers.get('user-agent') ?? '',
+        send: () =>
+          sendChangeNotificationEmail(fullUser.email, {
+            change: 'パスワード変更',
+            time: new Date().toISOString(),
+            ip,
+          }),
       });
 
       return handleSuccess({ message: 'パスワードを変更しました' });

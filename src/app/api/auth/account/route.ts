@@ -8,6 +8,7 @@ import { revokeUserOidcGrants } from '@/lib/oidc/grants';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
 import { getRequestClientIp } from '@/lib/auth/session';
 import { sendAccountDeletionEmail } from '@/lib/auth/email/templates';
+import { deliverEmailSafely } from '@/lib/auth/email/deliver';
 
 export async function DELETE(request: NextRequest) {
   return withAuthPipeline(
@@ -27,7 +28,13 @@ export async function DELETE(request: NextRequest) {
 
       const fullUser = await findUserById(user.id);
       if (fullUser) {
-        await sendAccountDeletionEmail(fullUser.email);
+        await deliverEmailSafely({
+          kind: 'account_deletion',
+          userId: user.id,
+          ip: getRequestClientIp(request),
+          userAgent: request.headers.get('user-agent') ?? '',
+          send: () => sendAccountDeletionEmail(fullUser.email),
+        });
       }
 
       return handleSuccess({ message: 'アカウントを削除しました' });

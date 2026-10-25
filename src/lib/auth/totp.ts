@@ -34,9 +34,15 @@ export async function verifyAndConsumeTotp(args: {
   userId: string;
   code: string;
   now?: Date;
+  /**
+   * 有効化フロー（setup → verify）は `enabled = true` になる前にコードを検証するため true を渡す。
+   * 保留行（enabled=false）でも検証・消費を許可する。既定 false（通常の検証は有効行のみ）。
+   */
+  allowPending?: boolean;
 }): Promise<{ ok: true } | { ok: false; reason: 'invalid' | 'replayed' }> {
   const row = await findTotpByUserId(args.userId);
-  if (!row || !row.enabled) return { ok: false, reason: 'invalid' };
+  if (!row) return { ok: false, reason: 'invalid' };
+  if (!row.enabled && !args.allowPending) return { ok: false, reason: 'invalid' };
 
   let secretBase32: string;
   try {
@@ -59,6 +65,8 @@ export async function verifyAndConsumeTotp(args: {
 
   // delta は「一致した counter が基準 counter からどれだけずれたか」。基準 + delta が実際に一致した counter。
   const matchedCounter = TOTP.counter({ period: TOTP_PERIOD_SECONDS, timestamp }) + delta;
-  const consumed = await consumeTotpCounter(args.userId, matchedCounter);
+  const consumed = await consumeTotpCounter(args.userId, matchedCounter, {
+    requireEnabled: !args.allowPending,
+  });
   return consumed ? { ok: true } : { ok: false, reason: 'replayed' };
 }

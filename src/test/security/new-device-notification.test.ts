@@ -73,7 +73,12 @@ vi.mock('next/headers', () => {
 
 vi.mock('@/lib/db/client', () => ({
   getPool: () => ({ query: vi.fn(async () => ({ rows: [], rowCount: 0 })) }),
-  getDb: () => ({ insert: () => ({ values: async () => undefined }) }),
+  getDb: () => ({
+    insert: () => ({ values: async () => undefined }),
+    // Phase 5: login は findTotpByUserId()（db.select）で 2FA 有無を判定する。
+    // 2FA 行なし（= 空配列）を返し、通常ログイン経路を通す。
+    select: () => ({ from: () => ({ where: () => ({ limit: async () => [] }) }) }),
+  }),
 }));
 
 type FakeSessionRow = { id: string; ipHash: string | null; deviceName: string | null };

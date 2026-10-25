@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, gt, isNull } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
 import {
   emailVerificationTokens,
@@ -15,55 +15,64 @@ type VerifyTokenResult = {
   reason?: 'not_found' | 'expired' | 'already_used' | 'purpose_mismatch';
 };
 
+/**
+ * トークンを**消費する**。`valid` が false なら失敗（= 不一致 / 期限切れ / 消費済み）。
+ *
+ * 消費は `UPDATE ... WHERE used_at IS NULL AND expires_at > now() RETURNING` の更新行数で
+ * 判定する（D-16）。read → 判定 → write の 2 段書きにすると、並行リクエストが同じ行を
+ * 未消費と観測して全員が成功してしまう（TOCTOU）。単文 UPDATE にすることで、同一
+ * トークンを同時に送っても成功するのは 1 リクエストだけになる。
+ */
 export async function verifyAndConsumeToken(
   tokenHash: string,
   purpose: TokenPurpose,
 ): Promise<VerifyTokenResult> {
   const db = getDb();
-  return db.transaction(async (tx) => {
-    if (purpose === 'email_verification') {
-      const [row] = await tx
-        .select()
-        .from(emailVerificationTokens)
-        .where(eq(emailVerificationTokens.tokenHash, tokenHash))
-        .limit(1);
-      if (!row) return { valid: false, userId: null, newEmail: null, reason: 'not_found' };
-      if (row.usedAt) return { valid: false, userId: null, newEmail: null, reason: 'already_used' };
-      if (!(row.expiresAt.getTime() > Date.now())) return { valid: false, userId: null, newEmail: null, reason: 'expired' };
-      await tx
-        .update(emailVerificationTokens)
-        .set({ usedAt: new Date() })
-        .where(eq(emailVerificationTokens.id, row.id));
-      return { valid: true, userId: row.userId, newEmail: null };
-    }
-    if (purpose === 'password_reset') {
-      const [row] = await tx
-        .select()
-        .from(passwordResetTokens)
-        .where(eq(passwordResetTokens.tokenHash, tokenHash))
-        .limit(1);
-      if (!row) return { valid: false, userId: null, newEmail: null, reason: 'not_found' };
-      if (row.usedAt) return { valid: false, userId: null, newEmail: null, reason: 'already_used' };
-      if (!(row.expiresAt.getTime() > Date.now())) return { valid: false, userId: null, newEmail: null, reason: 'expired' };
-      await tx
-        .update(passwordResetTokens)
-        .set({ usedAt: new Date() })
-        .where(eq(passwordResetTokens.id, row.id));
-      return { valid: true, userId: row.userId, newEmail: null };
-    }
-    // email_change
-    const [row] = await tx
-      .select()
-      .from(emailChangeRequests)
-      .where(eq(emailChangeRequests.tokenHash, tokenHash))
-      .limit(1);
-    if (!row) return { valid: false, userId: null, newEmail: null, reason: 'not_found' };
-    if (row.usedAt) return { valid: false, userId: null, newEmail: null, reason: 'already_used' };
-    if (!(row.expiresAt.getTime() > Date.now())) return { valid: false, userId: null, newEmail: null, reason: 'expired' };
-    await tx
-      .update(emailChangeRequests)
-      .set({ usedAt: new Date() })
-      .where(eq(emailChangeRequests.id, row.id));
-    return { valid: true, userId: row.userId, newEmail: row.newEmail };
-  });
+  const now = new Date();
+
+  if (purpose === 'email_verification') {
+    const rows = await db
+      .update(emailVerificationTokens)
+      .set({ usedAt: now })
+      .where(
+        and(
+          eq(emailVerificationTokens.tokenHash, tokenHash),
+          isNull(emailVerificationTokens.usedAt),
+          gt(emailVerificationTokens.expiresAt, now),
+        ),
+      )
+      .returning({ userId: emailVerificationTokens.userId });
+    if (rows.length !== 1) return { valid: false, userId: null, newEmail: null };
+    return { valid: true, userId: rows[0]!.userId, newEmail: null };
+  }
+
+  if (purpose === 'password_reset') {
+    const rows = await db
+      .update(passwordResetTokens)
+      .set({ usedAt: now })
+      .where(
+        and(
+          eq(passwordResetTokens.tokenHash, tokenHash),
+          isNull(passwordResetTokens.usedAt),
+          gt(passwordResetTokens.expiresAt, now),
+        ),
+      )
+      .returning({ userId: passwordResetTokens.userId });
+    if (rows.length !== 1) return { valid: false, userId: null, newEmail: null };
+    return { valid: true, userId: rows[0]!.userId, newEmail: null };
+  }
+
+  const rows = await db
+    .update(emailChangeRequests)
+    .set({ usedAt: now })
+    .where(
+      and(
+        eq(emailChangeRequests.tokenHash, tokenHash),
+        isNull(emailChangeRequests.usedAt),
+        gt(emailChangeRequests.expiresAt, now),
+      ),
+    )
+    .returning({ userId: emailChangeRequests.userId, newEmail: emailChangeRequests.newEmail });
+  if (rows.length !== 1) return { valid: false, userId: null, newEmail: null };
+  return { valid: true, userId: rows[0]!.userId, newEmail: rows[0]!.newEmail };
 }

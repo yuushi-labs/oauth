@@ -41,11 +41,18 @@ export async function enableTotp(userId: string): Promise<void> {
  *
  * 単文 UPDATE の更新行数で判定する（read → 判定 → write の 2 段書き禁止・D-16）。
  */
-export async function consumeTotpCounter(userId: string, counter: number): Promise<boolean> {
+export async function consumeTotpCounter(
+  userId: string,
+  counter: number,
+  options: { requireEnabled?: boolean } = {},
+): Promise<boolean> {
+  // 有効化フロー（setup → verify）は `enabled = true` になる**前**にコードを検証するため、
+  // `enabled` 条件を外せるようにする（既定は true = 通常検証）。
+  const requireEnabled = options.requireEnabled ?? true;
   const result = await getPool().query(
     `UPDATE totp SET last_used_counter = $2, updated_at = now()
-     WHERE user_id = $1 AND enabled = true AND last_used_counter < $2`,
-    [userId, counter],
+     WHERE user_id = $1 AND ($3 = false OR enabled = true) AND last_used_counter < $2`,
+    [userId, counter, requireEnabled],
   );
   return result.rowCount === 1;
 }
