@@ -238,7 +238,7 @@ oauth/
 | `RESEND_API_KEY` / `EMAIL_FROM` | 遅延評価 | メール送信 | Phase 1-B |
 | `GOOGLE_*` / `GITHUB_*` / `DISCORD_*` | 遅延評価 | OAuth 資格情報（Apple は除外: C-01） | Phase 4 |
 | `TURNSTILE_SECRET_KEY` | 遅延評価 | CAPTCHA。Phase 2では未設定時500、secret設定済みでprovider未接続なら503 | Phase 2 / Phase 9（実接続） |
-| `WEBAUTHN_RP_ID` / `WEBAUTHN_RP_NAME` / `WEBAUTHN_ORIGIN` | 遅延評価 | Passkey の rpID / rpName / origin。**環境ごとに別値を明示設定**（host からの自動導出はしない） | Phase 6 |
+| `WEBAUTHN_RP_ID` / `WEBAUTHN_RP_NAME` / `WEBAUTHN_ALLOWED_ORIGINS` | 遅延評価 | Passkey の rpID / rpName / 許可 origin（カンマ区切り）。**環境ごとに別値を明示設定**（host からの自動導出はしない）。dev 既定は `localhost` / `http://localhost:3000` | Phase 6 |
 | `NODE_ENV` | 任意（既定 `development`） | 実行モード | Phase 0 |
 | `POSTGRES_USER` / `POSTGRES_DB` / `POSTGRES_PASSWORD` | ローカル専用 | `compose.yaml` が参照（アプリ側では参照しない） | Phase 0 |
 
@@ -279,7 +279,7 @@ oauth/
 | M3 | Phase 3 | UI / テーマ / 通知メール / デバイス管理 | **完了（2026-10-17）**（共通UI・テーマ・設定画面・セッション管理・通知メール。実ブラウザ viewport 検証のみ Phase 8-B へ） |
 | M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | **実装完了（2026-10-18）**（+ Phase 4-B で連携確認画面を追加。**実ブラウザでの手動疎通 11 手順のみ未実施**） |
 | M5 | Phase 5 | TOTP 2FA + Recovery Codes | **完了（2026-10-24）**（API 6 本 ＋ UI。実機手動確認 11 項目も同日に実施済み） |
-| M6 | Phase 6 | Passkey / WebAuthn | 未着手 |
+| M6 | Phase 6 | Passkey / WebAuthn | **完了（2026-10-25）**（登録・ログイン・削除 API と UI。実機手動確認は実ブラウザ環境で未実施） |
 | M7 | Phase 7 | 管理者 / RBAC / 監査ログ | 未着手 |
 | M8 | Phase 8-9 | リスク検知 / セキュリティテスト完成 / 運用デプロイ | 未着手 |
 
@@ -491,6 +491,42 @@ UI: `/settings/security` の 2FA カード（`two-factor-panel` / `recovery-code
 **実装で見つけた欠陥の修正**: (1) `INVALID_CODE` が 401 だったのを §8.8 どおり 400 に修正、(2) 有効化フローが `enabled=false` の保留行に対してコード検証できず `verify` が常に失敗していたため `allowPending` を追加、(3) 重複登録（email / username の一意制約違反）が 500 になっていた（Drizzle が driver エラーを `DrizzleQueryError` で包み SQLSTATE が `err.cause.code` に入るため `err.code` の判定が効かず）のを `src/lib/db/sql-state.ts#isUniqueViolation` で修正、(4) 応答文言に `-email` が混入し `register` の成功経路と重複経路で応答が異なる列挙オラクルになっていたのを正典（`src/messages/ja.ts`）に合わせて修正。
 
 **実機手動確認（計画 §14.4・11 項目）**: 2026-10-24 に実施済み。QR は SVG→PNG→OpenCV デコードで実検証（得た `secret` で有効化まで通した）、9・10 は実ブラウザ＋実 API、他は実 HTTP ハーネスで確認。
+
+---
+
+## Phase 6 実装詳細（2026-10-25 / 実装完了）
+
+計画: `docs/phase6-passkey-webauthn-実装計画.md`（v1 / D-34-01〜D-34-16）、実行手順: `docs/phase6-実行Todo.md`
+
+Passkey（WebAuthn）によるパスワードレスログインと、セキュリティ設定からの管理を実装しました。暗号学的検証は `@simplewebauthn/server` に委譲し、**自作の WebAuthn 検証は書いていません**（D-34-03 / 仕様 §67）。
+
+| API | 役割 |
+|---|---|
+| `POST /api/auth/passkey/register/options` | 登録 challenge ＋ options（再認証必須・§8.2） |
+| `POST /api/auth/passkey/register/verify` | 登録検証（**公開鍵のみ保存**・通知・`passkey_added`） |
+| `GET /api/auth/passkey` | 一覧（内部 ID のみ・`credential_id` / `public_key` は返さない） |
+| `DELETE /api/auth/passkey/{id}` | 削除（強い再認証・最後のログイン手段は 409・§8.6） |
+| `POST /api/auth/passkey/login/options` | ログイン challenge（未認証・discoverable） |
+| `POST /api/auth/passkey/login/verify` | ログイン検証（atomic sign_count 更新・**新セッション発行**） |
+| `POST /api/auth/reauth/passkey/options` | 再認証用 challenge（D-34-12） |
+
+**DoD**: 仕様 §64「Passkey」完了。`pnpm lint`（0 errors）/ `typecheck` / `test`（**103 files / 707 tests**、Phase 5 比 +15 files / +89 tests）/ `build` / `db:verify-migrations`（0018 の up/down/往復/restore）すべて green。
+
+| 脅威 | 対策 |
+|---|---|
+| challenge の再利用 | `consumed_at IS NULL` の**単文 UPDATE の更新行数**で消費（D-34-05 / D-16）。TTL 5 分 |
+| origin / rpID の不一致 | `rpID` / 許可 origin は**環境変数から明示解決**し request ヘッダを信頼しない（D-34-01）。検証は `@simplewebauthn/server` の `expectedOrigin` / `expectedRPID` |
+| sign_count の後退（クローン検知） | `sign_count < :new` の**単文 UPDATE** のみ進める。`newCounter === 0` は `last_used_at` のみ更新（D-34-06） |
+| 削除済み credential の認証 | `deleted_at IS NULL` の user に紐づく credential のみ許可 |
+| 他人の credential 操作 | 内部 ID ＋ owner で引く。存在しない / 他人は同じ 404 に丸める（§49） |
+| 最後のログイン手段の喪失 | パスワード無し・Passkey 1 件・TOTP 無効のとき削除を 409 で拒否 |
+| セッション窃取だけでの削除 | 削除・2FA 無効化・再生成は強い再認証（パスワード＋コード、または Passkey）を要求（D-34-08 / D-34-11） |
+| 総当たり | Passkey 入力は 30/5 分（§16） |
+| 機密値の漏洩 | `logger` の `SENSITIVE_KEYS` に `credentialId` / `publicKey` / `challenge` / `signature` 等を追加（D-34-13） |
+
+UI: `/settings/security` の Passkey カード（`passkey-panel`）、`/login` の「パスキーでログイン」（`passkey-login-button`）、`strong-reauth-dialog` の Passkey タブ。Passkey の有無は**サーバー側で判定して props で渡す**（BUG-11）。
+
+**実装で見つけた欠陥の修正**: (1) challenge 文字列をそのまま `verify*` へ渡すと UTF-8 再エンコードで値が変わり常に検証失敗 → `isoBase64URL.toBuffer()` でバイト列に変換、(2) 重複登録（`credential_id` 一意制約違反）が 500 になっていたのを `isUniqueViolation`（`err.cause.code` も参照）で 409 `CREDENTIAL_ALREADY_REGISTERED` に修正、(3) テスト env の `WEBAUTHN_RP_ID` / origin が `127.0.0.1` と `localhost` で不一致だったのを統一（rpID は origin host のサフィックスでなければならない）。
 
 ---
 

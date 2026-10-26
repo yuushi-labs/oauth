@@ -1,8 +1,9 @@
 import Link from 'next/link';
 import { CircleCheck, ShieldAlert } from 'lucide-react';
-import { BadgeCheck, KeyRound, Link2, MonitorSmartphone, Fingerprint, Plug } from 'lucide-react';
+import { BadgeCheck, KeyRound, Link2, MonitorSmartphone, Plug } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TwoFactorPanel } from '@/components/settings/two-factor-panel';
+import { PasskeyPanel, type PasskeyRow } from '@/components/settings/passkey-panel';
 import { formatLocalDateTime } from '@/lib/util/datetime';
 import type { SessionRow } from '@/components/settings/session-list';
 import { m } from '@/messages/ja';
@@ -39,6 +40,8 @@ export function SecurityOverview({
   linkedAccounts,
   linkedAccountLabels,
   twoFactor,
+  passkeys,
+  passwordSet,
 }: {
   email: string;
   emailVerified: boolean;
@@ -50,6 +53,8 @@ export function SecurityOverview({
   linkedAccounts: number;
   linkedAccountLabels: string[];
   twoFactor: { enabled: boolean; recovery_codes_remaining: number; strong_reauth_methods: string[] };
+  passkeys: PasskeyRow[];
+  passwordSet: boolean;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -92,19 +97,14 @@ export function SecurityOverview({
       {/* 3. 2 段階認証（Phase 5 で実装済み）*/}
       <TwoFactorPanel initial={twoFactor} />
 
-      {/* 4. Passkey（未実装）*/}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2">
-            <Fingerprint aria-hidden className="size-4 text-muted-fg" />
-            {m('security.passkey')}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <p className="text-sm text-fg">{m('security.passkeyCount', { count: 0 })}</p>
-          <p className="text-xs text-muted-fg">{m('security.notAvailable')}</p>
-        </CardContent>
-      </Card>
+      {/* 4. Passkey（Phase 6）*/}
+      <PasskeyPanel
+        initial={passkeys}
+        methods={twoFactor.strong_reauth_methods}
+        timezone={timezone}
+        passwordSet={passwordSet}
+        twoFactorEnabled={twoFactor.enabled}
+      />
 
       {/* 5. 連携アカウント（Phase 4 で実装済み・実際の件数と導線を出す）*/}
       <Card>

@@ -20,6 +20,11 @@ type Status = {
 
 type SetupData = { secret: string; otpauth_uri: string; qr_svg: string };
 
+/** 強い再認証の body。パスワード＋コード、または Passkey assertion のどちらか（D-34-11）。 */
+type ReauthBody =
+  | { code: string }
+  | { passkey: unknown; challenge_id: string };
+
 const LOW_THRESHOLD = 3;
 
 /**
@@ -76,15 +81,15 @@ export function TwoFactorPanel({ initial }: { initial: Status }) {
     }
   }
 
-  async function runDisable(reauthCode: string) {
-    await apiClient.post('/api/auth/2fa/disable', { code: reauthCode });
+  async function runDisable(body: ReauthBody) {
+    await apiClient.post('/api/auth/2fa/disable', body);
     await refresh();
   }
 
-  async function runRegenerate(reauthCode: string) {
+  async function runRegenerate(body: ReauthBody) {
     const data = await apiClient.post<{ recovery_codes: string[] }>(
       '/api/auth/2fa/recovery-codes/regenerate',
-      { code: reauthCode },
+      body,
     );
     setRecoveryCodes(data.recovery_codes);
     await refresh();
@@ -190,9 +195,14 @@ export function TwoFactorPanel({ initial }: { initial: Status }) {
           methods={status.strong_reauth_methods}
           title={m('twoFactor.strongReauthTitle')}
           description={m('twoFactor.strongReauthInstruction')}
-          onConfirmed={(reauthCode) =>
-            dialog === 'regenerate' ? runRegenerate(reauthCode) : runDisable(reauthCode)
-          }
+          onConfirmed={(reauthCode) => {
+            const body: ReauthBody = { code: reauthCode };
+            return dialog === 'regenerate' ? runRegenerate(body) : runDisable(body);
+          }}
+          passkeySubmit={(passkey, challengeId) => {
+            const body: ReauthBody = { passkey, challenge_id: challengeId };
+            return dialog === 'regenerate' ? runRegenerate(body) : runDisable(body);
+          }}
         />
       </CardContent>
     </Card>

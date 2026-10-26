@@ -37,6 +37,14 @@ const SENSITIVE_KEYS = new Set([
   'state',
   'nonce',
   'codeverifier',
+  // Passkey / WebAuthn（D-34-14）。challenge は使い捨ての乱数でログに残す理由が無い。
+  'credentialid',
+  'publickey',
+  'attestationobject',
+  'authenticatordata',
+  'clientdatajson',
+  'signature',
+  'challenge',
 ]);
 
 const SENSITIVE_TEXT_PATTERNS: RegExp[] = [

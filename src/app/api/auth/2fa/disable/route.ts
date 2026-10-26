@@ -3,7 +3,7 @@ import { withAuthPipeline, failResponse, handleSuccess, rateLimitResponse } from
 import { requireStrongReauth } from '@/lib/auth/strong-reauth';
 import { deleteTotp } from '@/lib/db/queries/totp';
 import { deleteAllRecoveryCodes } from '@/lib/auth/recovery-codes';
-import { totpDisableSchema } from '@/lib/validate/totp';
+import { passkeyDeleteSchema } from '@/lib/validate/passkey';
 import { rateLimiter } from '@/lib/auth/rate-limit';
 import { RATE_LIMITS } from '@/config/rate-limits';
 import { rateLimitKeys } from '@/lib/auth/rate-limit-keys';
@@ -26,7 +26,8 @@ export async function POST(request: NextRequest) {
       return failResponse('SESSION_EXPIRED', 'セッションの有効期限が切れました', 401);
     }
 
-    const { code } = totpDisableSchema.parse(body);
+    // Passkey 再認証も受け付けるため、body をそのまま強い再認証へ渡す（D-34-11）。
+    const parsed = passkeyDeleteSchema.parse(body);
 
     const ip = getRequestClientIp(request);
     const userAgent = request.headers.get('user-agent') ?? '';
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 失敗（REAUTH_REQUIRED / INVALID_CODE）はそのまま呼び出し元へ伝播させる。
-    await requireStrongReauth({ user, session, code });
+    await requireStrongReauth({ user, session, body: parsed });
     await rateLimiter.finishFailedAttempt(reservation.reservation, true);
 
     await deleteTotp(user.id);

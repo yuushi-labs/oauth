@@ -66,6 +66,25 @@ describe('Phase 5 security event coverage (2fa/**)', () => {
     expect(source).toContain("reason: 'email_unverified'");
   });
 
+  it('Passkey ルートが期待どおりのイベントを記録する（Phase 6）', () => {
+    const routeEvents: Array<[string, string[]]> = [
+      ['passkey/register/options/route.ts', ['rate_limited']],
+      ['passkey/register/verify/route.ts', ['passkey_added', 'rate_limited']],
+      ['passkey/login/options/route.ts', ['rate_limited']],
+      ['passkey/login/verify/route.ts', ['login_failed', 'login_success', 'rate_limited']],
+      ['passkey/route.ts', ['rate_limited']],
+      ['passkey/[id]/route.ts', ['passkey_removed', 'rate_limited']],
+      ['reauth/passkey/options/route.ts', ['rate_limited']],
+    ];
+    for (const [relativePath, eventTypes] of routeEvents) {
+      const source = readFileSync(resolve(process.cwd(), 'src/app/api/auth', relativePath), 'utf8');
+      expect(source, `${relativePath} should record security events`).toContain('recordSecurityEvent');
+      for (const eventType of eventTypes) {
+        expect(source, `${relativePath} should record ${eventType}`).toContain(`'${eventType}'`);
+      }
+    }
+  });
+
   it('resend-verification は未認証経路で user_id が無い場合 null を渡す', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/app/api/auth/resend-verification/route.ts'), 'utf8');
     // eventUserId = user?.id ?? null

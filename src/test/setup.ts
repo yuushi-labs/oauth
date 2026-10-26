@@ -21,6 +21,12 @@ const TEST_ENV = {
   GITHUB_CLIENT_SECRET: 'test-github-client-secret',
   DISCORD_CLIENT_ID: 'test-discord-client-id',
   DISCORD_CLIENT_SECRET: 'test-discord-client-secret',
+  // WebAuthn（Passkey）のテスト既定値（D-34-01）。rpID は origin の登録可能ドメインで
+  // なければならない（`localhost` は `127.0.0.1` のサフィックスではない）ため、origin は
+  // localhost に揃える。実 HTTP（app-server）テストは起動時に自前で env を上書きする。
+  WEBAUTHN_RP_ID: 'localhost',
+  WEBAUTHN_RP_NAME: 'Auth System Test',
+  WEBAUTHN_ALLOWED_ORIGINS: 'http://localhost:3000',
 };
 
 for (const [key, value] of Object.entries(TEST_ENV)) {

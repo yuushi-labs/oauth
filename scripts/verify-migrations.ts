@@ -266,6 +266,13 @@ async function main(): Promise<void> {
       ['recovery_codes は users への外部キーと code_hash の一意インデックスを持つ',
         Object.values(afterUp.foreignKeys).flat().includes('recovery_codes_user_id_users_id_fk')
         && (afterUp.indexes.recovery_codes ?? []).includes('recovery_codes_code_hash_uniq')],
+      ['webauthn_credentials テーブルが存在する（migration 0018）', afterUp.tables.includes('webauthn_credentials')],
+      ['webauthn_challenges テーブルが存在する（migration 0018）', afterUp.tables.includes('webauthn_challenges')],
+      ['webauthn_credentials に credential_id の unique index がある',
+        (afterUp.indexes.webauthn_credentials ?? []).includes('webauthn_credentials_credential_id_uniq')],
+      ['webauthn_credentials.sign_count 列がある', (afterUp.columns.webauthn_credentials ?? []).includes('sign_count')],
+      ['webauthn_challenges に expires_at の index がある',
+        (afterUp.indexes.webauthn_challenges ?? []).includes('webauthn_challenges_expires_at_idx')],
     ];
     for (const [label, ok] of expectations) {
       process.stdout.write(`- ${ok ? '✅' : '❌'} ${label}\n`);

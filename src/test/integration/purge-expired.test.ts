@@ -43,6 +43,10 @@ beforeAll(async () => {
     provider_email text, email_verified boolean NOT NULL DEFAULT false, email_owner_id text,
     created_at timestamptz NOT NULL DEFAULT NOW(), expires_at timestamptz NOT NULL, consumed_at timestamptz
   )`));
+  await db.execute(sql.raw(`CREATE TEMP TABLE webauthn_challenges (
+    id text PRIMARY KEY, user_id text, type text NOT NULL, challenge text NOT NULL,
+    expires_at timestamptz NOT NULL, consumed_at timestamptz, created_at timestamptz NOT NULL DEFAULT NOW()
+  )`));
   await db.execute(sql.raw(`CREATE TEMP TABLE oidc_user_grants (
     id text PRIMARY KEY, user_id text NOT NULL, client_id text NOT NULL,
     scopes text[] NOT NULL DEFAULT ARRAY['openid']::text[], created_at timestamptz NOT NULL DEFAULT NOW(),
@@ -97,6 +101,11 @@ describe('expired data cleanup', () => {
     await db.execute(sql`INSERT INTO oidc_user_grants (id, user_id, client_id, scopes, revoked_at) VALUES
       ('grant-revoked-old', 'usr_purge', 'cli_purge', ARRAY['openid'], NOW() - INTERVAL '31 days'),
       ('grant-revoked-recent', 'usr_purge', 'cli_purge', ARRAY['openid'], NOW() - INTERVAL '1 day')`);
+    await db.execute(sql`INSERT INTO webauthn_challenges (id, type, challenge, expires_at, consumed_at) VALUES
+      ('wch_expired', 'registration', 'c1', NOW() - INTERVAL '1 hour', NULL),
+      ('wch_consumed_old', 'authentication', 'c2', NOW() + INTERVAL '1 hour', NOW() - INTERVAL '2 days'),
+      ('wch_consumed_recent', 'authentication', 'c3', NOW() + INTERVAL '1 hour', NOW() - INTERVAL '10 minutes'),
+      ('wch_valid', 'registration', 'c4', NOW() + INTERVAL '10 minutes', NULL)`);
 
     const result = await purgeExpired(db);
 
@@ -112,6 +121,7 @@ describe('expired data cleanup', () => {
       'revoked OIDC grant': 1,
       'oauth state': 2,
       'social claim': 2,
+      'webauthn challenge': 2,
     });
 
     const reservations = await db.execute(sql`SELECT reservation_id, status FROM rate_limit_reservations ORDER BY reservation_id`);
@@ -131,5 +141,7 @@ describe('expired data cleanup', () => {
     expect(oauthStates.rows).toEqual([{ state_hash: 'consumed-recent-state' }, { state_hash: 'valid-state' }]);
     const claims = await db.execute(sql`SELECT state_hash FROM oauth_social_claims ORDER BY state_hash`);
     expect(claims.rows).toEqual([{ state_hash: 'claim-consumed-recent' }, { state_hash: 'claim-valid' }]);
+    const challenges = await db.execute(sql`SELECT id FROM webauthn_challenges ORDER BY id`);
+    expect(challenges.rows).toEqual([{ id: 'wch_consumed_recent' }, { id: 'wch_valid' }]);
   });
 });

@@ -543,3 +543,53 @@ export type Totp = typeof totp.$inferSelect;
 export type NewTotp = typeof totp.$inferInsert;
 export type RecoveryCode = typeof recoveryCodes.$inferSelect;
 export type NewRecoveryCode = typeof recoveryCodes.$inferInsert;
+
+/**
+ * Passkey（WebAuthn credential）。公開鍵のみを保存し、秘密鍵は端末から出ない（§12）。
+ * `id` は内部 ID（`wac_` + ULID）で、外部由来の `credential_id` を URL に出さないため分けている。
+ */
+export const webauthnCredentials = pgTable(
+  'webauthn_credentials',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    credentialId: text('credential_id').notNull(),
+    publicKey: text('public_key').notNull(),
+    signCount: bigint('sign_count', { mode: 'number' }).default(0).notNull(),
+    transports: jsonb('transports').$type<string[]>(),
+    aaguid: text('aaguid'),
+    deviceName: text('device_name'),
+    backedUp: boolean('backed_up').default(false).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('webauthn_credentials_credential_id_uniq').on(table.credentialId),
+    index('webauthn_credentials_user_id_idx').on(table.userId),
+  ],
+);
+
+/** WebAuthn の challenge（登録・認証）。TTL 5 分・1 回限り消費（D-34-05）。 */
+export const webauthnChallenges = pgTable(
+  'webauthn_challenges',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(),
+    challenge: text('challenge').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('webauthn_challenges_expires_at_idx').on(table.expiresAt),
+    index('webauthn_challenges_user_id_idx').on(table.userId),
+  ],
+);
+
+export type WebauthnCredential = typeof webauthnCredentials.$inferSelect;
+export type NewWebauthnCredential = typeof webauthnCredentials.$inferInsert;
+export type WebauthnChallenge = typeof webauthnChallenges.$inferSelect;
+export type NewWebauthnChallenge = typeof webauthnChallenges.$inferInsert;

@@ -36,4 +36,9 @@ describe('Security - Rate Limiting Configuration', () => {
     expect(RATE_LIMITS.twoFactor.limit).toBe(10);
     expect(RATE_LIMITS.twoFactor.window).toBe(300_000);
   });
+
+  it('Passkey は 30/5 分（Phase 6・§16）', () => {
+    expect(RATE_LIMITS.passkey.limit).toBe(30);
+    expect(RATE_LIMITS.passkey.window).toBe(300_000);
+  });
 });

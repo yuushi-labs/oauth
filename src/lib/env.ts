@@ -51,6 +51,11 @@ const requiredEnvSchema = z.object({
   ARGON2_M: z.coerce.number().int().positive().default(65536),
   ARGON2_T: z.coerce.number().int().positive().default(3),
   ARGON2_P: z.coerce.number().int().positive().default(4),
+  // WebAuthn（Passkey）。dev/test は既定値、production は必須（D-34-01 / D-26）。
+  // 許可 origin はカンマ区切りの絶対 URL。解決・許可リスト検証は `passkey/config.ts` が担う。
+  WEBAUTHN_RP_ID: z.string().optional(),
+  WEBAUTHN_RP_NAME: z.string().optional(),
+  WEBAUTHN_ALLOWED_ORIGINS: z.string().optional(),
 });
 
 export type Env = z.infer<typeof requiredEnvSchema>;

@@ -24,6 +24,10 @@ export async function startTestAppServer(options: { dev?: boolean; oidc?: boolea
   process.env.NEXT_PUBLIC_APP_URL = origin;
   process.env.CSRF_TRUSTED_ORIGINS = origin;
   process.env.ALLOWED_ORIGINS = origin;
+  // WebAuthn は rpID が origin の登録可能ドメインでなければならない。実 HTTP の origin は
+  // 127.0.0.1 に固定されるため、`localhost` ではなく 127.0.0.1 を rpID にする（D-34-01）。
+  process.env.WEBAUTHN_RP_ID = '127.0.0.1';
+  process.env.WEBAUTHN_ALLOWED_ORIGINS = origin;
 
   if (options.oidc) {
     // The provider refuses to boot unless the issuer origin matches the app URL, so keep

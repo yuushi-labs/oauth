@@ -8,6 +8,7 @@ export type EmailKind =
   | 'email_change'
   | 'security_notification'
   | 'change_notification'
+  | 'passkey_change'
   | 'account_deletion';
 
 export type DeliverEmailOptions = {

@@ -137,4 +137,28 @@ describe('Security - Log Redaction', () => {
     expect((result.users as unknown[])[0]).toEqual({ password: '***', name: 'A' });
     expect((result.users as unknown[])[1]).toEqual({ password: '***', name: 'B' });
   });
+  it('redact masks Passkey / WebAuthn values as object keys（D-34-14）', () => {
+    const obj = {
+      credentialId: 'cred-abc',
+      publicKey: 'cHVia2V5',
+      attestationObject: 'o2NmbXQ',
+      authenticatorData: 'SZYN5YgO',
+      clientDataJSON: 'eyJ0eXBl',
+      signature: 'MEUCIQ',
+      challenge: 'chal-abc',
+      // 機密でないフィールドは残る
+      deviceName: 'MacBook の Touch ID',
+      signCount: 5,
+    };
+    const result = redact(obj) as Record<string, unknown>;
+    expect(result.credentialId).toBe('***');
+    expect(result.publicKey).toBe('***');
+    expect(result.attestationObject).toBe('***');
+    expect(result.authenticatorData).toBe('***');
+    expect(result.clientDataJSON).toBe('***');
+    expect(result.signature).toBe('***');
+    expect(result.challenge).toBe('***');
+    expect(result.deviceName).toBe('MacBook の Touch ID');
+    expect(result.signCount).toBe(5);
+  });
 });

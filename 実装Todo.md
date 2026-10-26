@@ -465,34 +465,49 @@ Phase 4 の本体内で未だった 2 点（BUG-12 後の実ブラウザ検証�
 
 ---
 
-## 8. Phase 6 — Passkey / WebAuthn（2〜3日）
+## 8. Phase 6 — Passkey / WebAuthn（完了・実績 30.4h）
+
+> 実装計画: `docs/phase6-passkey-webauthn-実装計画.md`（v1 / D-34-01〜D-34-16）
+> 実行チェックリスト: `docs/phase6-実行Todo.md`
+> 決定事項: `D-34-01`〜`D-34-16`（`docs/phase6-passkey-webauthn-実装計画.md` §17）
+> 実績: 新規ファイル **18**・テスト **13** ファイル（既存追記含む）・migration **0018**・工数 **30.4h**
 
 ### 8-A 基盤
 
-- [ ] **P6-A-01** `@simplewebauthn/server` 導入
-  - [ ] **P6-A-01a** `rpID` / `rpName` / `origin` は **実行環境（`process.env` や request host）から自動導出せず、環境ごとの明示設定として管理する**（下記 P6-A-01b）
-  - [ ] **P6-A-01b** `env.ts` に `WEBAUTHN_RP_ID` / `WEBAUTHN_RP_NAME` / `WEBAUTHN_ORIGIN`（または `WEBAUTHN_ALLOWED_ORIGINS` の配列）を**検証付きで**定義し、dev / prod で**別値を固定して設定する**。値が未設定・空・`localhost` と prod で同一、などの状態を `env.ts` の zod 検証で起動時に落とす（fail fast）
-  - [ ] **P6-A-01c** 検証は許可リスト方式（`origin` ∈ 許可リスト、`rpID` = 許可リストの各 origin の host と一致）で行い、request の `Origin` / `Host` ヘッダを無条件に信頼しない
-  - [ ] 本番ドメインは Phase 9 のドメイン確定時に合わせて固定する（本書ではドメイン自体を確定しない）
-- [ ] **P6-A-02** `webauthn_credentials` マイグレーション（credential_id UNIQUE, public_key, sign_count, transports, aaguid, device_name, backed_up）
-- [ ] **P6-A-03** challenge 保存（**TTL 5分・1回限り**・★）
+- [x] **P6-A-01** `@simplewebauthn/server` 導入
+  - [x] **P6-A-01a** `rpID` / `rpName` / `origin` は **実行環境（`process.env` や request host）から自動導出せず、環境ごとの明示設定として管理する**（`src/lib/auth/passkey/config.ts`）
+  - [x] **P6-A-01b** `env.ts` に `WEBAUTHN_RP_ID` / `WEBAUTHN_RP_NAME` / `WEBAUTHN_ALLOWED_ORIGINS` を**検証付きで**定義し、dev / prod で**別値を固定**。未設定・空・prod で `localhost` などの状態を起動時に落とす（fail fast）
+  - [x] **P6-A-01c** 検証は許可リスト方式（`origin` ∈ 許可リスト、`rpID` = 各 origin の host と一致／サフィックス）。request の `Origin` / `Host` ヘッダを信頼しない（`resolveWebauthnConfig` は request を受け取らない）
+- [x] **P6-A-02** `webauthn_credentials` / `webauthn_challenges` マイグレーション（`drizzle/0018_passkey.sql`、credential_id UNIQUE, public_key, sign_count, transports, aaguid, device_name, backed_up）
+- [x] **P6-A-03** challenge 保存（**TTL 5分・1回限り**・★、`src/lib/auth/passkey/challenge.ts`）
 
 ### 8-B 登録（再認証必須）
 
-- [ ] **P6-B-01** `POST /api/auth/passkey/register/options`（`rpID` は明示設定値、`userVerification=preferred`）
-- [ ] **P6-B-02** `POST /api/auth/passkey/register/verify`（origin / rpIDHash / signature / flags 検証、**公開鍵のみ保存**、通知、`passkey_added`）
-- [ ] **P6-B-03** `GET /api/auth/passkey`（device_name, created_at, last_used_at）
-- [ ] **P6-B-04** `DELETE /api/auth/passkey/{id}`（**再認証必須**、最後のpasskeyなら PW/2FA 残存チェック、通知）
+- [x] **P6-B-01** `POST /api/auth/passkey/register/options`（`rpID` は明示設定値、`userVerification=preferred`）
+- [x] **P6-B-02** `POST /api/auth/passkey/register/verify`（origin / rpIDHash / signature / flags 検証、**公開鍵のみ保存**、通知、`passkey_added`）
+- [x] **P6-B-03** `GET /api/auth/passkey`（device_name, created_at, last_used_at）
+- [x] **P6-B-04** `DELETE /api/auth/passkey/{id}`（**再認証必須**、最後のpasskeyなら PW/2FA 残存チェック、通知）
 
 ### 8-C ログイン
 
-- [ ] **P6-C-01** `POST /api/auth/passkey/login/options`（discoverable 対応、`allowCredentials`）
-- [ ] **P6-C-02** `POST /api/auth/passkey/login/verify`（検証、sign_count 更新、last_used_at 更新、**新セッション発行**）
-- [ ] **P6-C-03** UI: ログインボタンの passkey、`settings/security` の passkey 管理カード
+- [x] **P6-C-01** `POST /api/auth/passkey/login/options`（discoverable 対応、`allowCredentials`）
+- [x] **P6-C-02** `POST /api/auth/passkey/login/verify`（検証、sign_count 更新、last_used_at 更新、**新セッション発行**）
+- [x] **P6-C-03** UI: ログインボタンの passkey（`PasskeyLoginButton`）、`settings/security` の passkey 管理カード（`PasskeyPanel`）
+
+### 8-D 強い再認証への差し込み（D-34-11）
+
+- [x] **P6-D-01** `POST /api/auth/reauth/passkey/options`（再認証用 challenge 発行・D-34-12）
+- [x] **P6-D-02** `strong-reauth.ts` に `passkeyVerifier` を追加（判定順: パスワード＋コード → Passkey）
+- [x] **P6-D-03** `StrongReauthDialog` の Passkey タブ（`strong_reauth_methods` に出し分け）
+- [x] **P6-D-04** 2FA 無効化・リカバリーコード再生成が Passkey でも通る（`passkeyDeleteSchema`）
 
 **DoD（Phase 6）**
-- [ ] 仕様64章「Passkey」完了
-- [ ] `src/test/security/{webauthn-challenge-reuse,webauthn-origin,webauthn-rpid,webauthn-signcount,webauthn-deleted}.test.ts` green
+- [x] 仕様64章「Passkey」完了
+- [x] `src/test/security/{webauthn-challenge-reuse,webauthn-origin,webauthn-rpid,webauthn-signcount,webauthn-deleted}.test.ts` green
+- [x] `src/test/security/{webauthn-register,webauthn-login,passkey-reauth}.test.ts` green
+- [x] `src/test/unit/{passkey-config,passkey-registration,passkey-authentication,passkey-challenge,strong-reauth,webauthn-mock}.test.ts` green
+- [x] `src/test/integration/{webauthn-queries,purge-expired}.test.ts` green
+- [x] `pnpm lint`（0 errors） / `pnpm typecheck` / `pnpm build` / `pnpm db:verify-migrations`（0018 up/down/往復/restore）
 
 ---
 

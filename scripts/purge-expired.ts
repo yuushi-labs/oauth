@@ -65,6 +65,12 @@ export async function purgeExpired(db: Pick<DbClient, 'execute'> = getDb()): Pro
       WHERE expires_at < NOW() OR consumed_at < NOW() - INTERVAL '1 hour'
       ORDER BY expires_at ASC LIMIT ${BATCH_SIZE} FOR UPDATE SKIP LOCKED
     ) RETURNING state_hash`],
+    // WebAuthn challenge（D-34-16）。期限切れは即削除、消費済みは 1 日残す。
+    ['webauthn challenge', sql`DELETE FROM webauthn_challenges WHERE id IN (
+      SELECT id FROM webauthn_challenges
+      WHERE expires_at < NOW() OR consumed_at < NOW() - INTERVAL '1 day'
+      ORDER BY expires_at ASC LIMIT ${BATCH_SIZE} FOR UPDATE SKIP LOCKED
+    ) RETURNING id`],
   ] as const;
   const results = await Promise.all(jobs.map(async ([label, statement]) => [label, await deleteInBatches(db, statement)] as const));
   return Object.fromEntries(results);

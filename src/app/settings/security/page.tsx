@@ -5,6 +5,7 @@ import { getUserPreferences } from '@/lib/db/queries/user-preferences';
 import { listRecentSecurityEventsByUser } from '@/lib/db/queries/security-events';
 import { listAccountsByUser } from '@/lib/auth/oauth/accounts';
 import { findTotpByUserId } from '@/lib/db/queries/totp';
+import { listCredentialsByUser } from '@/lib/db/queries/webauthn';
 import { countUnusedRecoveryCodes } from '@/lib/auth/recovery-codes';
 import { availableStrongReauthMethods } from '@/lib/auth/strong-reauth';
 import { OAUTH_PROVIDER_REGISTRY } from '@/lib/auth/oauth/registry';
@@ -25,13 +26,14 @@ const EVENT_LIMIT = 10;
  */
 export default async function SettingsSecurityPage() {
   const settingsUser = await requireSettingsUser();
-  const [user, sessions, events, preferences, linkedRows, totpRow] = await Promise.all([
+  const [user, sessions, events, preferences, linkedRows, totpRow, credentialRows] = await Promise.all([
     findUserById(settingsUser.id),
     listActiveSessionsByUser(settingsUser.id),
     listRecentSecurityEventsByUser(settingsUser.id, EVENT_LIMIT),
     getUserPreferences(settingsUser.id),
     listAccountsByUser(settingsUser.id),
     findTotpByUserId(settingsUser.id),
+    listCredentialsByUser(settingsUser.id),
   ]);
   if (!user) return null;
 
@@ -39,7 +41,7 @@ export default async function SettingsSecurityPage() {
   const twoFactor = {
     enabled: twoFactorEnabled,
     recovery_codes_remaining: twoFactorEnabled ? await countUnusedRecoveryCodes(user.id) : 0,
-    strong_reauth_methods: availableStrongReauthMethods(user),
+    strong_reauth_methods: await availableStrongReauthMethods(user),
   };
 
   const timezone = resolveTimeZone(preferences.timezone);
@@ -78,6 +80,14 @@ export default async function SettingsSecurityPage() {
         linkedAccounts={linkedRows.length}
         linkedAccountLabels={linkedAccountLabels}
         twoFactor={twoFactor}
+        passkeys={credentialRows.map((row) => ({
+          id: row.id,
+          device_name: row.deviceName,
+          created_at: row.createdAt.toISOString(),
+          last_used_at: row.lastUsedAt?.toISOString() ?? null,
+          backed_up: row.backedUp,
+        }))}
+        passwordSet={Boolean(user.passwordHash)}
       />
     </main>
   );

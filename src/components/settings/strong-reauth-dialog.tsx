@@ -7,15 +7,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { m } from '@/messages/ja';
 
+type PasskeySubmit = (passkey: unknown, challengeId: string) => Promise<void>;
+
 /**
- * 強い再認証ダイアログ（§9.3 / D-33-23 / D-33-24）。
+ * 強い再認証ダイアログ（§9.3 / D-33-23 / D-33-24 / D-34-11）。
  *
- * 無効化・再生成では「パスワード（再認証）」と「現在のコード」の 2 要素を要求する。
- * - `REAUTH_REQUIRED`（401）→ 既存の `POST /api/auth/reauth` でパスワードを通し、コードを保持したまま再送する。
- * - `INVALID_CODE`（400）→ コード欄をクリアして再入力させる。
- * Phase 6 は `methods` に `'passkey'` が加わり、Passkey タブを足す（API ルートは無変更）。
+ * 2 つの手段を提供する。
+ * - **パスワードタブ**: パスワード（`POST /api/auth/reauth` の 5 分猶予）＋現在のコード。
+ *   `REAUTH_REQUIRED`（401）ならパスワードを通してからコードを再送し、`INVALID_CODE`（400）なら
+ *   コード欄をクリアする。
+ * - **Passkey タブ**: `strong_reauth_methods` に `'passkey'` が含まれるときだけ出す。
+ *   `reauth/passkey/options` → `startAuthentication` → 本体 API へ `{ passkey, challenge_id }` を送る。
  */
 export function StrongReauthDialog({
   open,
@@ -24,6 +29,7 @@ export function StrongReauthDialog({
   title,
   description,
   onConfirmed,
+  passkeySubmit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -31,8 +37,10 @@ export function StrongReauthDialog({
   methods: string[];
   title: string;
   description: string;
-  /** 強い再認証に成功したあとの本体処理。ここで対象 API を呼ぶ。 */
+  /** パスワード＋コードでの本体処理。ここで対象 API を呼ぶ。 */
   onConfirmed: (code: string) => Promise<void>;
+  /** Passkey での本体処理。未指定なら Passkey タブを出さない。 */
+  passkeySubmit?: PasskeySubmit;
 }) {
   const [password, setPassword] = React.useState('');
   const [code, setCode] = React.useState('');
@@ -40,8 +48,10 @@ export function StrongReauthDialog({
   const [busy, setBusy] = React.useState(false);
 
   const supportsPassword = methods.includes('password');
+  const supportsPasskey = methods.includes('passkey') && passkeySubmit !== undefined;
+  const [tab, setTab] = React.useState(supportsPassword ? 'password' : 'passkey');
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
+  async function submitPassword(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
     setBusy(true);
@@ -74,6 +84,90 @@ export function StrongReauthDialog({
     }
   }
 
+  async function submitPasskey() {
+    if (!passkeySubmit) return;
+    setError('');
+    setBusy(true);
+    try {
+      const { startAuthentication } = await import('@simplewebauthn/browser');
+      const { options, challenge_id } = await apiClient.post<{
+        options: Parameters<typeof startAuthentication>[0]['optionsJSON'];
+        challenge_id: string;
+      }>('/api/auth/reauth/passkey/options');
+      const passkey = await startAuthentication({ optionsJSON: options });
+      await passkeySubmit(passkey, challenge_id);
+      onOpenChange(false);
+    } catch (caught) {
+      setError(caught instanceof ApiClientError ? caught.message : m('passkey.loginFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function renderPasswordForm() {
+    return (
+      <form onSubmit={submitPassword} className="flex flex-col gap-4">
+        <Label className="flex flex-col gap-1">
+          {m('twoFactor.strongReauthPassword')}
+          <Input
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+        </Label>
+        <Label className="flex flex-col gap-1">
+          {m('twoFactor.strongReauthCode')}
+          <Input
+            autoComplete="one-time-code"
+            value={code}
+            onChange={(event) => setCode(event.target.value)}
+            required
+          />
+        </Label>
+        {error && (
+          <Alert variant="danger" size="sm">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={busy}>
+            {m('common.cancel')}
+          </Button>
+          <Button type="submit" disabled={busy || code.length < 6 || !password}>
+            {busy ? m('common.loading') : m('twoFactor.strongReauthSubmit')}
+          </Button>
+        </DialogFooter>
+      </form>
+    );
+  }
+
+  function renderPasskeyForm() {
+    return (
+      <div className="flex flex-col gap-4">
+        {error && (
+          <Alert variant="danger" size="sm">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        <DialogFooter>
+          <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={busy}>
+            {m('common.cancel')}
+          </Button>
+          <Button type="button" onClick={submitPasskey} disabled={busy}>
+            {busy ? m('common.loading') : m('passkey.reauthTabPasskey')}
+          </Button>
+        </DialogFooter>
+      </div>
+    );
+  }
+
+  const tabs = [
+    ...(supportsPassword ? [{ value: 'password', label: m('twoFactor.strongReauthPassword') }] : []),
+    ...(supportsPasskey ? [{ value: 'passkey', label: m('passkey.reauthTabPasskey') }] : []),
+  ];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -81,42 +175,23 @@ export function StrongReauthDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
-        <form onSubmit={submit} className="flex flex-col gap-4">
-          {supportsPassword && (
-            <Label className="flex flex-col gap-1">
-              {m('twoFactor.strongReauthPassword')}
-              <Input
-                type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </Label>
-          )}
-          <Label className="flex flex-col gap-1">
-            {m('twoFactor.strongReauthCode')}
-            <Input
-              autoComplete="one-time-code"
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-              required
-            />
-          </Label>
-          {error && (
-            <Alert variant="danger" size="sm">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          <DialogFooter>
-            <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={busy}>
-              {m('common.cancel')}
-            </Button>
-            <Button type="submit" disabled={busy || code.length < 6 || (supportsPassword && !password)}>
-              {busy ? m('common.loading') : m('twoFactor.strongReauthSubmit')}
-            </Button>
-          </DialogFooter>
-        </form>
+        {tabs.length > 1 ? (
+          <Tabs value={tab} onValueChange={setTab}>
+            <TabsList>
+              {tabs.map((entry) => (
+                <TabsTrigger key={entry.value} value={entry.value}>
+                  {entry.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            <TabsContent value="password">{supportsPassword && renderPasswordForm()}</TabsContent>
+            <TabsContent value="passkey">{supportsPasskey && renderPasskeyForm()}</TabsContent>
+          </Tabs>
+        ) : supportsPassword ? (
+          renderPasswordForm()
+        ) : (
+          renderPasskeyForm()
+        )}
       </DialogContent>
     </Dialog>
   );

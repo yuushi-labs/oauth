@@ -56,10 +56,24 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
 - 「1 回限り」の値（token / state / claim）は **`UPDATE ... WHERE <未消費>` の更新行数**で消費する。
   read → 判定 → write の 2 段書きは禁止（D-16）。
 
-## 現在の到達点（2026-10-24 時点）
+## 現在の到達点（2026-10-25 時点）
 
-M0〜M5 完了（Phase 0 / 1 / 2 / 2.5 / 2.6 / 3 / 4 / 4-B / **5**）。**次は Phase 6（M6）: Passkey / WebAuthn**。
-計画は `docs/phase6-passkey-webauthn-実装計画.md`、実行タスクは `docs/phase6-実行Todo.md`。
+M0〜M6 完了（Phase 0 / 1 / 2 / 2.5 / 2.6 / 3 / 4 / 4-B / 5 / **6**）。**次は Phase 7（M7）: 管理者 / RBAC / 監査**。
+Phase 6 の計画は `docs/phase6-passkey-webauthn-実装計画.md`（D-34-01〜D-34-16）。
+
+Phase 6 の要点:
+- `src/lib/auth/passkey/config.ts` — `rpID` / `rpName` / 許可 origin を**環境変数から明示解決**する。
+  **request / headers を受け取らない**（Host 偽装での検証迂回を防ぐ・D-34-01）。`isPasskeyEnabled()` は
+  設定不備でも throw せず `false`（ログイン画面を壊さない）。
+- `src/lib/auth/passkey/challenge.ts` — challenge は TTL 5 分・**単文 UPDATE の更新行数で 1 回限り消費**（D-34-05 / D-16）。
+- `src/lib/auth/passkey/registration.ts` / `authentication.ts` — 検証は `@simplewebauthn/server` に委譲（自作禁止・D-34-03）。
+  challenge は**文字列のまま渡さず** `isoBase64URL.toBuffer()` でバイト列に変換して渡す（文字列渡しは UTF-8 再エンコードで値が変わる）。
+- `src/lib/db/queries/webauthn.ts` — `advanceSignCount` は単文 UPDATE。`newCounter === 0` は `last_used_at` のみ更新（D-34-06）。
+- `src/lib/auth/strong-reauth.ts` — 検証器配列は「パスワード＋コード → Passkey」の順（D-34-11）。
+  `strong_reauth_methods` は Passkey を 1 件以上持つときだけ `['password','passkey']`。
+- UI は `PasskeyPanel`（登録・一覧・削除）／`PasskeyLoginButton`（`/login`）／`StrongReauthDialog` の Passkey タブ。
+  Passkey の有無は**サーバ側で判定して props で渡す**（BUG-11）。
+- ログの `SENSITIVE_KEYS` に `credentialid` / `publickey` / `challenge` / `signature` 等を追加済み。
 
 Phase 5 で得た知見（次フェーズでも効くもの）:
 - 2FA 有効化（`setup` → `verify`）は `enabled=false` の保留行に対してコード検証する。

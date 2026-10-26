@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     return handleSuccess({
       enabled,
       recovery_codes_remaining: remaining,
-      strong_reauth_methods: availableStrongReauthMethods(user),
+      strong_reauth_methods: await availableStrongReauthMethods(user),
     });
   });
 }

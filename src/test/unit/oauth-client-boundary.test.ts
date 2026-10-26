@@ -27,6 +27,12 @@ const SERVER_ONLY_MODULES = [
   '@/lib/auth/oauth/redirect-uri',
   '@/lib/db/schema',
   '@/lib/db/client',
+  // Passkey / WebAuthn（Phase 6・BUG-11 の再発防止）。`config.ts` は `getEnv()` を、
+  // `queries/webauthn` は DB を参照するためクライアントから import してはいけない。
+  '@/lib/auth/passkey/config',
+  '@/lib/auth/passkey/registration',
+  '@/lib/auth/passkey/authentication',
+  '@/lib/db/queries/webauthn',
 ];
 
 function walk(dir: string): string[] {
