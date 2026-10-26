@@ -11,6 +11,7 @@ import { revokeAllSessions } from '@/lib/auth/session';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
 import { getRequestClientIp } from '@/lib/auth/session';
 import { sendChangeNotificationEmail } from '@/lib/auth/email/templates';
+import { deliverEmailSafely } from '@/lib/auth/email/deliver';
 import { z } from 'zod';
 
 const resetSchema = z.object({
@@ -56,10 +57,17 @@ export async function POST(request: NextRequest) {
 
       const user = await findUserById(result.userId);
       if (user) {
-        await sendChangeNotificationEmail(user.email, {
-          change: 'パスワードリセット',
-          time: new Date().toISOString(),
+        await deliverEmailSafely({
+          kind: 'change_notification',
+          userId: result.userId,
           ip,
+          userAgent: request.headers.get('user-agent') ?? '',
+          send: () =>
+            sendChangeNotificationEmail(user.email, {
+              change: 'パスワードリセット',
+              time: new Date().toISOString(),
+              ip,
+            }),
         });
       }
 
