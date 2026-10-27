@@ -55,6 +55,13 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
 - 一意性は **partial unique index**（`deleted_at IS NULL`）のみ。通常 UNIQUE は付けない（D-04）。
 - 「1 回限り」の値（token / state / claim）は **`UPDATE ... WHERE <未消費>` の更新行数**で消費する。
   read → 判定 → write の 2 段書きは禁止（D-16）。
+- `pnpm dev` の `relation "xxx" does not exist`（42P01）は**コードのバグではなく DB が古い**。
+  `pnpm db:migrate`（必要なら `pnpm seed`）で解消する。起動時に `scripts/server.ts` が
+  `assertSchemaReady()`（`src/lib/db/schema-readiness.ts`）で不足テーブルを検出し fail fast する（Phase 7 後）。
+- **drizzle-kit は `drizzle.__drizzle_migrations` の sha256 ハッシュで適用済みを判定し、
+  「最後に記録された migration より新しいもの」だけを適用する**。途中の migration が作ったテーブルを
+  手で DROP しても `pnpm db:migrate` は「success」と言うだけで再作成しない（その SQL を直接流すか、
+  該当行を消して以降を再適用する）。schema を疑ったら `pnpm db:verify-migrations` で往復検証する。
 
 ## 現在の到達点（2026-10-27 時点）
 
