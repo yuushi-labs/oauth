@@ -55,6 +55,16 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
 - 一意性は **partial unique index**（`deleted_at IS NULL`）のみ。通常 UNIQUE は付けない（D-04）。
 - 「1 回限り」の値（token / state / claim）は **`UPDATE ... WHERE <未消費>` の更新行数**で消費する。
   read → 判定 → write の 2 段書きは禁止（D-16）。
+- **partial unique index 違反を 500 にしない**。`deleted_at IS NULL` の一意制約に当たる更新
+  （メール変更確定・登録など）は、**消費前に衝突を検査して 409 を返す**（`findUserByLowerEmail`）。
+  500 は列挙オラクル（500=登録済み / 200=空き）になる。並行確定の保険として
+  `isUniqueViolation` も 409 に正規化する。検査は token 消費より前に置き、衝突でトークンを
+  焼かない（SEC-1）。
+- **Drizzle の失敗クエリはバインド値を `message` へ展開する**。error を丸ごとログへ流すと
+  保存済み argon2 ハッシュや PII が平文で残る。`logger` は argon2 パターンも伏せ字化する。
+  新しい機密形式を保存するときは `SENSITIVE_TEXT_PATTERNS` に追加する（SEC-3）。
+- **メール送信を伴う API は必ずレート制限を課す**（§4.3 / §18）。`RATE_LIMITS` と
+  `rateLimitKeys` に利用者単位＋ IP 単位の両方を足す（SEC-2。`emailChange` が抜けていた）。
 - `pnpm dev` の `relation "xxx" does not exist`（42P01）は**コードのバグではなく DB が古い**。
   `pnpm db:migrate`（必要なら `pnpm seed`）で解消する。起動時に `scripts/server.ts` が
   `assertSchemaReady()`（`src/lib/db/schema-readiness.ts`）で不足テーブルを検出し fail fast する（Phase 7 後）。
