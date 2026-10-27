@@ -49,6 +49,10 @@ const SENSITIVE_KEYS = new Set([
 
 const SENSITIVE_TEXT_PATTERNS: RegExp[] = [
   /(token|code_verifier|code|state|nonce|password|secret|pepper|api_key|apikey)=([^&\s"'`<>]+)/gi,
+  // argon2 ハッシュは資格情報そのもの。Drizzle の失敗クエリはバインド値を message へ
+  // 展開するため、エラーを丸ごとログへ流すと保存済みハッシュが平文で残る。
+  // ハッシュはパラメータ部にカンマを含むので、空白までを 1 トークンとして丸ごと伏せる。
+  /\$argon2[a-z0-9]*\$[^\s'"`<>]+/gi,
 ];
 
 export function isSensitiveKey(key: string): boolean {
@@ -57,7 +61,10 @@ export function isSensitiveKey(key: string): boolean {
 
 export function redactText(text: string): string {
   return SENSITIVE_TEXT_PATTERNS.reduce(
-    (acc, pattern) => acc.replace(pattern, (_match, key: string) => `${key}=${REDACTED}`),
+    (acc, pattern) =>
+      acc.replace(pattern, (_match: string, key?: string) =>
+        typeof key === 'string' ? `${key}=${REDACTED}` : REDACTED,
+      ),
     text,
   );
 }

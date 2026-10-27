@@ -161,4 +161,14 @@ describe('Security - Log Redaction', () => {
     expect(result.deviceName).toBe('MacBook の Touch ID');
     expect(result.signCount).toBe(5);
   });
+
+  it('redactText masks argon2 password hashes embedded in DB error messages', () => {
+    const input =
+      'Failed query: insert into "users" ... params: usr_1,user,user@example.com,false,'
+      + '$argon2id$v=19$m=65536,t=3,p=4$FMsGOawt+ruw4dI+paVGNw$QgJlmaSCopYpvpx6RU91Wp+tO1U2rQf0I20rKqTsdSk,pending_email,role_user';
+    const result = redactText(input);
+    expect(result).not.toContain('$argon2id$');
+    expect(result).not.toContain('QgJlmaSCopYpvpx6RU91Wp');
+    expect(result).toContain('***');
+  });
 });

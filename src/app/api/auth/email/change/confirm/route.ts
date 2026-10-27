@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withAuthPipeline, failResponse, handleSuccess } from '@/lib/api/utils';
 import { hashToken } from '@/lib/auth/tokens/generate';
 import { verifyAndConsumeToken } from '@/lib/auth/tokens/verify';
-import { updateUser, findUserById } from '@/lib/db/queries/users';
-import { markEmailChangeNotified } from '@/lib/db/queries/tokens';
+import { findUserById, findUserByLowerEmail } from '@/lib/db/queries/users';
+import { markEmailChangeNotified, findEmailChangeRequestByHash } from '@/lib/db/queries/tokens';
+import { isUniqueViolation } from '@/lib/db/sql-state';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
 import { getRequestClientIp } from '@/lib/auth/session';
 import { sendChangeNotificationEmail } from '@/lib/auth/email/templates';
@@ -37,6 +38,18 @@ export async function POST(request: NextRequest) {
       const { token } = confirmSchema.parse(body);
 
       const hash = hashToken(token);
+
+      // §14: the target address must not already belong to another account. Checked before the
+      // token is consumed so a collision does not burn the one-time token, and so the unique
+      // index violation cannot surface as a 500. The atomic consume below still closes the race.
+      const pending = await findEmailChangeRequestByHash(hash);
+      if (pending && pending.purpose === 'email_change' && !pending.usedAt && pending.expiresAt > new Date()) {
+        const owner = await findUserByLowerEmail(pending.newEmail);
+        if (owner && owner.id !== pending.userId) {
+          return failResponse('EMAIL_CONFLICT', 'このメールアドレスは別のアカウントに登録済みです', 409);
+        }
+      }
+
       const result = await verifyAndConsumeToken(hash, 'email_change');
       if (!result.valid || !result.userId || !result.newEmail) {
         return failResponse('INVALID_TOKEN', 'リンクが無効か、有効期限が切れています', 400);
@@ -51,12 +64,20 @@ export async function POST(request: NextRequest) {
       const oldEmail = user?.email ?? null;
 
       const db = getDb();
-      await db.transaction(async (tx) => {
-        await tx
-          .update(users)
-          .set({ email: newEmail, emailVerified: true, updatedAt: new Date() })
-          .where(eq(users.id, userId));
-      });
+      try {
+        await db.transaction(async (tx) => {
+          await tx
+            .update(users)
+            .set({ email: newEmail, emailVerified: true, updatedAt: new Date() })
+            .where(eq(users.id, userId));
+        });
+      } catch (error) {
+        // 並行して同じアドレスが確定した場合の保険（unique index 違反）。
+        if (isUniqueViolation(error)) {
+          return failResponse('EMAIL_CONFLICT', 'このメールアドレスは別のアカウントに登録済みです', 409);
+        }
+        throw error;
+      }
 
       await recordSecurityEvent(
         'email_changed',

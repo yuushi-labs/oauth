@@ -14,6 +14,10 @@ export const RATE_LIMITS = {
     user: { window: 3_600_000, limit: 5, softLimit: 4 },
     ip: { window: 3_600_000, limit: 10, softLimit: 5 },
   },
+  emailChange: {
+    user: { window: 3_600_000, limit: 5, softLimit: 4 },
+    ip: { window: 3_600_000, limit: 10, softLimit: 5 },
+  },
   oauth: {
     start: { window: 600_000, limit: 10, softLimit: 5 },
     callback: { window: 600_000, limit: 20, softLimit: 10 },
