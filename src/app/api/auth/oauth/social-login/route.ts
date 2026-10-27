@@ -4,6 +4,7 @@ import { RATE_LIMITS } from '@/config/rate-limits';
 import { rateLimitKeys } from '@/lib/auth/rate-limit-keys';
 import { rateLimiter, type FailedAttemptReservation } from '@/lib/auth/rate-limit';
 import { createSession, getRequestClientIp } from '@/lib/auth/session';
+import { sessionMaxAgeSecondsForRole } from '@/lib/auth/admin-policy';
 import { buildClearedSocialClaimCookie, getSocialClaimCookieName, setAnonCookie, setSessionCookie } from '@/lib/auth/cookie';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
 import { verifyPassword } from '@/lib/auth/password';
@@ -244,7 +245,11 @@ async function issueSession(
   ip: string,
   userAgent: string,
 ): Promise<void> {
-  const { token, session } = await createSession(user.id, request, { reauthVerified: true });
+  const sessionMaxAgeSeconds = sessionMaxAgeSecondsForRole(user.roleId);
+  const { token, session } = await createSession(user.id, request, {
+    reauthVerified: true,
+    ...(sessionMaxAgeSeconds ? { sessionMaxAgeSeconds } : {}),
+  });
   await setSessionCookie(token);
   await setAnonCookie(session.csrfSecret);
 

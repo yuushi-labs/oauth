@@ -314,6 +314,10 @@
 
 - [x] `src/test/security/rate-limit.test.ts` に `RATE_LIMITS.passkey`（30/300_000）を追加
 - [x] `src/test/security/security-events-coverage.test.ts` に `passkey/**` ルートの `recordSecurityEvent` を追加
+- [x] **アカウント削除で Passkey を無効化する（仕様 §24 / issue #19）**
+  - [x] `DELETE /api/auth/account` に `deleteCredentialsByUser(user.id)` を追加（`revokeUserOidcGrants` の隣）
+  - [x] 回帰テスト: `src/test/security/account-delete-passkey.test.ts`（削除後に `webauthn_credentials` が 0 件）
+  - [x] 根拠: §24「削除開始時に Passkey 無効化」。Passkey 導入前は対象が無く未実装だった（`docs/phase-verification-report-2026-10-26.md` §3.4）
 - [x] `src/test/integration/purge-expired.test.ts`（P6-B-10 で追加済み）を再確認
 - [x] **静的検査**を追加（計画 §11.3）
   - [x] `passkey/config` / `db/queries/webauthn` がクライアントから import されていない

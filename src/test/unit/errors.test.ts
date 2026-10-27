@@ -47,6 +47,13 @@ describe('ApiError', () => {
     expect(new ApiError('TOTP_ALREADY_ENABLED').status).toBe(409);
     expect(new ApiError('EMAIL_NOT_VERIFIED').status).toBe(403);
   });
+
+  it('Phase 7 の新コードは §50 / §51 / §49 の status を持つ', () => {
+    expect(new ApiError('FORBIDDEN').status).toBe(403);
+    expect(new ApiError('ADMIN_2FA_REQUIRED').status).toBe(403);
+    expect(new ApiError('CANNOT_TARGET_SELF').status).toBe(409);
+    expect(new ApiError('ADMIN_NOT_FOUND').status).toBe(404);
+  });
 });
 
 describe('normalizeError', () => {

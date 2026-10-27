@@ -18,6 +18,7 @@ import { getCookieToken, handleApiError, rateLimitResponse } from '@/lib/api/uti
 import { ApiError } from '@/lib/errors';
 import { getProvider } from '@/lib/auth/oauth/registry';
 import { redirectUriFor } from '@/lib/auth/oauth/redirect-uri';
+import { sessionMaxAgeSecondsForRole } from '@/lib/auth/admin-policy';
 import { ProviderError } from '@/lib/auth/oauth/provider-error';
 import { consumeOAuthState } from '@/lib/auth/oauth/state';
 import { issueSocialClaim } from '@/lib/auth/oauth/social-claim';
@@ -214,7 +215,11 @@ async function completeLoginCallback(args: {
   }
 
   // 既存ログイン・新規登録のどちらでも**必ず新しいセッションを発行する**（§6.2）。
-  const { token, session } = await createSession(outcome.user.id, request);
+  // 管理者は 8 時間の短命セッション（§51・D-35-03）。
+  const sessionMaxAgeSeconds = sessionMaxAgeSecondsForRole(outcome.user.roleId);
+  const { token, session } = await createSession(outcome.user.id, request, {
+    ...(sessionMaxAgeSeconds ? { sessionMaxAgeSeconds } : {}),
+  });
   await setSessionCookie(token);
   await setAnonCookie(session.csrfSecret);
 

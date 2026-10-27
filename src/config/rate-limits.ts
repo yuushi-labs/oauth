@@ -25,6 +25,10 @@ export const RATE_LIMITS = {
     create: { window: 3_600_000, limit: 5, softLimit: 4 },
     mutation: { window: 600_000, limit: 30, softLimit: 15 },
   },
+  admin: {
+    read: { window: 60_000, limit: 120, softLimit: 60 },
+    mutation: { window: 60_000, limit: 60, softLimit: 30 },
+  },
   oidc: {
     authorize: { window: 600_000, limit: 30 },
     interaction: { window: 600_000, limit: 60 },

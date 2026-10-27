@@ -5,6 +5,7 @@ import { findUserById } from '@/lib/db/queries/users';
 import { revokeAllSessions } from '@/lib/auth/session';
 import { invalidateAllUserTokens } from '@/lib/db/queries/tokens';
 import { revokeUserOidcGrants } from '@/lib/oidc/grants';
+import { deleteCredentialsByUser } from '@/lib/db/queries/webauthn';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
 import { getRequestClientIp } from '@/lib/auth/session';
 import { sendAccountDeletionEmail } from '@/lib/auth/email/templates';
@@ -22,6 +23,8 @@ export async function DELETE(request: NextRequest) {
       await softDeleteUser(user.id);
       await revokeAllSessions(user.id, 'account_delete');
       await invalidateAllUserTokens(user.id);
+      // §24: アカウント削除時は Passkey も無効化する（論理削除中も残存させない）。
+      await deleteCredentialsByUser(user.id);
       const revokedClients = await revokeUserOidcGrants(user.id);
 
       await recordSecurityEvent('account_deleted', user.id, getRequestClientIp(request), request.headers.get('user-agent') ?? '', { revokedOidcClients: revokedClients.length });

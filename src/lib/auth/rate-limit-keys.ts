@@ -49,4 +49,5 @@ export const rateLimitKeys = {
   passkeyIp: (ip: string) => `rl:passkey:ip:${hashRateLimitIp(ip)}`,
   settingsUser: (userId: string) => `rl:settings:user:${userId}`,
   oidcClientUser: (userId: string) => `rl:oidc-client:user:${userId}`,
+  adminUser: (userId: string) => `rl:admin:user:${userId}`,
 };

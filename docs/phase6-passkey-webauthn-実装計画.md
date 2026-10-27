@@ -129,6 +129,8 @@
 
 > **掃除ジョブについて**: `webauthn_challenges` は TTL 5 分。`scripts/purge-expired.ts` に **1 ジョブ追加**する（`expires_at < now()` または消費後 1 日経過を削除・D-31-17 と同じ方針）。`webauthn_credentials` は user 削除で CASCADE されるため追加不要。
 
+> **§24「アカウント削除時の Passkey 無効化」について（issue #19）**: 仕様 §24 は削除開始時に「Passkey 無効化」を要求する。本設計では (1) `findCredentialByCredentialId` が `deleted_at IS NULL` の user を JOIN するため**削除済みユーザーの credential ではログインできない**（§3 の表 #7）、(2) 物理削除は保持期間後の purge で CASCADE される、の 2 点で要件を満たす。ただし**論理削除の時点で credential 行を明示的に無効化する**方が §24 の文言に忠実で、ログイン経路の判定漏れにも強い。よって `DELETE /api/auth/account` に `deleteCredentialsByUser(user.id)` を追加する（`docs/phase6-実行Todo.md` P6-C-07 / issue #19・**実装済み**）。
+
 ---
 
 ## 4. 前提・着手前チェック

@@ -8,6 +8,7 @@ vi.mock('@/lib/db/client', () => ({
 }));
 
 import { recordSecurityEvent } from '@/lib/auth/security-events';
+import { parseId } from '@/lib/util/id';
 
 describe('Phase 2 security event coverage', () => {
   it('records the core Phase 1 authentication events from their endpoint handlers', () => {
@@ -41,6 +42,14 @@ describe('Phase 2 security event coverage', () => {
       ipMasked: '203.0.113.xxx',
       metadata: { scope: 'login' },
     }));
+  });
+
+  it('security_events.id は evt_ + ULID 26 文字（§59 / D-22）で、parseId が通る', async () => {
+    dbMock.values.mockClear();
+    await recordSecurityEvent('login_success', null, '203.0.113.42', 'test-agent');
+    const arg = dbMock.values.mock.calls.at(-1)?.[0] as { id: string };
+    expect(arg.id).toMatch(/^evt_[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(() => parseId(arg.id, 'evt')).not.toThrow();
   });
 });
 

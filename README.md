@@ -280,7 +280,7 @@ oauth/
 | M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | **実装完了（2026-10-18）**（+ Phase 4-B で連携確認画面を追加。**実ブラウザでの手動疎通 11 手順のみ未実施**） |
 | M5 | Phase 5 | TOTP 2FA + Recovery Codes | **完了（2026-10-24）**（API 6 本 ＋ UI。実機手動確認 11 項目も同日に実施済み） |
 | M6 | Phase 6 | Passkey / WebAuthn | **完了（2026-10-25）**（登録・ログイン・削除 API と UI。実機手動確認は実ブラウザ環境で未実施） |
-| M7 | Phase 7 | 管理者 / RBAC / 監査ログ | 未着手 |
+| M7 | Phase 7 | 管理者 / RBAC / 監査ログ | **完了（2026-10-27）**（RBAC ガード・管理 API 6 本・監査ログ・8h セッション。**UI はスコープ外**＝§34 に管理画面が無い） |
 | M8 | Phase 8-9 | リスク検知 / セキュリティテスト完成 / 運用デプロイ | 未着手 |
 
 進捗の正本は `実装Todo.md` のチェックボックスです。
@@ -527,6 +527,50 @@ Passkey（WebAuthn）によるパスワードレスログインと、セキュ�
 UI: `/settings/security` の Passkey カード（`passkey-panel`）、`/login` の「パスキーでログイン」（`passkey-login-button`）、`strong-reauth-dialog` の Passkey タブ。Passkey の有無は**サーバー側で判定して props で渡す**（BUG-11）。
 
 **実装で見つけた欠陥の修正**: (1) challenge 文字列をそのまま `verify*` へ渡すと UTF-8 再エンコードで値が変わり常に検証失敗 → `isoBase64URL.toBuffer()` でバイト列に変換、(2) 重複登録（`credential_id` 一意制約違反）が 500 になっていたのを `isUniqueViolation`（`err.cause.code` も参照）で 409 `CREDENTIAL_ALREADY_REGISTERED` に修正、(3) テスト env の `WEBAUTHN_RP_ID` / origin が `127.0.0.1` と `localhost` で不一致だったのを統一（rpID は origin host のサフィックスでなければならない）。
+
+---
+
+## Phase 7 実装詳細（2026-10-27 / 実装完了）
+
+計画: `docs/phase7-admin-rbac-audit-実装計画.md`（v1.0 / D-35-01〜D-35-12）、実行手順: `docs/phase7-実行Todo.md`
+
+RBAC（role rank 比較）・管理者ポリシー（2FA 必須・再認証・8h セッション）・管理 API・監査ログを実装しました。**管理 UI はスコープ外**です（仕様 §34 に管理画面が無いため、認可はすべてサーバー側で完結・D-35-02）。
+
+| API | 役割 |
+|---|---|
+| `GET /api/admin/users` | ユーザー一覧（**secret 列を一切返さない**。`has_password` / `has_2fa` / `passkey_count` に畳む・§45） |
+| `POST /api/admin/users/{id}/suspend` | 停止（対象の全セッションを失効・`admin_user_suspended`） |
+| `POST /api/admin/users/{id}/unsuspend` | 停止解除（`admin_user_unsuspended`） |
+| `POST /api/admin/users/{id}/sessions/revoke` | セッション全失効（`admin_session_revoked`） |
+| `POST /api/admin/users/{id}/delete` | 論理削除（`admin_account_deleted`・§61） |
+| `GET /api/admin/audit-logs` | 監査ログ一覧（`admin_audit_logs` のみ・`no-store`） |
+
+**DoD**: 仕様 §49 / §50 / §51 / §61 を充足。`pnpm lint`（0 errors）/ `typecheck` / `test`（**110 files / 765 tests**、Phase 6 比 +7 files / +58 tests）/ `build` / `db:verify-migrations`（0019 の up/down/往復/restore）すべて green。
+
+| 脅威 | 対策 |
+|---|---|
+| 一般ユーザーが管理 API を叩く | `withAdminPipeline` が `requireAdminAccess`（role ≥ admin）で 403 `FORBIDDEN`（§49・D-35-02） |
+| 2FA 未設定の管理者 | 管理 API 入口で 403 `ADMIN_2FA_REQUIRED`（D-35-04）。ログイン自体は止めない（恒久ロックアウト回避） |
+| セッション窃取だけで管理操作 | 管理 API は **GET も含めすべて再認証必須**（5 分猶予・D-35-05） |
+| 管理者が自分を停止・削除 | 409 `CANNOT_TARGET_SELF`（D-35-10） |
+| 存在しない / 論理削除済みユーザーの存在確認 | 404 `ADMIN_NOT_FOUND` に丸める（§49・D-35-11） |
+| 管理画面からの secret 漏洩 | `listAdminUsers` が secret 列を select しない。監査 metadata も許可キーのみ（§45・D-35-09） |
+| 監査証跡と本人向けセキュリティログの混在 | `admin_audit_logs` に**別テーブル**で保存（§61・D-35-07）。`security_events` には入れない |
+| 管理者セッションの長期化 | role ≥ admin は **8 時間**（絶対も 8 時間・D-35-03）。既定は従来どおり 30 日 |
+
+---
+
+## 検証フォローアップ修正（2026-10-27）
+
+`docs/phase-verification-report-2026-10-26.md` の要フォロー 3 件（issue #19 / #20 / #21）をすべて解消しました。
+
+| issue | 内容 | 対応 |
+|---|---|---|
+| #20 | `security_events.id` が ID 規約（`evt_` + ULID 26 文字）違反 | `newId('evt')` に変更。`parseId` が通ることをテストで固定 |
+| #19 | §24 アカウント削除時に Passkey を無効化していない | `DELETE /api/auth/account` に `deleteCredentialsByUser(user.id)` を追加。実 DB で credential 0 件を固定 |
+| #21 | `rotateSession()` が死蔵コード（呼び出し元・テスト 0 件） | 削除（§6.2 は `createSession` の新規発行で充足） |
+
+**追加で検出・修正した欠陥**: `GET /api/auth/oauth/{provider}/callback` が管理者の短命セッション（8h・§51 / D-35-03）を適用しておらず、OAuth ログイン経由の管理者だけ 30 日セッションを得られる抜け道がありました。callback に適用を追加し、session 発行 4 経路すべてが `sessionMaxAgeSecondsForRole` を使うことを静的検査で固定しました。
 
 ---
 

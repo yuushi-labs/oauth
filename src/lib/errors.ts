@@ -26,6 +26,10 @@ export const ERROR_CODES = [
   'TOTP_ALREADY_ENABLED',
   'EMAIL_NOT_VERIFIED',
   'CREDENTIAL_ALREADY_REGISTERED',
+  'FORBIDDEN',
+  'ADMIN_2FA_REQUIRED',
+  'CANNOT_TARGET_SELF',
+  'ADMIN_NOT_FOUND',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -58,6 +62,10 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   TOTP_ALREADY_ENABLED: 409,
   EMAIL_NOT_VERIFIED: 403,
   CREDENTIAL_ALREADY_REGISTERED: 409,
+  FORBIDDEN: 403,
+  ADMIN_2FA_REQUIRED: 403,
+  CANNOT_TARGET_SELF: 409,
+  ADMIN_NOT_FOUND: 404,
 };
 
 const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
@@ -88,6 +96,10 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   TOTP_ALREADY_ENABLED: '2 段階認証は既に有効です。',
   EMAIL_NOT_VERIFIED: 'メールアドレスの確認が必要です。',
   CREDENTIAL_ALREADY_REGISTERED: 'このパスキーは既に登録されています。',
+  FORBIDDEN: 'この操作を行う権限がありません。',
+  ADMIN_2FA_REQUIRED: '管理者は 2 段階認証の有効化が必要です。',
+  CANNOT_TARGET_SELF: '自分自身に対してこの操作はできません。',
+  ADMIN_NOT_FOUND: '対象のユーザーが見つかりません。',
 };
 
 export function defaultMessage(code: ErrorCode): string {

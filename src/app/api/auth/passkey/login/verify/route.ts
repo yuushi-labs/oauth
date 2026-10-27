@@ -8,6 +8,7 @@ import { findUserById } from '@/lib/db/queries/users';
 import { loginVerifySchema } from '@/lib/validate/passkey';
 import type { AuthenticationResponseJSON } from '@simplewebauthn/server';
 import { createSession, getRequestClientIp } from '@/lib/auth/session';
+import { sessionMaxAgeSecondsForRole } from '@/lib/auth/admin-policy';
 import { setSessionCookie, setAnonCookie } from '@/lib/auth/cookie';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
 import { rateLimiter } from '@/lib/auth/rate-limit';
@@ -92,8 +93,11 @@ export async function POST(request: NextRequest) {
       return failResponse('INVALID_CODE', 'パスキーでログインできませんでした', 400);
     }
 
-    // 6. 新セッションを発行する（既存セッションは奪わない・D-34-07）。
-    const { token, session } = await createSession(user.id, request);
+    // 6. 新セッションを発行する（既存セッションは奪わない・D-34-07）。管理者は 8 時間（§51）。
+    const sessionMaxAgeSeconds = sessionMaxAgeSecondsForRole(user.roleId);
+    const { token, session } = await createSession(user.id, request, {
+      ...(sessionMaxAgeSeconds ? { sessionMaxAgeSeconds } : {}),
+    });
     await setSessionCookie(token);
     await setAnonCookie(session.csrfSecret);
 

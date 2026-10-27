@@ -1,6 +1,7 @@
 import { getDb } from '@/lib/db/client';
 import { securityEvents, type SecurityEventType } from '@/lib/db/schema';
 import { maskIp } from '@/lib/util/ip';
+import { newId } from '@/lib/util/id';
 
 export async function recordSecurityEvent(
   type: SecurityEventType,
@@ -11,7 +12,7 @@ export async function recordSecurityEvent(
 ): Promise<void> {
   const db = getDb();
   await db.insert(securityEvents).values({
-    id: `evt_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+    id: newId('evt'),
     userId,
     eventType: type,
     ip,

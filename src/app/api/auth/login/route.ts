@@ -13,6 +13,7 @@ import { ApiError } from '@/lib/errors';
 import type { FailedAttemptReservation } from '@/lib/auth/rate-limit';
 import { findUserByEmailOrUsername } from '@/lib/db/queries/users';
 import { findTotpByUserId } from '@/lib/db/queries/totp';
+import { sessionMaxAgeSecondsForRole } from '@/lib/auth/admin-policy';
 import { isFirstSessionFromDevice, notifyNewDeviceLogin } from '@/lib/auth/notifications';
 import { z } from 'zod';
 
@@ -115,15 +116,21 @@ export async function POST(request: NextRequest) {
 
       // 2FA 有効なら保留セッションを発行する（D-33-07）。ログイン完了は昇格時（challenge/verify）。
       const totpRow = await findTotpByUserId(user.id);
+      const sessionMaxAgeSeconds = sessionMaxAgeSecondsForRole(user.roleId);
       if (totpRow?.enabled) {
-        const { token, session } = await createSession(user.id, request, { totpPending: true });
+        const { token, session } = await createSession(user.id, request, {
+          totpPending: true,
+          ...(sessionMaxAgeSeconds ? { sessionMaxAgeSeconds } : {}),
+        });
         await setSessionCookie(token);
         await setAnonCookie(session.csrfSecret);
         // login_success も新規デバイス通知も**まだ記録しない**（2FA 未完了・T14）。
         return handleSuccess({ twoFactorRequired: true });
       }
 
-      const { token, session } = await createSession(user.id, request);
+      const { token, session } = await createSession(user.id, request, {
+        ...(sessionMaxAgeSeconds ? { sessionMaxAgeSeconds } : {}),
+      });
       await setSessionCookie(token);
       await setAnonCookie(session.csrfSecret);
 

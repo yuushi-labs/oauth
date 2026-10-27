@@ -134,6 +134,13 @@
       "when": 1793050324831,
       "tag": "0018_passkey",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793056047455,
+      "tag": "0019_admin_rbac_audit",
+      "breakpoints": true
     }
   ]
 }

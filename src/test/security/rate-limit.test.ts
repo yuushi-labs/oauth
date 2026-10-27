@@ -41,4 +41,12 @@ describe('Security - Rate Limiting Configuration', () => {
     expect(RATE_LIMITS.passkey.limit).toBe(30);
     expect(RATE_LIMITS.passkey.window).toBe(300_000);
   });
+
+  it('管理 API は read / mutation で分離されている（Phase 7・§51）', () => {
+    expect(RATE_LIMITS.admin.read.limit).toBe(120);
+    expect(RATE_LIMITS.admin.read.window).toBe(60_000);
+    expect(RATE_LIMITS.admin.mutation.limit).toBe(60);
+    expect(RATE_LIMITS.admin.mutation.window).toBe(60_000);
+    expect(RATE_LIMITS.admin.mutation.limit).toBeLessThan(RATE_LIMITS.admin.read.limit);
+  });
 });

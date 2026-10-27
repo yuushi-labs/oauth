@@ -273,6 +273,15 @@ async function main(): Promise<void> {
       ['webauthn_credentials.sign_count 列がある', (afterUp.columns.webauthn_credentials ?? []).includes('sign_count')],
       ['webauthn_challenges に expires_at の index がある',
         (afterUp.indexes.webauthn_challenges ?? []).includes('webauthn_challenges_expires_at_idx')],
+      ['role_permissions テーブルが存在する（migration 0019）', afterUp.tables.includes('role_permissions')],
+      ['admin_audit_logs テーブルが存在する（migration 0019）', afterUp.tables.includes('admin_audit_logs')],
+      ['role_permissions は roles への外部キーを持つ',
+        Object.values(afterUp.foreignKeys).flat().includes('role_permissions_role_id_roles_id_fk')],
+      ['admin_audit_logs は users への外部キーを 2 本持つ',
+        Object.values(afterUp.foreignKeys).flat().includes('admin_audit_logs_actor_user_id_users_id_fk')
+        && Object.values(afterUp.foreignKeys).flat().includes('admin_audit_logs_target_user_id_users_id_fk')],
+      ['admin_audit_logs に created_at の index がある',
+        (afterUp.indexes.admin_audit_logs ?? []).includes('admin_audit_logs_created_at_idx')],
     ];
     for (const [label, ok] of expectations) {
       process.stdout.write(`- ${ok ? '✅' : '❌'} ${label}\n`);

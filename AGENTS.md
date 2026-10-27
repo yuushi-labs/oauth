@@ -56,9 +56,31 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
 - 「1 回限り」の値（token / state / claim）は **`UPDATE ... WHERE <未消費>` の更新行数**で消費する。
   read → 判定 → write の 2 段書きは禁止（D-16）。
 
-## 現在の到達点（2026-10-25 時点）
+## 現在の到達点（2026-10-27 時点）
 
-M0〜M6 完了（Phase 0 / 1 / 2 / 2.5 / 2.6 / 3 / 4 / 4-B / 5 / **6**）。**次は Phase 7（M7）: 管理者 / RBAC / 監査**。
+M0〜M7 完了（Phase 0 / 1 / 2 / 2.5 / 2.6 / 3 / 4 / 4-B / 5 / 6 / **7**）。**次は Phase 8（M8）: リスク検知 / テスト完成**。
+Phase 7 の計画は `docs/phase7-admin-rbac-audit-実装計画.md`（D-35-01〜D-35-12）。**UI はスコープ外**（§34 に管理画面が無い）。
+
+Phase 7 の要点:
+- `src/lib/auth/admin-policy.ts` — 認可は **role rank** 比較（`user`=0 / `moderator`=1 / `admin`=2 / `superadmin`=3、未知は -1）。
+  `requireRole(user, 'admin')` は 403 `FORBIDDEN`。`requireAdminAccess(user)` は **role ≥ admin ＋ 2FA 有効**を必須にする
+  （未設定は 403 `ADMIN_2FA_REQUIRED`・D-35-04）。**request / headers を受け取らない**（§49）。
+- `src/lib/api/admin.ts` — 管理 API の共通ラッパー `withAdminPipeline(request, scope, handler)`。
+  `requireAuth` ＋ `requireReauth`（**GET も含めすべて**・D-35-05）→ `requireAdminAccess` → レート制限（read / mutation）の順。
+- `src/lib/auth/audit.ts` — `recordAdminAudit()` は `admin_audit_logs`（**`security_events` とは別テーブル**・D-35-07）に追記。
+  metadata は許可キー（`count` / `reason` / `status` / `sessions`）のみ。**記録失敗で呼び出し元を失敗させない**。
+- `src/lib/db/queries/admin.ts` — `listAdminUsers` は **secret 列を select しない**（`has_password` / `has_2fa` /
+  `passkey_count` に畳む）。drizzle の相関サブクエリは `"id"` を非修飾で出すと内側の表に束縛されるため
+  **LEFT JOIN ＋ 集約**で書く（過去の地雷）。
+- `src/lib/api/admin-target.ts` — `resolveAdminTarget()`: 不正形式 / 不存在 / 論理削除済みは 404 `ADMIN_NOT_FOUND`（§49）、
+  自分自身は 409 `CANNOT_TARGET_SELF`（D-35-10）。
+- 管理者のログイン（password / passkey / social）は **8 時間セッション**（`sessionMaxAgeSecondsForRole`・D-35-03）。
+  既定は従来どおり 30 日。`createSession` の第 3 引数は options オブジェクト。
+- 管理 API: `GET /api/admin/users`・`POST /api/admin/users/{id}/{suspend,unsuspend,sessions/revoke,delete}`・
+  `GET /api/admin/audit-logs`。`AdminAuditAction` は 5 種。
+- テストは `src/test/security/{rbac,admin,audit-access}.test.ts` ＋ `src/test/integration/{admin-queries,admin-session-ttl}.test.ts`。
+  監査ログの 5 アクションが `admin_audit_logs` に入り、一般ユーザーは 403 で読めないことを固定する。
+
 Phase 6 の計画は `docs/phase6-passkey-webauthn-実装計画.md`（D-34-01〜D-34-16）。
 
 Phase 6 の要点:

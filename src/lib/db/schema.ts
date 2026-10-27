@@ -312,6 +312,8 @@ export const SECURITY_EVENT_TYPES = [
   'oauth_unlinked',
   'session_revoked',
   'account_deleted',
+  'account_suspended',
+  'account_unsuspended',
   'breach_check_fail_open',
   'rate_limited',
   'captcha_challenged',
@@ -593,3 +595,60 @@ export type WebauthnCredential = typeof webauthnCredentials.$inferSelect;
 export type NewWebauthnCredential = typeof webauthnCredentials.$inferInsert;
 export type WebauthnChallenge = typeof webauthnChallenges.$inferSelect;
 export type NewWebauthnChallenge = typeof webauthnChallenges.$inferInsert;
+
+/** 管理者の監査ログで記録するアクション（§61・D-35-07）。 */
+export const ADMIN_AUDIT_ACTIONS = [
+  'admin_user_viewed',
+  'admin_user_suspended',
+  'admin_user_unsuspended',
+  'admin_session_revoked',
+  'admin_account_deleted',
+] as const;
+export type AdminAuditAction = (typeof ADMIN_AUDIT_ACTIONS)[number];
+
+/**
+ * role → permission の対応（§50）。**MVP では使用しない**（将来拡張用・D-19）。
+ * 権限判定は `admin-policy.ts` の role rank で行う。
+ */
+export const rolePermissions = pgTable(
+  'role_permissions',
+  {
+    roleId: text('role_id')
+      .notNull()
+      .references(() => roles.id, { onDelete: 'cascade' }),
+    permission: text('permission').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.roleId, table.permission] })],
+);
+
+/**
+ * 管理者操作の監査ログ（§61）。通常の `security_events` とは**別テーブル**で、
+ * 一般ユーザーからは閲覧できない（D-35-07）。追記のみ（更新・削除の API を作らない）。
+ */
+export const adminAuditLogs = pgTable(
+  'admin_audit_logs',
+  {
+    id: text('id').primaryKey(),
+    actorUserId: text('actor_user_id')
+      .notNull()
+      .references(() => users.id),
+    action: text('action').notNull(),
+    targetUserId: text('target_user_id').references(() => users.id),
+    targetSessionId: text('target_session_id'),
+    ip: text('ip'),
+    ipMasked: text('ip_masked'),
+    userAgent: text('user_agent'),
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('admin_audit_logs_created_at_idx').on(table.createdAt),
+    index('admin_audit_logs_actor_user_id_idx').on(table.actorUserId),
+    index('admin_audit_logs_target_user_id_idx').on(table.targetUserId),
+  ],
+);
+
+export type RolePermission = typeof rolePermissions.$inferSelect;
+export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;
+export type NewAdminAuditLog = typeof adminAuditLogs.$inferInsert;

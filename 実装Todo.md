@@ -42,7 +42,7 @@
 | M4 ソーシャル | Phase 4 | Google/GitHub/Discord ログイン＋紐付け＋解除 | [x] 実装完了 2026-10-18（Phase 4-B で連携確認画面を追加。実 provider 疎通のみ未実施） |
 | M5 2FA | Phase 5 | TOTP＋Recovery Codes＋atomic 1回限り | [ ] 未着手 |
 | M6 Passkey | Phase 6 | Passkey 登録/ログイン/削除＋Level3検証 | [ ] 未着手 |
-| M7 管理者 | Phase 7 | RBAC＋監査ログ＋secret非露出 | [ ] 未着手 |
+| M7 管理者 | Phase 7 | RBAC＋監査ログ＋secret非露出 | [x] 実装完了 2026-10-27（P7-A-01〜P7-C-04。UI はスコープ外・§34） |
 | M8 完成 | Phase 8-9 | §48 テスト全件 green＋CI green＋バックアップ/監視 | [ ] 未着手 |
 
 **システム完成 = M8 達成**（＝仕様64章の完成条件。Appleのみ C-01 で除外）
@@ -514,20 +514,20 @@ Phase 4 の本体内で未だった 2 点（BUG-12 後の実ブラウザ検証�
 ## 9. Phase 7 — 管理者 / RBAC / 監査（1.5〜2日）
 
 - [x] **P7-01a** `roles` マイグレーション ＋ seed（user/moderator/admin/superadmin）— **Phase 0 で完了**（`drizzle/0000_01_roles.sql` / `pnpm seed`）
-- [ ] **P7-01b** `role_permissions` テーブル追加（将来拡張用。MVPでは使用しない＝D-19）
-- [ ] **P7-02** `requireRole()` ガード（**server-side のみ**、§49/§50）
-- [ ] **P7-03** 管理者ポリシー（§51）: **2FA必須**、Passkey推奨、セッション短め(8h)、再認証、管理操作ログ
-- [ ] **P7-04** `admin_audit_logs` マイグレーション ＋ `lib/auth/audit.ts`（**5種**アクション: `admin_user_viewed` / `admin_user_suspended` / `admin_user_unsuspended` / `admin_session_revoked` / `admin_account_deleted`）
-- [ ] **P7-05** `GET /api/admin/users`（requireRole(admin)、**PW/TOTP secret は絶対に返さない**・★）
-- [ ] **P7-06** `POST /api/admin/users/{id}/suspend` / `unsuspend`（監査ログ、対象session全revoke）
-- [ ] **P7-07** `POST /api/admin/users/{id}/sessions/revoke`（`admin_session_revoked`）
-- [ ] **P7-07b** `POST /api/admin/users/{id}/delete`（`admin_account_deleted`、§61）
-- [ ] **P7-08** `GET /api/admin/audit-logs`（requireRole(admin)以上、`admin_audit_logs` のみ）
-- [ ] **P7-09** 一般ユーザーから監査ログを遮断（API遮断＋可能ならDBロール分離）
+- [x] **P7-01b** `role_permissions` テーブル追加（将来拡張用。MVPでは使用しない＝D-19）
+- [x] **P7-02** `requireRole()` ガード（**server-side のみ**、§49/§50）
+- [x] **P7-03** 管理者ポリシー（§51）: **2FA必須**、Passkey推奨、セッション短め(8h)、再認証、管理操作ログ
+- [x] **P7-04** `admin_audit_logs` マイグレーション ＋ `lib/auth/audit.ts`（**5種**アクション: `admin_user_viewed` / `admin_user_suspended` / `admin_user_unsuspended` / `admin_session_revoked` / `admin_account_deleted`）
+- [x] **P7-05** `GET /api/admin/users`（requireRole(admin)、**PW/TOTP secret は絶対に返さない**・★）
+- [x] **P7-06** `POST /api/admin/users/{id}/suspend` / `unsuspend`（監査ログ、対象session全revoke）
+- [x] **P7-07** `POST /api/admin/users/{id}/sessions/revoke`（`admin_session_revoked`）
+- [x] **P7-07b** `POST /api/admin/users/{id}/delete`（`admin_account_deleted`、§61）
+- [x] **P7-08** `GET /api/admin/audit-logs`（requireRole(admin)以上、`admin_audit_logs` のみ）
+- [x] **P7-09** 一般ユーザーから監査ログを遮断（API遮断＋可能ならDBロール分離）
 
 **DoD（Phase 7）**
-- [ ] `src/test/security/{rbac,admin,audit-access}.test.ts` green
-- [ ] 管理者APIが secret を一切返さないことをテストで固定
+- [x] `src/test/security/{rbac,admin,audit-access}.test.ts` green
+- [x] 管理者APIが secret を一切返さないことをテストで固定
 
 ---
 
