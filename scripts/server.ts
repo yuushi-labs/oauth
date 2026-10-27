@@ -389,6 +389,13 @@ export async function startServer(options: { dev: boolean; port: number; hostnam
   const { default: next } = await import('next');
   const app = next({ dev, hostname, port });
   await app.prepare();
+  // migration 未適用のまま起動すると、初回リクエストが `relation "xxx" does not exist` の
+  // 500 になる。原因が分かりにくいので、`.env` を読み終えたここで不足テーブルを検出し
+  // fail fast する。NODE_ENV=test は自前で schema を用意するため対象外。
+  if (process.env.NODE_ENV !== 'test') {
+    const { assertSchemaReady } = await import('@/lib/db/schema-readiness');
+    await assertSchemaReady();
+  }
   const handleNext = app.getRequestHandler();
   const handleUpgrade = app.getUpgradeHandler();
   const provider = await getOidcProvider();
@@ -417,8 +424,12 @@ async function main(): Promise<void> {
 }
 
 if (process.env.NODE_ENV !== 'test') {
-  main().catch(() => {
+  main().catch((error: unknown) => {
+    if (error instanceof Error) {
+      process.stderr.write(`${error.message}\n`);
+    }
     process.stderr.write('Application server failed to start. Check the environment configuration.\n');
-    process.exitCode = 1;
+    // Next の dev は watcher が event loop を掴み続けるため、exitCode だけでは終了しない。
+    process.exit(1);
   });
 }
