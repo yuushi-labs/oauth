@@ -275,7 +275,7 @@ oauth/
 | M0 | Phase 0 | プロジェクト土台 | **完了** |
 | M1 | Phase 1 | メール/パスワード認証（登録・ログイン・確認・リセット・セッション・CSRF・レート制限） | **完了** |
 | M2 | Phase 2 | Webセキュリティ・CSRF・レート制限・期限切れデータ削除 | **完了（2026-10-12）** |
-| M2.5 | Phase 2.5 | 自作サービス向けOAuth 2.0 / OIDC Provider、scope・同意管理・client registry | **実装中** |
+| M2.5 | Phase 2.5 | 自作サービス向けOAuth 2.0 / OIDC Provider、scope・同意管理・client registry | **完了（2026-10-17）**（29/29 タスク。本番公開の運用確認のみ Phase 9 へ） |
 | M3 | Phase 3 | UI / テーマ / 通知メール / デバイス管理 | **完了（2026-10-17）**（共通UI・テーマ・設定画面・セッション管理・通知メール。実ブラウザ viewport 検証のみ Phase 8-B へ） |
 | M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | **実装完了（2026-10-18）**（+ Phase 4-B で連携確認画面を追加。**実ブラウザでの手動疎通 11 手順のみ未実施**） |
 | M5 | Phase 5 | TOTP 2FA + Recovery Codes | **完了（2026-10-24）**（API 6 本 ＋ UI。実機手動確認 11 項目も同日に実施済み） |
