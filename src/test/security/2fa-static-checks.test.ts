@@ -108,4 +108,12 @@ describe('Static - 再認証が必要な操作は REAUTH_REQUIRED をダイア�
     expect(source).toContain('ReauthDialog');
     expect(source).toContain('reauthOpen');
   });
+
+  // ReauthDialog は成功時に onOpenChange(false) を先に呼ぶ。onOpenChange 側で
+  // retryRef を破棄すると再認証後の再試行が失われる（実機で発見）。
+  it('passkey-panel は再認証後に登録を再試行する', () => {
+    const source = read('components/settings/passkey-panel.tsx');
+    expect(source).toContain('onOpenChange={setReauthOpen}');
+    expect(source).toMatch(/onReauthenticated=\{[\s\S]*?retryRef\.current[\s\S]*?retry\?\.\(\)/);
+  });
 });
