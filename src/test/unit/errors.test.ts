@@ -54,6 +54,10 @@ describe('ApiError', () => {
     expect(new ApiError('CANNOT_TARGET_SELF').status).toBe(409);
     expect(new ApiError('ADMIN_NOT_FOUND').status).toBe(404);
   });
+
+  it('Phase 7.5 の LAST_ADMIN は 409（D-36-03）', () => {
+    expect(new ApiError('LAST_ADMIN').status).toBe(409);
+  });
 });
 
 describe('normalizeError', () => {

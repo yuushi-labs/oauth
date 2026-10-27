@@ -9,6 +9,7 @@ import { APP_NAME } from '@/config/app';
 import { getSessionCookieName } from '@/lib/auth/cookie';
 import { getSession } from '@/lib/auth/session';
 import { findUserById } from '@/lib/db/queries/users';
+import { isAdminRole } from '@/lib/auth/admin-policy';
 import type { User } from '@/lib/db/schema';
 
 export type SettingsUser = { id: string; username: string; email: string; roleId: string };
@@ -26,7 +27,7 @@ export const requireSettingsUser = cache(async (): Promise<SettingsUser> => {
 });
 
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
-  await requireSettingsUser();
+  const user = await requireSettingsUser();
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -39,7 +40,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
         </div>
       </header>
       <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
-        <SettingsNav />
+        <SettingsNav isAdmin={isAdminRole(user.roleId)} />
         <div className="min-w-0 flex-1">{children}</div>
       </div>
     </div>

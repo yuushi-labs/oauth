@@ -314,6 +314,7 @@ export const SECURITY_EVENT_TYPES = [
   'account_deleted',
   'account_suspended',
   'account_unsuspended',
+  'role_changed',
   'breach_check_fail_open',
   'rate_limited',
   'captcha_challenged',
@@ -603,6 +604,7 @@ export const ADMIN_AUDIT_ACTIONS = [
   'admin_user_unsuspended',
   'admin_session_revoked',
   'admin_account_deleted',
+  'admin_role_changed',
 ] as const;
 export type AdminAuditAction = (typeof ADMIN_AUDIT_ACTIONS)[number];
 

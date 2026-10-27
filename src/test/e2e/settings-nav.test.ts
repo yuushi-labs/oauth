@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { startTestAppServer } from '../helpers/app-server';
 import { CookieJar, cleanupTestRows, httpRequest } from '../helpers/http';
 import { getPool } from '@/lib/db/client';
-import { DEFAULT_ROLE_ID } from '@/lib/db/schema';
+import { DEFAULT_ROLE_ID, ROLE_IDS } from '@/lib/db/schema';
 import { hashPassword } from '@/lib/auth/password';
 import { createSession } from '@/lib/auth/session';
 
@@ -22,6 +22,11 @@ const uid = randomBytes(4).toString('hex');
 const email = `settings-nav-${uid}@example.com`;
 const username = `settings_nav_${uid}`;
 const userId = `usr_settings_nav_${uid}`;
+
+const adminUid = randomBytes(4).toString('hex');
+const adminEmail = `settings-nav-admin-${adminUid}@example.com`;
+const adminUsername = `settings_nav_admin_${adminUid}`;
+const adminUserId = `usr_settings_nav_admin_${adminUid}`;
 
 const NAV_LINKS = [
   '/settings/account',
@@ -44,8 +49,12 @@ function jar(): CookieJar {
 }
 
 async function authedJar(): Promise<CookieJar> {
+  return sessionJar(userId);
+}
+
+async function sessionJar(id: string): Promise<CookieJar> {
   const cookieJar = jar();
-  const session = await createSession(userId, {
+  const session = await createSession(id, {
     headers: new Headers({
       'user-agent': 'Mozilla/5.0 (Windows NT 10.0) Chrome/140.0.0.0 Safari/537.36',
     }),
@@ -70,6 +79,17 @@ beforeAll(async () => {
       DEFAULT_ROLE_ID,
     ],
   );
+  await getPool().query(
+    `INSERT INTO users (id, username, email, email_verified, password_hash, status, role_id)
+     VALUES ($1, $2, $3, true, $4, 'active', $5) ON CONFLICT (id) DO NOTHING`,
+    [
+      adminUserId,
+      adminUsername,
+      adminEmail,
+      await hashPassword('Settings-Nav-Admin-Pass-2026!'),
+      ROLE_IDS.admin,
+    ],
+  );
 }, 120_000);
 
 afterEach(() => {
@@ -77,7 +97,7 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-  await cleanupTestRows({ emails: [email], usernames: [username], clientIds: [] });
+  await cleanupTestRows({ emails: [email, adminEmail], usernames: [username, adminUsername], clientIds: [] });
   if (app) await app.stop();
 }, 60_000);
 
@@ -108,5 +128,21 @@ describe('E2E - settings hamburger navigation', () => {
       cookie: cookieJar.header(),
     });
     expect(response.body).toContain('aria-current="page"');
+  }, 60_000);
+
+  it('一般ユーザーのナビに「管理」リンクは出ない（§49）', async () => {
+    const cookieJar = await authedJar();
+    const response = await httpRequest(`${app.origin}/settings/account`, {
+      cookie: cookieJar.header(),
+    });
+    expect(response.body).not.toContain('href="/admin/users"');
+  }, 60_000);
+
+  it('管理者のナビには「管理」リンクが出る（Phase 7.5）', async () => {
+    const cookieJar = await sessionJar(adminUserId);
+    const response = await httpRequest(`${app.origin}/settings/account`, {
+      cookie: cookieJar.header(),
+    });
+    expect(response.body).toContain('href="/admin/users"');
   }, 60_000);
 });

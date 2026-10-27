@@ -57,6 +57,7 @@ describe('Static - admin routes are guarded', () => {
     'users/route.ts',
     'users/[id]/suspend/route.ts',
     'users/[id]/unsuspend/route.ts',
+    'users/[id]/role/route.ts',
     'users/[id]/sessions/revoke/route.ts',
     'users/[id]/delete/route.ts',
     'audit-logs/route.ts',

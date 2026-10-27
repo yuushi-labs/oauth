@@ -26,6 +26,7 @@
     "oidc:load": "tsx scripts/oidc-load-test.ts",
     "db:verify-migrations": "tsx scripts/verify-migrations.ts",
     "seed": "tsx scripts/seed.ts",
+    "admin:grant": "tsx scripts/admin-grant.ts",
     "secrets:gen": "tsx scripts/generate-secrets.ts"
   },
   "dependencies": {

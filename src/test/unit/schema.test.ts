@@ -141,13 +141,14 @@ describe('admin_audit_logs (§61)', () => {
     ]);
   });
 
-  it('ADMIN_AUDIT_ACTIONS は 5 アクション（§11.6）', () => {
+  it('ADMIN_AUDIT_ACTIONS は 6 アクション（§11.6 + Phase 7.5）', () => {
     expect(ADMIN_AUDIT_ACTIONS).toEqual([
       'admin_user_viewed',
       'admin_user_suspended',
       'admin_user_unsuspended',
       'admin_session_revoked',
       'admin_account_deleted',
+      'admin_role_changed',
     ]);
   });
 });

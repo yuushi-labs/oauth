@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { parseId } from '@/lib/util/id';
+import { ROLE_IDS } from '@/lib/db/schema';
 
 /** 管理 API の一覧クエリ（§11.6）。 */
 export const listQuerySchema = z.object({
@@ -20,3 +21,13 @@ export const targetIdParamSchema = z
       return false;
     }
   }, '対象ユーザー ID の形式が正しくありません');
+
+/**
+ * role 変更の body（Phase 7.5）。付与可能な role は `admin-role.ts` の
+ * `isAssignableRole`（rank ≤ admin）で判定する。ここでは形式のみ検証する。
+ */
+const ROLE_IDS_VALUES = Object.values(ROLE_IDS) as [string, ...string[]];
+
+export const roleChangeSchema = z.object({
+  role_id: z.enum(ROLE_IDS_VALUES),
+});

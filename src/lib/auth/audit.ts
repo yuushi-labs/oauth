@@ -5,7 +5,7 @@ import { maskIp } from '@/lib/util/ip';
 import { logger } from '@/lib/util/logger';
 
 /** 監査ログの metadata に残してよいキー（§45・D-35-09）。 */
-const ALLOWED_METADATA_KEYS = new Set(['count', 'reason', 'status', 'sessions']);
+const ALLOWED_METADATA_KEYS = new Set(['count', 'reason', 'status', 'sessions', 'role', 'previous_role']);
 
 function filterMetadata(metadata: Record<string, unknown> | undefined): Record<string, unknown> | null {
   if (!metadata) return null;

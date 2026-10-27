@@ -30,6 +30,7 @@ export const ERROR_CODES = [
   'ADMIN_2FA_REQUIRED',
   'CANNOT_TARGET_SELF',
   'ADMIN_NOT_FOUND',
+  'LAST_ADMIN',
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -66,6 +67,7 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   ADMIN_2FA_REQUIRED: 403,
   CANNOT_TARGET_SELF: 409,
   ADMIN_NOT_FOUND: 404,
+  LAST_ADMIN: 409,
 };
 
 const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
@@ -100,6 +102,7 @@ const DEFAULT_MESSAGES: Record<ErrorCode, string> = {
   ADMIN_2FA_REQUIRED: '管理者は 2 段階認証の有効化が必要です。',
   CANNOT_TARGET_SELF: '自分自身に対してこの操作はできません。',
   ADMIN_NOT_FOUND: '対象のユーザーが見つかりません。',
+  LAST_ADMIN: '最後の管理者は降格できません。',
 };
 
 export function defaultMessage(code: ErrorCode): string {

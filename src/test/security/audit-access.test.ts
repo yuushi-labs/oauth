@@ -188,7 +188,7 @@ describe('Static - audit query isolation', () => {
     return files;
   }
 
-  it('listAdminAuditLogs は admin API 以外から import されない', () => {
+  it('listAdminAuditLogs は admin 画面 / 管理 API 以外から import されない', () => {
     const violations: string[] = [];
     for (const file of walk(SRC)) {
       if (file.endsWith('queries/audit-logs.ts')) continue;
@@ -197,7 +197,9 @@ describe('Static - audit query isolation', () => {
       if (normalized.includes('/src/test/')) continue;
       const source = readFileSync(file, 'utf8');
       if (!source.includes('listAdminAuditLogs')) continue;
-      if (!normalized.includes('/api/admin/')) violations.push(normalized.replace(SRC, 'src'));
+      // 管理 API（withAdminPipeline）と管理画面（requireAdminUser でガード）のみ許可する。
+      const guarded = normalized.includes('/api/admin/') || normalized.includes('/app/admin/');
+      if (!guarded) violations.push(normalized.replace(SRC, 'src'));
     }
     expect(violations).toEqual([]);
   });

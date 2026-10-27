@@ -13,6 +13,7 @@ import {
   Palette,
   Plug,
   ShieldCheck,
+  UserCog,
   UserRound,
   X,
   type LucideIcon,
@@ -33,6 +34,8 @@ const items: readonly NavItem[] = [
   { href: '/settings/applications', label: m('settings.applications'), Icon: AppWindow },
 ] as const;
 
+const adminItem: NavItem = { href: '/admin/users', label: m('settings.admin'), Icon: UserCog };
+
 const NAV_ID = 'settings-nav';
 
 /**
@@ -41,13 +44,18 @@ const NAV_ID = 'settings-nav';
  * モバイル（lg 未満）はハンバーガーで開閉する縦並び、デスクトップ（lg 以上）は
  * 常時表示のサイドバーに切り替える。表示は 1 つの `<ul>` を CSS で出し分けるため、
  * リンク先・項目数はどの幅でも同じ（機能は変えない）。
+ *
+ * `isAdmin` のときだけ「管理」リンクを末尾に足す。これは UX の補助で、
+ * 認可は `/admin` レイアウトの `requireAdminUser` がサーバー側で再判定する（§49）。
  */
-export function SettingsNav() {
+export function SettingsNav({ isAdmin = false }: { isAdmin?: boolean } = {}) {
   const pathname = usePathname() ?? '/settings';
   const currentPath = pathname.startsWith('/settings/applications')
     ? '/settings/applications'
     : pathname;
   const [open, setOpen] = useState(false);
+
+  const navItems = isAdmin ? [...items, adminItem] : items;
 
   // 遷移したらメニューを閉じる（モバイルで開いたままにならない）
   useEffect(() => {
@@ -102,7 +110,7 @@ export function SettingsNav() {
           {m('settings.title')}
         </p>
         <ul className="flex flex-col gap-1">
-          {items.map(({ href, label, Icon }) => {
+          {navItems.map(({ href, label, Icon }) => {
             const isCurrent = currentPath === href;
             return (
               <li key={href}>

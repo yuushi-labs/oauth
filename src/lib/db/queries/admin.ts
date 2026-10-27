@@ -1,6 +1,6 @@
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
-import { totp, users, webauthnCredentials } from '@/lib/db/schema';
+import { ROLE_IDS, totp, users, webauthnCredentials } from '@/lib/db/schema';
 
 /**
  * 管理者向けのユーザー一覧（§51・§11.6）。
@@ -82,4 +82,32 @@ export async function unsuspendUser(id: string): Promise<string> {
   const status = row?.emailVerified ? 'active' : 'pending_email';
   await db.update(users).set({ status, updatedAt: new Date() }).where(eq(users.id, id));
   return status;
+}
+
+/** role を変更する（Phase 7.5）。セッションは失効させない（D-36-04）。 */
+export async function setUserRole(id: string, roleId: string): Promise<void> {
+  const db = getDb();
+  await db.update(users).set({ roleId, updatedAt: new Date() }).where(eq(users.id, id));
+}
+
+/**
+ * `excludeUserId` を除いた「有効な管理者」の人数（D-36-03）。
+ *
+ * 有効 = `deleted_at IS NULL` かつ `status = 'active'` かつ rank ≥ admin。
+ * これが 0 のとき、対象を降格すると管理者が 0 人になる。
+ */
+export async function countOtherUsableAdmins(excludeUserId: string): Promise<number> {
+  const db = getDb();
+  const [row] = await db
+    .select({ total: sql<number>`count(*)::int` })
+    .from(users)
+    .where(
+      and(
+        ne(users.id, excludeUserId),
+        isNull(users.deletedAt),
+        eq(users.status, 'active'),
+        inArray(users.roleId, [ROLE_IDS.admin, ROLE_IDS.superadmin]),
+      ),
+    );
+  return row?.total ?? 0;
 }
