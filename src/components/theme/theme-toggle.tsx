@@ -23,7 +23,7 @@ export function ThemeToggle({ className, onError }: { className?: string; onErro
     <div
       role="group"
       aria-label={m('theme.toggleLabel')}
-      className={cn('inline-flex rounded-md border border-border bg-card p-1', className)}
+      className={cn('inline-flex shrink-0 rounded-md border border-border bg-card p-1', className)}
     >
       {THEME_PREFERENCES.map((value) => {
         const { label, Icon } = LABELS[value];
@@ -43,8 +43,8 @@ export function ThemeToggle({ className, onError }: { className?: string; onErro
               active ? 'bg-hover text-fg' : 'text-muted-fg hover:text-fg',
             )}
           >
-            <Icon aria-hidden className="size-4" />
-            <span>{label}</span>
+            <Icon aria-hidden className="size-4 shrink-0" />
+            <span className="whitespace-nowrap">{label}</span>
             {active && <span className="sr-only">{m('theme.selected')}</span>}
           </button>
         );

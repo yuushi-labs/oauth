@@ -3,6 +3,7 @@ import { CircleCheck, ShieldAlert } from 'lucide-react';
 import { BadgeCheck, KeyRound, Link2, MonitorSmartphone, Plug } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TwoFactorPanel } from '@/components/settings/two-factor-panel';
+import { EmailChangePanel } from '@/components/settings/email-change-panel';
 import { PasskeyPanel, type PasskeyRow } from '@/components/settings/passkey-panel';
 import { formatLocalDateTime } from '@/lib/util/datetime';
 import type { SessionRow } from '@/components/settings/session-list';
@@ -80,7 +81,7 @@ export function SecurityOverview({
         </CardContent>
       </Card>
 
-      {/* 2. メールアドレス */}
+      {/* 2. メールアドレス（表示＋変更フォーム）*/}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
@@ -88,9 +89,12 @@ export function SecurityOverview({
             {m('security.email')}
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-3 pt-0">
-          <p className="text-sm">{email}</p>
-          <StateBadge enabled={emailVerified} />
+        <CardContent className="flex flex-col gap-3 pt-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm">{email}</p>
+            <StateBadge enabled={emailVerified} />
+          </div>
+          <EmailChangePanel currentEmail={email} />
         </CardContent>
       </Card>
 

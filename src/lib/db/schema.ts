@@ -359,7 +359,8 @@ export const userPreferences = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     theme: text('theme').notNull().default('system'),
     language: text('language').notNull().default('ja'),
-    timezone: text('timezone').notNull().default('UTC'),
+    // 既定は Asia/Tokyo（§60 の例に合わせる。想定利用者は日本）。
+    timezone: text('timezone').notNull().default('Asia/Tokyo'),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

@@ -141,6 +141,13 @@
       "when": 1793056047455,
       "tag": "0019_admin_rbac_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793106272614,
+      "tag": "0020_bored_karen_page",
+      "breakpoints": true
     }
   ]
 }

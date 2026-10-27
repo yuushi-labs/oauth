@@ -24,9 +24,9 @@ vi.mock('@/lib/db/queries/users', async () => {
 
 let stored: Record<string, unknown> | null = null;
 vi.mock('@/lib/db/queries/user-preferences', () => ({
-  getUserPreferences: vi.fn(async (userId: string) => stored ?? ({ userId, theme: 'system', language: 'ja', timezone: 'UTC', updatedAt: new Date(0) })),
+  getUserPreferences: vi.fn(async (userId: string) => stored ?? ({ userId, theme: 'system', language: 'ja', timezone: 'Asia/Tokyo', updatedAt: new Date(0) })),
   upsertUserPreferences: vi.fn(async (userId: string, patch: Record<string, unknown>) => {
-    stored = { userId, ...(stored ?? { language: 'ja', timezone: 'UTC' }), ...patch, updatedAt: new Date() };
+    stored = { userId, ...(stored ?? { language: 'ja', timezone: 'Asia/Tokyo' }), ...patch, updatedAt: new Date() };
     return stored;
   }),
 }));
@@ -56,10 +56,10 @@ afterEach(() => {
 });
 
 describe('Security - user preferences (spec 40)', () => {
-  it('行が無い場合は既定（system/ja/UTC）を返す', async () => {
+  it('行が無い場合は既定（system/ja/Asia/Tokyo）を返す', async () => {
     const response = await getPreferences(request('GET'));
     expect(response.status).toBe(200);
-    expect((await response.json()).data).toMatchObject({ theme: 'system', language: 'ja', timezone: 'UTC' });
+    expect((await response.json()).data).toMatchObject({ theme: 'system', language: 'ja', timezone: 'Asia/Tokyo' });
     expect(response.headers.get('cache-control')).toBe('no-store');
   });
 

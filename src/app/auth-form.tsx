@@ -102,8 +102,8 @@ export function AuthForm({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-6 py-12">
-      <header className="flex items-start justify-between gap-3">
-        <div className="text-center">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 text-center">
           <Link className="text-2xl font-bold" href="/login">{APP_NAME}</Link>
           <p className="mt-2 text-sm text-muted-fg">{APP_DESCRIPTION}</p>
         </div>

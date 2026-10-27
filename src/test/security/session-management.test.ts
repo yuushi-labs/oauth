@@ -60,7 +60,7 @@ vi.mock('@/lib/db/queries/sessions', () => ({
     activeSessions.find((row) => row.id === id && row.userId === userId) ?? null),
 }));
 vi.mock('@/lib/db/queries/user-preferences', () => ({
-  getUserPreferences: vi.fn(async (userId: string) => ({ userId, theme: 'system', language: 'ja', timezone: 'UTC', updatedAt: new Date(0) })),
+  getUserPreferences: vi.fn(async (userId: string) => ({ userId, theme: 'system', language: 'ja', timezone: 'Asia/Tokyo', updatedAt: new Date(0) })),
 }));
 vi.mock('@/lib/auth/email/templates', () => ({
   sendChangeNotificationEmail: vi.fn(async () => undefined),

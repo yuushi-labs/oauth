@@ -12,10 +12,10 @@ describe('formatLocalDateTime (spec 38 / 60)', () => {
     expect(formatLocalDateTime(utc, 'Asia/Tokyo')).toBe('2026/10/04 05:30');
   });
 
-  it('不正なタイムゾーンは例外を出さず UTC へ落とす', () => {
-    expect(formatLocalDateTime(utc, 'Mars/Phobos')).toBe('2026/10/03 20:30');
-    expect(formatLocalDateTime(utc, undefined)).toBe('2026/10/03 20:30');
-    expect(formatLocalDateTime(utc, null)).toBe('2026/10/03 20:30');
+  it('不正なタイムゾーンは例外を出さず既定（Asia/Tokyo）へ落とす', () => {
+    expect(formatLocalDateTime(utc, 'Mars/Phobos')).toBe('2026/10/04 05:30');
+    expect(formatLocalDateTime(utc, undefined)).toBe('2026/10/04 05:30');
+    expect(formatLocalDateTime(utc, null)).toBe('2026/10/04 05:30');
   });
 
   it('文字列を受け取れる', () => {
@@ -36,8 +36,8 @@ describe('time zone helpers', () => {
     expect(isValidTimeZone(null)).toBe(false);
   });
 
-  it('resolveTimeZone は既定を UTC にする', () => {
+  it('resolveTimeZone は既定を Asia/Tokyo にする', () => {
     expect(resolveTimeZone('Asia/Tokyo')).toBe('Asia/Tokyo');
-    expect(resolveTimeZone('Mars/Phobos')).toBe('UTC');
+    expect(resolveTimeZone('Mars/Phobos')).toBe('Asia/Tokyo');
   });
 });

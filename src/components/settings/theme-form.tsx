@@ -4,6 +4,7 @@ import * as React from 'react';
 import { Check, Monitor, Moon, Sun } from 'lucide-react';
 import { useTheme } from '@/components/theme/theme-provider';
 import { useToast } from '@/components/ui/toast';
+import { TimezoneForm } from '@/components/settings/timezone-form';
 import { cn } from '@/lib/cn';
 import { THEME_PREFERENCES, type ThemePreference } from '@/lib/theme/resolver';
 import { m } from '@/messages/ja';
@@ -78,7 +79,8 @@ export function ThemeForm({ initialTheme, timezone }: { initialTheme: string; ti
           value: resolved === 'dark' ? m('theme.dark') : m('theme.light'),
         })}）
       </p>
-      <p className="text-xs text-muted-fg">{m('preferences.timezone')}: {timezone}</p>
+
+      <TimezoneForm initialTimezone={timezone} />
     </div>
   );
 }

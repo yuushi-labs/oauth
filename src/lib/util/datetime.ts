@@ -2,8 +2,10 @@
  * 日時の表示整形（§60 / D-30-17）。
  * DB は UTC 保存、表示はユーザー設定のタイムゾーンへ変換する。
  * 表示形式は §38 の `2026/10/03 20:30`。
+ *
+ * 既定は `Asia/Tokyo`。仕様 §60 の例も `Asia/Tokyo` で、想定利用者が日本のため。
  */
-const DEFAULT_TIME_ZONE = 'UTC';
+export const DEFAULT_TIME_ZONE = 'Asia/Tokyo';
 
 export function isValidTimeZone(timeZone: string | null | undefined): boolean {
   if (!timeZone) return false;
@@ -15,7 +17,7 @@ export function isValidTimeZone(timeZone: string | null | undefined): boolean {
   }
 }
 
-/** 不正なタイムゾーンは黙って UTC へ落とす（例外を画面へ漏らさない）。 */
+/** 不正なタイムゾーンは黙って既定（Asia/Tokyo）へ落とす（例外を画面へ漏らさない）。 */
 export function resolveTimeZone(timeZone: string | null | undefined): string {
   return isValidTimeZone(timeZone) ? timeZone! : DEFAULT_TIME_ZONE;
 }

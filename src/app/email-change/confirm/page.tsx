@@ -18,7 +18,7 @@ export default async function EmailChangeConfirmPage({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-6 py-12">
-      <header className="flex items-start justify-between gap-3">
+      <header className="flex flex-wrap items-start justify-between gap-3">
         <Link className="text-2xl font-bold" href="/login">{APP_NAME}</Link>
         <ThemeToggle />
       </header>

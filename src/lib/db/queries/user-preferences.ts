@@ -1,11 +1,12 @@
 import { getDb } from '@/lib/db/client';
 import { userPreferences, type UserPreferences } from '@/lib/db/schema';
+import { DEFAULT_TIME_ZONE } from '@/lib/util/datetime';
 import { eq } from 'drizzle-orm';
 
 export const DEFAULT_PREFERENCES = {
   theme: 'system',
   language: 'ja',
-  timezone: 'UTC',
+  timezone: DEFAULT_TIME_ZONE,
 } as const;
 
 function normalizeTimezone(value: string | null | undefined): string {
