@@ -194,15 +194,14 @@ export function PasskeyPanel({
 
         <ReauthDialog
           open={reauthOpen}
-          onOpenChange={(open) => {
-            setReauthOpen(open);
-            if (!open) retryRef.current = null;
-          }}
+          onOpenChange={setReauthOpen}
           description={m('passkey.registerReauthHint')}
-          onReauthenticated={async () => {
+          onReauthenticated={() => {
+            // ReauthDialog は成功時に onOpenChange(false) を先に呼ぶため、
+            // ここで初めて retry を取り出す（onOpenChange 側で消すと再試行が失われる）。
             const retry = retryRef.current;
             retryRef.current = null;
-            if (retry) retry();
+            retry?.();
           }}
         />
       </CardContent>
