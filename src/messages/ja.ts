@@ -262,6 +262,7 @@ export const messages = {
       deviceNameLabel: 'デバイス名（任意）',
       deviceNamePlaceholder: '例: MacBook の Touch ID',
       registerFailed: 'Passkey を登録できませんでした。',
+      registerReauthHint: 'Passkey の登録には本人確認が必要です。パスワードを入力してください。',
       loginFailed: 'パスキーでログインできませんでした。別の方法をお試しください。',
       loginButton: 'パスキーでログイン',
       notSupported: 'この端末・ブラウザは Passkey に対応していません。',

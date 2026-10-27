@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StrongReauthDialog } from '@/components/settings/strong-reauth-dialog';
+import { ReauthDialog } from '@/components/auth/reauth-dialog';
 import { apiClient, ApiClientError } from '@/lib/api/client';
 import { formatLocalDateTime } from '@/lib/util/datetime';
 import { m } from '@/messages/ja';
@@ -50,6 +51,9 @@ export function PasskeyPanel({
   const [error, setError] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [removing, setRemoving] = React.useState<PasskeyRow | null>(null);
+  const [reauthOpen, setReauthOpen] = React.useState(false);
+  /** 再認証後に 1 回だけ再生する登録処理。null なら再試行しない。 */
+  const retryRef = React.useRef<(() => void) | null>(null);
 
   const lastMethod = !passwordSet && rows.length <= 1 && !twoFactorEnabled;
 
@@ -58,25 +62,42 @@ export function PasskeyPanel({
     setRows(data.passkeys);
   }
 
+  /**
+   * 登録 Ceremony を実行する。options 発行は再認証必須（D-34-08）なので、
+   * `REAUTH_REQUIRED` を受けたら `ReauthDialog` を開いて再試行する。
+   */
+  async function runRegistration(): Promise<void> {
+    const { startRegistration } = await import('@simplewebauthn/browser');
+    const { options, challenge_id } = await apiClient.post<RegistrationOptions>(
+      '/api/auth/passkey/register/options',
+      { device_name: deviceName || undefined },
+    );
+    const response = await startRegistration({ optionsJSON: options });
+    await apiClient.post('/api/auth/passkey/register/verify', {
+      response,
+      challenge_id,
+      device_name: deviceName || undefined,
+    });
+    setDeviceName('');
+    await refresh();
+  }
+
   async function register(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
     setBusy(true);
     try {
-      const { startRegistration } = await import('@simplewebauthn/browser');
-      const { options, challenge_id } = await apiClient.post<RegistrationOptions>(
-        '/api/auth/passkey/register/options',
-        { device_name: deviceName || undefined },
-      );
-      const response = await startRegistration({ optionsJSON: options });
-      await apiClient.post('/api/auth/passkey/register/verify', {
-        response,
-        challenge_id,
-        device_name: deviceName || undefined,
-      });
-      setDeviceName('');
-      await refresh();
+      await runRegistration();
     } catch (caught) {
+      if (caught instanceof ApiClientError && caught.code === 'REAUTH_REQUIRED') {
+        retryRef.current = () => {
+          void runRegistration().catch((next: unknown) => {
+            setError(next instanceof ApiClientError ? next.message : m('passkey.registerFailed'));
+          });
+        };
+        setReauthOpen(true);
+        return;
+      }
       setError(caught instanceof ApiClientError ? caught.message : m('passkey.registerFailed'));
     } finally {
       setBusy(false);
@@ -169,6 +190,20 @@ export function PasskeyPanel({
           description={m('passkey.title')}
           onConfirmed={(code) => remove({ code })}
           passkeySubmit={(passkey, challengeId) => remove({ passkey, challenge_id: challengeId })}
+        />
+
+        <ReauthDialog
+          open={reauthOpen}
+          onOpenChange={(open) => {
+            setReauthOpen(open);
+            if (!open) retryRef.current = null;
+          }}
+          description={m('passkey.registerReauthHint')}
+          onReauthenticated={async () => {
+            const retry = retryRef.current;
+            retryRef.current = null;
+            if (retry) retry();
+          }}
         />
       </CardContent>
     </Card>

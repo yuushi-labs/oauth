@@ -98,3 +98,14 @@ describe('Static - resend is unauthenticated (D-33-22 / T19)', () => {
     expect(source).toMatch(/requireAuth:\s*false/);
   });
 });
+
+describe('Static - 再認証が必要な操作は REAUTH_REQUIRED をダイアログへ繋ぐ (BUG-16)', () => {
+  // register/options は再認証必須（D-34-08）。UI が REAUTH_REQUIRED を握り潰すと
+  // 「本人確認が必要です」とだけ出て再認証モーダルが開かない（実機で発見）。
+  it('passkey-panel は REAUTH_REQUIRED で ReauthDialog を開く', () => {
+    const source = read('components/settings/passkey-panel.tsx');
+    expect(source).toContain("code === 'REAUTH_REQUIRED'");
+    expect(source).toContain('ReauthDialog');
+    expect(source).toContain('reauthOpen');
+  });
+});
