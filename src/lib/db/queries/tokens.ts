@@ -4,9 +4,11 @@ import {
   emailVerificationTokens,
   passwordResetTokens,
   emailChangeRequests,
+  accountDeletionRequests,
   type EmailVerificationToken,
   type PasswordResetToken,
   type EmailChangeRequest,
+  type AccountDeletionRequest,
 } from '@/lib/db/schema';
 
 export async function insertEmailVerificationToken(
@@ -101,6 +103,22 @@ export async function markEmailChangeNotified(tokenHash: string): Promise<void> 
     .where(eq(emailChangeRequests.tokenHash, tokenHash));
 }
 
+export async function insertAccountDeletionRequest(
+  data: { id: string; userId: string; tokenHash: string; purpose: string; expiresAt: Date },
+): Promise<AccountDeletionRequest> {
+  const db = getDb();
+  const [row] = await db.insert(accountDeletionRequests).values(data).returning();
+  return row!;
+}
+
+export async function invalidateAccountDeletionRequests(userId: string): Promise<void> {
+  const db = getDb();
+  await db
+    .update(accountDeletionRequests)
+    .set({ usedAt: new Date() })
+    .where(and(eq(accountDeletionRequests.userId, userId), isNull(accountDeletionRequests.usedAt)));
+}
+
 export async function invalidateAllUserTokens(userId: string): Promise<void> {
   const db = getDb();
   await db.transaction(async (tx) => {
@@ -116,5 +134,9 @@ export async function invalidateAllUserTokens(userId: string): Promise<void> {
       .update(emailChangeRequests)
       .set({ usedAt: new Date() })
       .where(and(eq(emailChangeRequests.userId, userId), isNull(emailChangeRequests.usedAt)));
+    await tx
+      .update(accountDeletionRequests)
+      .set({ usedAt: new Date() })
+      .where(and(eq(accountDeletionRequests.userId, userId), isNull(accountDeletionRequests.usedAt)));
   });
 }

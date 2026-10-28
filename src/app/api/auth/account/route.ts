@@ -1,46 +1,51 @@
 import { NextRequest } from 'next/server';
-import { withAuthPipeline, failResponse, handleSuccess } from '@/lib/api/utils';
-import { softDeleteUser } from '@/lib/db/queries/users';
-import { findUserById } from '@/lib/db/queries/users';
-import { revokeAllSessions } from '@/lib/auth/session';
-import { invalidateAllUserTokens } from '@/lib/db/queries/tokens';
-import { revokeUserOidcGrants } from '@/lib/oidc/grants';
-import { deleteCredentialsByUser } from '@/lib/db/queries/webauthn';
-import { recordSecurityEvent } from '@/lib/auth/security-events';
+import { withAuthPipeline, failResponse, handleSuccess, rateLimitResponse } from '@/lib/api/utils';
+import { requireStrongReauth } from '@/lib/auth/strong-reauth';
+import { passkeyDeleteSchema } from '@/lib/validate/passkey';
+import { rateLimiter } from '@/lib/auth/rate-limit';
+import { RATE_LIMITS } from '@/config/rate-limits';
+import { rateLimitKeys } from '@/lib/auth/rate-limit-keys';
 import { getRequestClientIp } from '@/lib/auth/session';
-import { sendAccountDeletionEmail } from '@/lib/auth/email/templates';
-import { deliverEmailSafely } from '@/lib/auth/email/deliver';
+import { recordSecurityEvent } from '@/lib/auth/security-events';
+import { performAccountDeletion } from '@/lib/auth/account-deletion';
 
+/**
+ * DELETE /api/auth/account — 2FA または Passkey で本人確認してアカウントを削除する（§8 / §24）。
+ *
+ * 確認手段は「2FA（パスワード＋現在のコード／リカバリーコード）」または「Passkey assertion」。
+ * どちらも無い利用者はメール確認（`POST /api/auth/account/delete/request` → メール内リンク）を使う。
+ * パスワードの 5 分猶予だけでは削除できない（`requireStrongReauth` が code / passkey を要求する）。
+ *
+ * 検証に失敗したら**何も変更しない**。成功時は `performAccountDeletion` に副作用を集約する。
+ */
 export async function DELETE(request: NextRequest) {
-  return withAuthPipeline(
-    request,
-    { requireAuth: true, requireReauth: true },
-    async ({ user, session }) => {
-      if (!user || !session) {
-        return failResponse('SESSION_EXPIRED', 'セッションの有効期限が切れました', 401);
-      }
+  return withAuthPipeline(request, { requireAuth: true }, async ({ user, session, body }) => {
+    if (!user || !session) {
+      return failResponse('SESSION_EXPIRED', 'セッションの有効期限が切れました', 401);
+    }
 
-      await softDeleteUser(user.id);
-      await revokeAllSessions(user.id, 'account_delete');
-      await invalidateAllUserTokens(user.id);
-      // §24: アカウント削除時は Passkey も無効化する（論理削除中も残存させない）。
-      await deleteCredentialsByUser(user.id);
-      const revokedClients = await revokeUserOidcGrants(user.id);
+    const parsed = passkeyDeleteSchema.parse(body);
 
-      await recordSecurityEvent('account_deleted', user.id, getRequestClientIp(request), request.headers.get('user-agent') ?? '', { revokedOidcClients: revokedClients.length });
+    const ip = getRequestClientIp(request);
+    const userAgent = request.headers.get('user-agent') ?? '';
 
-      const fullUser = await findUserById(user.id);
-      if (fullUser) {
-        await deliverEmailSafely({
-          kind: 'account_deletion',
-          userId: user.id,
-          ip: getRequestClientIp(request),
-          userAgent: request.headers.get('user-agent') ?? '',
-          send: () => sendAccountDeletionEmail(fullUser.email),
-        });
-      }
+    const reservation = await rateLimiter.reserveFailedAttempt(
+      rateLimitKeys.accountDeleteUser(user.id),
+      RATE_LIMITS.accountDelete.window,
+      RATE_LIMITS.accountDelete.limit,
+      RATE_LIMITS.accountDelete.softLimit,
+    );
+    if (!reservation.allowed) {
+      await recordSecurityEvent('rate_limited', user.id, ip, userAgent, { scope: 'account_delete' });
+      return rateLimitResponse(reservation.resetAt);
+    }
 
-      return handleSuccess({ message: 'アカウントを削除しました' });
-    },
-  );
+    // 失敗（REAUTH_REQUIRED / INVALID_CODE）はそのまま呼び出し元へ伝播させる。
+    const { method } = await requireStrongReauth({ user, session, body: parsed });
+    await rateLimiter.finishFailedAttempt(reservation.reservation, true);
+
+    await performAccountDeletion({ userId: user.id, ip, userAgent, metadata: { method } });
+
+    return handleSuccess({ message: 'アカウントを削除しました' });
+  });
 }

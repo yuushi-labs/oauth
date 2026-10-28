@@ -27,6 +27,7 @@
 | `docs/phase6-passkey-webauthn-実装計画.md` / `docs/phase6-実行Todo.md` | Passkey / WebAuthn（M6） |
 | `docs/phase7-admin-rbac-audit-実装計画.md` / `docs/phase7-実行Todo.md` | 管理者 / RBAC / 監査ログ（M7） |
 | `docs/phase7.5-admin-ui-cli-実装計画.md` | 管理者の付与（管理 UI ＋ CLI）（M7.5） |
+| `docs/phase8-account-deletion-実装計画.md` | アカウント削除フロー＋アカウント保護イベント（M8-A） |
 | `docs/phase-verification-report-2026-10-26.md` | Phase 7 完了時点の検証レポート |
 | `.env.example` | 環境変数の定義 |
 
@@ -290,9 +291,10 @@ oauth/
 | M6 | Phase 6 | Passkey / WebAuthn | **完了（2026-10-25）**（登録・ログイン・削除 API と UI。実機手動確認は実ブラウザ環境で未実施） |
 | M7 | Phase 7 | 管理者 / RBAC / 監査ログ | **完了（2026-10-27）**（RBAC ガード・管理 API 6 本・監査ログ・8h セッション） |
 | M7.5 | Phase 7.5 | 管理者の付与（管理 UI ＋ CLI） | **完了（2026-10-27）**（`/admin/users`・`/admin/audit-logs`・`POST /api/admin/users/{id}/role`・`pnpm admin:grant`。最後の管理者ガード・自己降格禁止） |
+| M8-A | Phase 8-A | アカウント削除フロー（メール確認）＋ アカウント保護イベント | **完了（2026-10-28）**（削除の副作用を `performAccountDeletion` に集約・§24 の Passkey 失効漏れを解消。メール確認退会・管理 API を同一ヘルパへ） |
 | M8 | Phase 8-9 | リスク検知 / セキュリティテスト完成 / 運用デプロイ | 未着手 |
 
-進捗の正本は `実装Todo.md` のチェックボックスです。最新のテスト実績は **116 files / 795 tests green**（`pnpm test`。e2e は Go ツールチェーン未導入時 interop をスキップ）。
+進捗の正本は `実装Todo.md` のチェックボックスです。最新のテスト実績は **119 files / 812 tests green**（`pnpm test`。e2e は Go ツールチェーン未導入時 interop をスキップ）。
 
 ---
 
@@ -589,6 +591,31 @@ Phase 7 は「管理者に何を要求するか」を実装しましたが、**�
 | 監査証跡の欠落 | role 変更は `admin_audit_logs` に記録。CLI で `--actor` 省略時は bootstrap とみなし警告を出す |
 
 migration は不要でした（`admin_audit_logs.action` / `security_events.event_type` は CHECK 無しの text）。
+
+---
+
+## Phase 8-A 実装詳細（2026-10-28 / 実装完了）
+
+計画: `docs/phase8-account-deletion-実装計画.md`（D-37-01〜D-37-06）
+
+§8（再認証）・§21（security_events）・§24（アカウント削除）の実装ギャップを埋めました。
+
+| 追加・変更 | 内容 |
+|---|---|
+| メール確認退会 | `POST /api/auth/account/delete/request`（確認リンク送信）→ メール内 `GET /api/auth/account/delete/confirm`（303 転送のみ・§25）→ `/account/delete/confirm` の POST でトークンを 1 回限り消費して確定 |
+| 副作用の集約 | `src/lib/auth/account-deletion.ts` の `performAccountDeletion` に論理削除・全セッション失効・全トークン失効・**Passkey 失効**・OIDC grant 失効・`account_deleted` 記録・削除通知を集約（D-37-01） |
+| §24 違反の解消 | 管理 API `POST /api/admin/users/{id}/delete` は独自実装で **Passkey 失効が漏れていた**。同じヘルパへ寄せて解消 |
+| UI | `/settings/account` に削除カード（2FA / Passkey / メール確認のタブ）。2FA 無効・Passkey 未登録なら該当タブを出さず残る手段だけを示す |
+| migration | `0022_tan_oracle.sql`（`account_deletion_requests`。`purpose` 列を持ち、既存の `email_change_requests` と同じ分離方針・D-37-03） |
+
+| 脅威 | 対策 |
+|---|---|
+| セッション窃取だけで削除 | パスワード＋コード / Passkey の**強い再認証**、またはメール確認を必須（D-37-02）。パスワード再認証の 5 分猶予だけでは削除できない |
+| リンク先読みで誤削除 | 確認リンクの GET は状態を変えず 303 転送のみ。削除は POST のみ（D-37-04・§25） |
+| 複数リンクの同時有効・再利用 | 再要求で旧トークンを無効化し、消費は単文 UPDATE の更新行数で判定（D-37-05・D-16） |
+| 確認メール爆撃 | 利用者 5 回/時・IP 10 回/時のレート制限（D-37-06） |
+
+**検証**: 追加テスト 6 件（`account-deletion-flow`）。全 **119 files / 812 tests green**、typecheck 0 error、lint 0 warning。migration は up / down / 往復 / restore すべて成功。
 
 ---
 

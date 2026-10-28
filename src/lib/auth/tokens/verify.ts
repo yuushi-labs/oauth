@@ -4,9 +4,10 @@ import {
   emailVerificationTokens,
   passwordResetTokens,
   emailChangeRequests,
+  accountDeletionRequests,
 } from '@/lib/db/schema';
 
-export type TokenPurpose = 'email_verification' | 'password_reset' | 'email_change';
+export type TokenPurpose = 'email_verification' | 'password_reset' | 'email_change' | 'account_deletion';
 
 type VerifyTokenResult = {
   valid: boolean;
@@ -58,6 +59,22 @@ export async function verifyAndConsumeToken(
         ),
       )
       .returning({ userId: passwordResetTokens.userId });
+    if (rows.length !== 1) return { valid: false, userId: null, newEmail: null };
+    return { valid: true, userId: rows[0]!.userId, newEmail: null };
+  }
+
+  if (purpose === 'account_deletion') {
+    const rows = await db
+      .update(accountDeletionRequests)
+      .set({ usedAt: now })
+      .where(
+        and(
+          eq(accountDeletionRequests.tokenHash, tokenHash),
+          isNull(accountDeletionRequests.usedAt),
+          gt(accountDeletionRequests.expiresAt, now),
+        ),
+      )
+      .returning({ userId: accountDeletionRequests.userId });
     if (rows.length !== 1) return { valid: false, userId: null, newEmail: null };
     return { valid: true, userId: rows[0]!.userId, newEmail: null };
   }

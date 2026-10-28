@@ -19,11 +19,12 @@ describe('Integration - schema readiness（起動前チェック）', () => {
     await expect(assertSchemaReady()).resolves.toBeUndefined();
   });
 
-  it('宣言テーブルは schema.ts と一致する（23 件）', () => {
+  it('宣言テーブルは schema.ts と一致する（24 件）', () => {
     const tables = declaredTableNames();
     expect(tables).toContain('totp');
     expect(tables).toContain('admin_audit_logs');
-    expect(tables.length).toBe(23);
+    expect(tables).toContain('account_deletion_requests');
+    expect(tables.length).toBe(24);
   });
 
   it('テーブルが欠けていれば SchemaOutOfDateError を投げる', async () => {

@@ -39,13 +39,21 @@ vi.mock('@/lib/auth/session', async () => {
   return { ...actual, getSession: vi.fn(async () => session), revokeAllSessions: vi.fn(async () => undefined) };
 });
 vi.mock('@/lib/auth/rate-limit', () => ({
-  rateLimiter: { check: vi.fn(async () => ({ allowed: true, resetAt: Date.now() + 60_000, logRateLimited: false })) },
+  rateLimiter: {
+    check: vi.fn(async () => ({ allowed: true, resetAt: Date.now() + 60_000, logRateLimited: false })),
+    reserveFailedAttempt: vi.fn(async () => ({
+      allowed: true,
+      reservation: { key: 'rl:account-delete:user:usr_owner', windowExpiresAt: new Date(Date.now() + 60_000) },
+    })),
+    finishFailedAttempt: vi.fn(async () => undefined),
+  },
 }));
 vi.mock('@/lib/auth/security-events', () => ({ recordSecurityEvent: vi.fn(async () => undefined) }));
-vi.mock('@/lib/auth/reauth', async () => {
-  const actual = await vi.importActual('@/lib/auth/reauth');
-  return { ...actual, checkReauth: vi.fn(() => undefined) };
-});
+// 削除は「パスワード＋コード / Passkey / メール確認」のいずれかで強い再認証を通る。
+// ここでは Passkey 無効化（§24）の回帰だけを見るため、再認証は成功として固定する。
+vi.mock('@/lib/auth/strong-reauth', () => ({
+  requireStrongReauth: vi.fn(async () => ({ method: 'password' as const })),
+}));
 vi.mock('@/lib/db/queries/users', () => ({
   findUserById: vi.fn(async () => ({ id: 'usr_owner', email: 'owner@example.com', passwordHash: 'hashed' })),
   softDeleteUser: vi.fn(async () => undefined),
@@ -62,10 +70,12 @@ function request(): NextRequest {
     method: 'DELETE',
     headers: {
       origin: appUrl,
+      'content-type': 'application/json',
       'x-csrf-token': deriveCsrfToken(session),
       cookie: 'auth_session=test-token',
       'user-agent': 'vitest',
     },
+    body: JSON.stringify({ code: '123456' }),
   }));
 }
 

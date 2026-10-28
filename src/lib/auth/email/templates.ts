@@ -64,3 +64,18 @@ export async function sendAccountDeletionEmail(to: string): Promise<void> {
     text: messages.emails.accountDeletion.text(),
   });
 }
+
+/**
+ * セルフサービス退会のメール確認リンク（§24）。
+ *
+ * 削除を確定する前にこのリンクを開かせる。リンクのトークンは 1 回限り消費され（D-16）、
+ * 確定した時点で論理削除が走る。心当たりがない場合の案内（無視すれば削除されない）を必ず載せる。
+ */
+export async function sendAccountDeletionConfirmEmail(to: string, url: string): Promise<void> {
+  await sendEmail({
+    to,
+    subject: messages.emails.accountDeletionConfirm.subject,
+    html: messages.emails.accountDeletionConfirm.html(url),
+    text: messages.emails.accountDeletionConfirm.text(url),
+  });
+}
