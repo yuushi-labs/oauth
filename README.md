@@ -1,6 +1,6 @@
 # oauth — 超本格アカウント・認証システム
 
-メールアドレス認証 / パスワード認証 / 自作サービス向けOAuth 2.0・OIDC Provider（実装中）/ ソーシャルログイン（Google・GitHub・Discord、Phase 4）/ Passkey / TOTP 2FA / セッション管理 / デバイス管理 / セキュリティログ / テーマ設定を統合する認証システムです。
+メールアドレス認証 / パスワード認証 / 自作サービス向けOAuth 2.0・OIDC Provider / ソーシャルログイン（Google・GitHub・Discord）/ Passkey / TOTP 2FA / セッション管理 / デバイス管理 / セキュリティログ / 管理者 RBAC・監査ログ / テーマ設定を統合する認証システムです。
 
 「ユーザーが操作できる便利さ」と「認証情報が漏洩・盗難された場合の被害を最小化すること」の両立を目標に、**失敗時・攻撃時・復旧時まで含めて**設計しています。
 
@@ -21,6 +21,13 @@
 | `docs/phase2.5-migration.md` | migrationの可逆性とrestoreの検証結果（P25-E-04） |
 | `docs/phase2.5-interop.md` | Go `coreos/go-oidc3` との相互運用結果（P25-E-05） |
 | `docs/phase2.6-oidc-client-console-実装計画.md` | ログイン後の設定画面とOIDC/OAuth 2.0 アプリ管理コンソール（M2.6） |
+| `docs/phase3-ui-theme-notification-実装計画.md` | UI / テーマ / 通知メール / デバイス管理（M3） |
+| `docs/phase4-oauth-social-login-実装計画.md` / `docs/phase4b-social-link-実装計画.md` | ソーシャルログインと紐付け（M4 / Phase 4-B） |
+| `docs/phase5-totp-2fa-実装計画.md` / `docs/phase5-実行Todo.md` | TOTP 2FA + Recovery Codes（M5） |
+| `docs/phase6-passkey-webauthn-実装計画.md` / `docs/phase6-実行Todo.md` | Passkey / WebAuthn（M6） |
+| `docs/phase7-admin-rbac-audit-実装計画.md` / `docs/phase7-実行Todo.md` | 管理者 / RBAC / 監査ログ（M7） |
+| `docs/phase7.5-admin-ui-cli-実装計画.md` | 管理者の付与（管理 UI ＋ CLI）（M7.5） |
+| `docs/phase-verification-report-2026-10-26.md` | Phase 7 完了時点の検証レポート |
 | `.env.example` | 環境変数の定義 |
 
 ## 技術スタック
@@ -141,6 +148,7 @@ docker へ権限が無い環境では、执行用户在 `docker` グループへ
 | `pnpm oidc:client update --client-id <id> ...` | client の名称・運営者・許可scope・redirect URI・CORS origin を変更 | 実装済 |
 | `pnpm oidc:client rotate-secret ...` / `revoke ...` | confidential secretのrotation / client失効 | 実装済 |
 | `pnpm oidc:load --scenario all` | OIDCレート制限値の負荷検証（一時サーバを起動し実HTTPで計測。結果は `docs/phase2.5-load-test.md`） | 実装済 |
+| `pnpm admin:grant <email\|username> [--role <role>] [--actor <email\|id>]` | 既存ユーザーへ role を付与・変更（初回 bootstrap 用。`--actor` 省略時は監査ログに残さず警告） | 実装済 |
 | `pnpm db:verify-migrations` | migrationのup/down/往復/restoreを検証（一時DBを作成し終了時に削除） | 実装済 |
 
 ## ディレクトリ構成
@@ -148,68 +156,64 @@ docker へ権限が無い環境では、执行用户在 `docker` グループへ
 ```text
 oauth/
 ├─ compose.yaml              # ローカル PostgreSQL 16
-├─ drizzle/                  # マイグレーション SQL（generated）
-│  ├─ 0000_01_roles.sql
-│  ├─ 0001_02_users.sql
-│  ├─ 0002_04_sessions.sql
-│  ├─ 0003_05_tokens.sql
-│  ├─ 0004_08_security_events.sql
-│  ├─ 0005_10_rate_limit.sql
-│  └─ 0006_phase2_security.sql
+├─ drizzle/                  # マイグレーション SQL（generated・up のみ）
+│  ├─ 0000_01_roles.sql … 0006_phase2_security.sql   # Phase 0〜2（手書き命名）
+│  └─ 0007_… 〜 0020_bored_karen_page.sql            # Phase 3〜7（drizzle-kit 生成。最新は 0020）
 ├─ drizzle.config.ts
-├─ docs/phase0-設計.md       # フェーズごとの設計ドキュメント
-├─ messages/                 # UI文言・メール文面（Phase 1-B で追加）
-│  └─ ja.ts
+├─ docs/                     # フェーズごとの設計・実装計画・検証レポート
 ├─ scripts/
+│  ├─ server.ts              # Next + OIDC を 1 プロセスで起動（pnpm dev / start）
 │  ├─ generate-secrets.ts    # pnpm secrets:gen
-│  └─ seed.ts                # pnpm seed
+│  ├─ seed.ts                # pnpm seed（roles）
+│  ├─ oidc-keygen.ts / oidc-client.ts / oidc-load-test.ts
+│  ├─ admin-grant.ts         # pnpm admin:grant（role 付与・初回 bootstrap）
+│  ├─ purge-expired.ts       # 期限切れデータ削除（cron）
+│  └─ verify-migrations.ts   # pnpm db:verify-migrations
 ├─ src/
+│  ├─ middleware.ts          # セキュリティヘッダー / CSP nonce
 │  ├─ app/
-│  │  ├─ layout.tsx          # テーマ初期適用（FOUC 防止）
-│  │  ├─ page.tsx            # ログイン後トップ（未ログインは/loginへ）
-│  │  ├─ login/page.tsx      # ログイン
-│  │  ├─ register/page.tsx   # 登録
-│  │  ├─ globals.css         # CSS変数 light/dark
+│  │  ├─ layout.tsx / page.tsx / globals.css
+│  │  ├─ login/（+ social-confirm）/ register/ verify-email/
+│  │  ├─ forgot-password/ reset-password/ email-change/confirm/
+│  │  ├─ settings/{account,security,password,sessions,appearance,connected-accounts,connected-apps,applications}
+│  │  ├─ admin/{users,audit-logs}/           # Phase 7.5 管理 UI
 │  │  └─ api/
-│  │     └─ auth/
-│  │        ├─ csrf/route.ts
-│  │        ├─ register/route.ts
-│  │        ├─ login/route.ts
-│  │        ├─ logout/route.ts
-│  │        ├─ me/route.ts
-│  │        ├─ verify-email/route.ts
-│  │        ├─ resend-verification/route.ts
-│  │        ├─ password/{forgot,reset,change,set}/route.ts
-│  │        ├─ reauth/route.ts
-│  │        ├─ email/change/route.ts
-│  │        ├─ email/change/confirm/route.ts
-│  │        └─ account/route.ts
+│  │     ├─ auth/            # csrf / register / login / logout(-all) / me / verify-email /
+│  │     │                   # resend-verification / password/{forgot,reset,change,set} / reauth /
+│  │     │                   # email/change(+confirm) / account / sessions / preferences /
+│  │     │                   # security/events / 2fa/* / passkey/* / accounts/* / oauth/*
+│  │     ├─ auth/oidc/clients/*              # M2.6 セルフサービス client 管理
+│  │     └─ admin/*          # Phase 7 管理 API（users / audit-logs）
+│  ├─ components/{ui,auth,settings,theme}/
+│  ├─ config/{app,rate-limits}.ts
+│  ├─ emails/                # React Email テンプレート（6種）
+│  ├─ messages/ja.ts         # UI 文言・メール文面の一元管理（`m()` / `errorMessage()`）
 │  ├─ lib/
 │  │  ├─ env.ts              # zod による起動時検証（fail fast）
 │  │  ├─ errors.ts           # §58 応答形式 + error code Enum
-│  │  ├─ db/{schema,client}.ts
-│  │  │  └─ queries/{users,sessions,tokens,security-events}.ts
-│  │  ├─ util/{id,time,crypto,ip,logger}.ts
-│  │  ├─ validate/{email,username,password}.ts
-│  │  ├─ auth/
-│  │  │  ├─ password.ts      # Argon2id パスワードハッシュ
-│  │  │  ├─ strength.ts       # NG ワードリスト
-│  │  │  ├─ breached.ts       # HIBP 漏洩パスワード検査（fail-open）
-│  │  │  ├─ session.ts        # セッション生成・取得・無効化
-│  │  │  ├─ cookie.ts         # __Host-auth_session / __Host-auth_anon
-│  │  │  ├─ csrf.ts           # CSRF 共通パイプライン
-│  │  │  ├─ rate-limit.ts     # PostgreSQL正本のレート制限・予約方式
-│  │  │  ├─ security-events.ts # security_events 記録
-│  │  │  ├─ reauth.ts         # 再認証（5分犹予）
-│  │  │  ├─ tokens/           # トークン生成・ハッシュ・検証
-│  │  │  └─ email/            # メール送信（Resend）
-│  │  └─ api/utils.ts         # 共通パイプライン・エラー処理
-│  ├─ config/rate-limits.ts   # レート制限設定
-│  ├─ emails/                 # React Email テンプレート（6種）
-│  └─ test/unit/             # 純関数の単体テスト
+│  │  ├─ api/utils.ts        # 共通パイプライン・エラー処理
+│  │  ├─ db/{schema,client,schema-readiness}.ts
+│  │  │  └─ queries/{users,sessions,tokens,security-events,user-preferences}.ts
+│  │  ├─ util/{id,time,datetime,crypto,ip,logger}.ts
+│  │  ├─ validate/{email,username,password,preferences,resend}.ts
+│  │  ├─ theme/resolver.ts
+│  │  ├─ oidc/               # provider / adapter / clients / grants / scopes / subjects / events
+│  │  └─ auth/
+│  │     ├─ pipeline.ts / csrf.ts / origin.ts / session.ts / cookie.ts / reauth.ts
+│  │     ├─ strong-reauth.ts / password.ts / strength.ts / breached.ts
+│  │     ├─ rate-limit.ts / rate-limit-keys.ts / security-events.ts / audit.ts
+│  │     ├─ totp.ts / totp-crypto.ts / totp-qr.ts / recovery-codes.ts
+│  │     ├─ roles.ts / admin-role.ts / admin-policy.ts
+│  │     ├─ tokens/          # トークン生成・ハッシュ・検証（1回限り消費）
+│  │     ├─ passkey/         # WebAuthn（@simplewebauthn/server）
+│  │     ├─ oauth/           # Google / GitHub / Discord registry と state
+│  │     └─ email/           # メール送信（Resend）・deliver・templates
+│  └─ test/{unit,security,integration,e2e}/  # D-18: テストは src/test/** に集約
 ├─ next.config.ts / postcss.config.mjs / eslint.config.mjs / vitest.config.mts
 └─ .env.example / .env（local のみ・commit 禁止）
 ```
+
+> 補足: `drizzle/` は **up のみ**（down は `pnpm db:verify-migrations` が一時 DB で検証）。文言は `src/messages/ja.ts` に一元化されています。
 
 ## 環境変数
 
@@ -226,12 +230,14 @@ oauth/
 | `OIDC_ISSUER` | OIDC有効化時必須 | 固定issuer origin。`NEXT_PUBLIC_APP_URL`と同一origin | Phase 2.5 |
 | `OIDC_JWKS_JSON` | OIDC有効化時必須 | RS256 private JWK 1個 + rotation期間中に保持する旧public JWK | Phase 2.5 |
 | `OIDC_ADAPTER_ENCRYPTION_KEY` | OIDC有効化時必須（Base64 32B） | client secretとOIDC code/token/interactionをAES-256-GCM暗号化し、ID検索にHMAC | Phase 2.5 |
+| `OIDC_MAX_CLIENTS_PER_USER` | 任意（既定 `5`） | 1ユーザーあたりのセルフサービス登録 client 上限 | Phase 2.6 |
 | `RATE_LIMIT_SECRET` | 任意（32文字以上。未設定時は `TOKEN_PEPPER`） | レート制限キーのHMAC | Phase 2 |
 | `ALLOWED_ORIGINS` | 任意 | CORS許可Origin（既定はアプリOrigin） | Phase 2 |
 | `CSRF_TRUSTED_ORIGINS` | 任意 | 状態変更要求の信頼Origin（既定はアプリOrigin） | Phase 2 |
 | `ALLOWED_HOSTS` | 任意 | HTTPS redirectで許可するHost | Phase 2 |
 | `TRUSTED_PROXY_HOPS` | 任意（既定 `0`） | 信頼するproxy hop数。0では転送ヘッダーを信頼しない | Phase 2 / Phase 9で環境設定 |
 | `TRUSTED_PROXY_HEADER` | 任意 | 信頼proxyが設定するクライアントIP header | Phase 2 / Phase 9で環境設定 |
+| `ARGON2_M` / `ARGON2_T` / `ARGON2_P` | 任意（既定 `65536` / `3` / `4`） | Argon2id のメモリ・反復・並列度（ベンチマークで調整） | Phase 1 |
 | `REDIS_URL` | 任意 | Redis接続先（Phase 2の認証レート制限では未使用） | 将来拡張 |
 | `HIBP_TIMEOUT_MS` | 任意（既定 1500） | 漏洩パスワード検査のタイムアウト | Phase 1-A |
 | `BREACH_CHECK_FAIL_OPEN` | 任意（既定 true） | HIBP 障害時に登録を許可するか | Phase 1-A |
@@ -254,19 +260,20 @@ oauth/
 - パスワード・token・secret をログ・API 応答・`security_events.metadata` に出さない（`src/lib/util/logger.ts` が redaction）
 - 確定済みの変更点: **Apple 除外**（C-01）、**パスワード 8〜128文字**（C-02）
 
-### ログの redaction 要件（Phase 0 実装済み と Phase 4 実装待ちの区別）
+### ログの redaction 要件
 
 **redaction 対象として必ず扱う値**:
 
 | 区分 | 値 |
 |---|---|
-| メール/セッション系（Phase 0 で実装済み） | `password` / `password_hash` / `token` / `session_token` / `csrf_token` / `authorization` / `secret` / `totp_secret` / `recovery_code` / `access_token` / `refresh_token`、および URL 中の `token=` / `code_verifier=` / `password=` / `secret=` |
-| **OAuth 機密値（Phase 1-C でキー追加 → Phase 4-A で配線。現時点では未実装）** | `code` / `state` / `nonce` / `code_verifier` / `id_token` / `client_secret` ＋ OAuth 資格情報のその他の secret |
+| メール/セッション系 | `password` / `password_hash` / `token` / `session_token` / `csrf_token` / `authorization` / `secret` / `totp_secret` / `recovery_code` / `access_token` / `refresh_token`、および URL 中の `token=` / `code_verifier=` / `password=` / `secret=` |
+| OAuth / OIDC 機密値（Phase 4-A で配線済み） | `code` / `state` / `nonce` / `code_verifier` / `id_token` / `client_secret` / `challenge`、Passkey の `credentialId` / `publicKey` / `signature` 等 |
+| DB 失敗クエリのバインド値（SEC-3 で追加） | argon2 パスワードハッシュ（`$argon2id$...`）。Drizzle はバインド値を error message へ展開するため、`redactText` がパターンで丸ごと伏せる |
 
-- 上記の OAuth 機密値（特に **`code` / `state` / `nonce` / `code_verifier`**）は、**アプリ内ログ・エラーメッセージ・監査ログ（`admin_audit_logs`）・`security_events.metadata`・例外オブジェクトの出力**のいずれにも**平文で記録しない**（`実装計画.md` 12.4 / 17.2.1）
+- 上記の機密値は、**アプリ内ログ・エラーメッセージ・監査ログ（`admin_audit_logs`）・`security_events.metadata`・例外オブジェクトの出力**のいずれにも**平文で記録しない**（`実装計画.md` 12.4 / 17.2.1）
 - 「短命だから記録してよい」は理由にならない。認可コード `code` は `code_verifier` と組ませれば token 交換を完了でき、`state` はログイン CSRF、`nonce` は ID token リプレイに直結する
 - `security_events.metadata` には `provider` / `error` / `state_present: true` のような**真偽値・文脈のみ**を記録し、機密値の生値は入れない
-- **現状（Phase 0）**: `src/lib/util/logger.ts` は上の「メール/セッション系」のみを redact している。OAuth フローは未実装のため `code` / `state` / `nonce` / `code_verifier` の redact キー自体が無い。**Phase 1-C でキー追加、Phase 4-A で OAuth フローへ配線する**（キー追加的任务は `実装Todo.md` P1-C-09a / P4-A-05）
+- 実装は `src/lib/util/logger.ts` の `SENSITIVE_KEYS`（オブジェクトキー）と `SENSITIVE_TEXT_PATTERNS`（文字列中のパターン）。新しい機密形式を保存するときは両方へ追加する（例: SEC-3 の argon2）
 
 ## 実装状況
 
@@ -276,14 +283,16 @@ oauth/
 | M1 | Phase 1 | メール/パスワード認証（登録・ログイン・確認・リセット・セッション・CSRF・レート制限） | **完了** |
 | M2 | Phase 2 | Webセキュリティ・CSRF・レート制限・期限切れデータ削除 | **完了（2026-10-12）** |
 | M2.5 | Phase 2.5 | 自作サービス向けOAuth 2.0 / OIDC Provider、scope・同意管理・client registry | **完了（2026-10-17）**（29/29 タスク。本番公開の運用確認のみ Phase 9 へ） |
+| M2.6 | Phase 2.6 | ログイン後の設定画面と OIDC/OAuth 2.0 アプリ管理コンソール（セルフサービス登録） | **完了（2026-10-17）**（33 タスク。§69.4-2 と整合） |
 | M3 | Phase 3 | UI / テーマ / 通知メール / デバイス管理 | **完了（2026-10-17）**（共通UI・テーマ・設定画面・セッション管理・通知メール。実ブラウザ viewport 検証のみ Phase 8-B へ） |
 | M4 | Phase 4 | OAuth（Google・GitHub・Discord）と紐付け | **実装完了（2026-10-18）**（+ Phase 4-B で連携確認画面を追加。**実ブラウザでの手動疎通 11 手順のみ未実施**） |
 | M5 | Phase 5 | TOTP 2FA + Recovery Codes | **完了（2026-10-24）**（API 6 本 ＋ UI。実機手動確認 11 項目も同日に実施済み） |
 | M6 | Phase 6 | Passkey / WebAuthn | **完了（2026-10-25）**（登録・ログイン・削除 API と UI。実機手動確認は実ブラウザ環境で未実施） |
-| M7 | Phase 7 | 管理者 / RBAC / 監査ログ | **完了（2026-10-27）**（RBAC ガード・管理 API 6 本・監査ログ・8h セッション。**UI はスコープ外**＝§34 に管理画面が無い） |
+| M7 | Phase 7 | 管理者 / RBAC / 監査ログ | **完了（2026-10-27）**（RBAC ガード・管理 API 6 本・監査ログ・8h セッション） |
+| M7.5 | Phase 7.5 | 管理者の付与（管理 UI ＋ CLI） | **完了（2026-10-27）**（`/admin/users`・`/admin/audit-logs`・`POST /api/admin/users/{id}/role`・`pnpm admin:grant`。最後の管理者ガード・自己降格禁止） |
 | M8 | Phase 8-9 | リスク検知 / セキュリティテスト完成 / 運用デプロイ | 未着手 |
 
-進捗の正本は `実装Todo.md` のチェックボックスです。
+進捗の正本は `実装Todo.md` のチェックボックスです。最新のテスト実績は **116 files / 795 tests green**（`pnpm test`。e2e は Go ツールチェーン未導入時 interop をスキップ）。
 
 ---
 
@@ -315,7 +324,7 @@ CREATE UNIQUE INDEX users_email_lower_uniq
 - 理由: 通常の UNIQUE を付けると論理削除済み行が同値行を含み、**論理削除済み email / username の再利用**（仕様24章と3.1章）を妨げる。索引を `deleted_at IS NULL` で部分的にすることで、現役同士は大文字小文字を区別せず一意、論理削除済みは再利用可能になる
 - 最終判定は DB の一意違反（SQLSTATE 23505）に委譲する。アプリ層の事前 `SELECT` は参考用途で、检查と登録の間の TOCTOU は作らない（仕様27章）
 - 付随する CHECK 制約: `users_status_chk`（status は 4値のみ）、`users_status_email_verified_chk`（`active` にするには `email_verified = true` が必要）
-- `users.role_id` は `roles.id` への外部キー。既定 `role_user` はアプリ層で指定し、`pnpm seed` で 4役割（user / moderator / admin / superadmin）を投入する。`role_permissions` は将来拡張のため MVP では作らない
+- `users.role_id` は `roles.id` への外部キー。既定 `role_user` はアプリ層で指定し、`pnpm seed` で 4役割（user / moderator / admin / superadmin）を投入する。`role_permissions` は Phase 0 では作らなかったが、Phase 7 の migration `0019` で**将来拡張用のプレースホルダとして作成**（MVP では権限判定に使わず、role rank 比較のみ・D-19）
 
 ### 動作確認済み（DoD の証跡）
 
@@ -560,6 +569,45 @@ RBAC（role rank 比較）・管理者ポリシー（2FA 必須・再認証・8h
 
 ---
 
+## Phase 7.5 実装詳細（2026-10-27 / 実装完了）
+
+計画: `docs/phase7.5-admin-ui-cli-実装計画.md`（v1 / D-36-01〜D-36-08）
+
+Phase 7 は「管理者に何を要求するか」を実装しましたが、**誰を管理者にするかを決める経路が DB 直接 UPDATE しか無い**という運用ギャップを埋めました。
+
+| 追加 | 内容 |
+|---|---|
+| API | `POST /api/admin/users/{id}/role` — 管理者が他ユーザーの role を変更（`withAdminPipeline`・2FA 必須・再認証必須） |
+| CLI | `pnpm admin:grant <email\|username> [--role user\|moderator\|admin\|superadmin] [--actor <email\|id>]` — 初回 bootstrap 用。`--actor` 省略時は監査ログに残さず警告（`security_events` のみ） |
+| UI | `/admin/users`（一覧・role 変更・停止/解除・セッション失効・論理削除）、`/admin/audit-logs`（読み取り専用）。`SettingsNav` に role ≥ admin のときだけ「管理」リンクを表示 |
+| 監査 | 新アクション `admin_role_changed` / 新イベント `admin_role_changed` |
+
+| 脅威 | 対策 |
+|---|---|
+| 最後の管理者を降格してロックアウト | **最後の管理者ガード**＋**自己降格禁止**で二重に防ぐ（§51・D-36-02 / D-36-03） |
+| 権限昇格 | `withAdminPipeline` が role rank を比較（§49）。管理 UI のリンク非表示はセキュリティ境界にしない |
+| 監査証跡の欠落 | role 変更は `admin_audit_logs` に記録。CLI で `--actor` 省略時は bootstrap とみなし警告を出す |
+
+migration は不要でした（`admin_audit_logs.action` / `security_events.event_type` は CHECK 無しの text）。
+
+---
+
+## セキュリティ監査（PR #28 の新規攻撃面への実攻撃・2026-10-27）
+
+稼働中ローカルサーバ（Next.js + PostgreSQL 16）へ実攻撃リクエストを送り、メールアドレス変更フローなどで **3 件の脆弱性/バグ（SEC-1〜3）を発見・修正**しました。
+
+| ID | 深刻度 | 問題 | 修正 |
+|---|---|---|---|
+| SEC-1 | 高 | `POST /api/auth/email/change/confirm` で新アドレスが既存アカウントのものだと `users_email_lower_uniq` 違反が未処理の **500**。①列挙オラクル（500=登録済み / 200=空き）②失敗クエリのバインド値（相手アドレス・argon2 ハッシュ）が error ログへ平文 ③一度きりのトークンを消費してやり直せない | トークン消費**前**に `findUserByLowerEmail` で衝突検査し **409 `EMAIL_CONFLICT`**（トークン温存）。並行確定の unique 違反も 409 に正規化 |
+| SEC-2 | 中 | `POST /api/auth/email/change` にレート制限が無く、任意の第三者アドレスへ確認メールを無制限送信可能（15/15 が 200） | 利用者 5 回/時・IP 10 回/時（`RATE_LIMITS.emailChange`）を追加、超過時 `rate_limited` を記録（§4.3 / §18） |
+| SEC-3 | 中 | 失敗した DB クエリのバインド値（argon2 ハッシュ）が `logger` の redaction をすり抜けて error ログに平文 | `SENSITIVE_TEXT_PATTERNS` に argon2 パターンを追加、`redactText` を捕捉グループ無しパターンにも対応 |
+
+**防御を確認した項目（脆弱性なし）**: CSRF（トークン欠如/Origin 偽装→403）、メール変更の再認証必須、厳格スキーマ（追加キー/`__proto__`→400）、XSS/SQLi ペイロード（`emailSchema` が 400）、トークン目的混同・再利用、Host ヘッダ注入（リダイレクトは固定 URL）、Cookie フラグ（HttpOnly / SameSite=Lax / 本番 Secure）、CSP。
+
+**検証**: 追加テスト 5 件（`email-change-collision` 3 / `rate-limit` 設定 1 / argon2 redaction 1）。全 **116 files / 795 tests green**、typecheck 0 error。
+
+---
+
 ## 検証フォローアップ修正（2026-10-27）
 
 `docs/phase-verification-report-2026-10-26.md` の要フォロー 3 件（issue #19 / #20 / #21）をすべて解消しました。
@@ -598,11 +646,11 @@ Phase 3 の計画作成時に、仕様と実装が食い違っていた欠陥 **
 
 | 領域 | 内容 |
 |---|---|
-| パスワード基盤 | `src/lib/auth/password.ts`（Argon2id `m=19456,t=2,p=1`）、`strength.ts`（8〜128文字・Unicode/スペース許可・空白のみ拒否）、`breached.ts`（HIBP k-anonymity・fail-open） |
+| パスワード基盤 | `src/lib/auth/password.ts`（Argon2id。既定 `m=65536,t=3,p=4`・`ARGON2_*` で調整）、`strength.ts`（8〜128文字・Unicode/スペース許可・空白のみ拒否）、`breached.ts`（HIBP k-anonymity・fail-open） |
 | メールトークン | `tokens/{generate,hash,verify}.ts`（256bit・SHA-256 hash・TTL・1回限り・`purpose` 流用防止）、`email/{send,templates}.ts` + Resend 6種テンプレ |
 | セッション | `cookie.ts`（`__Host-auth_session` / `__Host-auth_anon` HttpOnly/Secure/SameSite=Lax）、`session.ts`（create/get/**rotate**/touch/revoke/revokeAll・HMAC-SHA256）、マイグレーション（`absolute_expires_at` 90日・`replaced_by`・`revoke_reason`・`ip_hash`/`ip_masked`・`device_name`・`reauth_verified_at`・`totp_pending`） |
 | CSRF | 共通パイプライン（Origin→CSRF→認証→再認証→認可→入力検証）、**Route Handler と Server Action の双方から同一検証関数**、OAuth コールバックのみ `state`+`nonce` で例外 |
-| レート制限 | PostgreSQL正本（`rate_limit_hits`）、`config/rate-limits.ts` に全13キー、HMAC識別子、ログイン失敗枠予約、CAPTCHA hook |
+| レート制限 | PostgreSQL正本（`rate_limit_hits`）、`config/rate-limits.ts`（Phase 1 時点は 13 キー。現在は register / login / forgot / resend / emailChange / oauth / twoFactor / passkey / settings / oidcClients / admin / oidc の 12 グループ）、HMAC識別子、ログイン失敗枠予約、CAPTCHA hook |
 | セキュリティイベント | 16種 Enum、全認証フローで記録、`logger.ts` に OAuth 機密値（`code`/`state`/`nonce`/`code_verifier` 等）の redact キー追加 |
 | エンドポイント | register / login / logout / me / verify-email / resend / forgot / reset / change / set / reauth / email/change / email/change/confirm / account（DELETE） |
 | テスト | **セキュリティテスト 9ファイル・40テスト全 green**、単体テスト 13+8、Argon2idベンチマーク 61.79ms / 19MB |
@@ -653,3 +701,4 @@ pnpm build           → ✓ Generating static pages
 | v1.0 | 2026-10-04 | 初版作成。Phase 0（プロジェクト土台）を実装。設計ドキュメント `docs/phase0-設計.md` を先に作成してから実装 |
 | v1.1 | 2026-10-04 | 他ドキュメントとの整合修正（**実装変更なし**）。参照する仕様書を v1.1 へ・実装計画を v1.3 へ更新、検証リンクの `src/test/**` 統一、C-02 を「8〜128文字」に明記、`TURNSTILE_SECRET_KEY` の導入フェーズと `NODE_ENV` / `POSTGRES_*` を環境変数表へ追記 |
 | v1.2 | 2026-10-04 | セキュリティ運用要件の明記（**実装変更なし**）。<br>①「ログの redaction 要件」節を新設。OAuth 機密値（`code` / `state` / `nonce` / `code_verifier` / `access_token` / `refresh_token` / `id_token` / `client_secret`）を redact 対象として列挙し、**ログ・エラーメッセージ・監査ログ・`security_events.metadata`・例外オブジェクト出力に平文で記録しない**旨を明記。**Phase 0 で実装済みの範囲**（メール/セッション系のみ。OAuth キーは未実装＝Phase 1-C キー追加 / Phase 4-A 配線）と分離<br>②技術スタックに「セッション＝自前（Resend は担当しない）」「メール＝Resend（送信のみ）」を分離明記<br>③`WEBAUTHN_RP_ID` / `WEBAUTHN_RP_NAME` / `WEBAUTHN_ORIGIN` を環境変数表へ追加（環境ごとに明示設定・host 自動導出なし） |
+| v1.3 | 2026-10-27 | 実装の現状に合わせて本文を更新（**実装変更なし**。M0〜M7.5 完了時点の反映）。<br>①先頭の概要を OIDC Provider / ソーシャルログインを実装済みとして表現を修正<br>②参照ドキュメント表に Phase 3〜7.5 の計画・検証レポートを追加<br>③ディレクトリ構成を実態へ更新（migration 21 本・`src/messages/ja.ts`・`src/lib/{oidc,auth}` の分割・`/admin` 画面・管理/OIDC/2FA/Passkey の API）<br>④コマンド表に `pnpm admin:grant` を追加<br>⑤環境変数表に `ARGON2_M/T/P`・`OIDC_MAX_CLIENTS_PER_USER` を追加<br>⑥「ログの redaction 要件」を現状（OAuth/OIDC キー配線済み・argon2 追加）へ更新<br>⑦実装状況に M2.6 / M7.5 を追加し、M7 の「UI はスコープ外」を撤回（Phase 7.5 で UI を実装）<br>⑧Phase 7.5 実装詳細と「セキュリティ監査（SEC-1〜3）」節を追加。Phase 1 の Argon2id パラメータ・レート制限キー数を現状に整合 |
