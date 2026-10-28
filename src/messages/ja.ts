@@ -332,6 +332,7 @@ export const messages = {
         account_unsuspended: 'アカウントの停止を解除',
         role_changed: '権限を変更',
         new_device_login: '新しいデバイスからログイン',
+        login_risk: '不審なログインを検知',
         rate_limited: 'リクエスト制限',
         breach_check_fail_open: '漏洩パスワード検査をスキップ',
         security_notification_failed: '通知メールの送信に失敗',

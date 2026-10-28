@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { createHmac } from 'node:crypto';
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { Secret, TOTP } from 'otpauth';
+import { totpCodeFor } from '@/test/helpers/totp';
 import { getDb, getPool } from '@/lib/db/client';
 import { DEFAULT_ROLE_ID, accountDeletionRequests, rateLimitHits, securityEvents, sessions, totp, users, webauthnCredentials } from '@/lib/db/schema';
 import { createUser, findUserById } from '@/lib/db/queries/users';
@@ -137,8 +137,7 @@ async function seedEnabledTotp(userId: string): Promise<void> {
 }
 
 function codeFor(at: Date = new Date()): string {
-  return new TOTP({ secret: Secret.fromBase32(SECRET), algorithm: 'SHA1', digits: 6, period: 30 })
-    .generate({ timestamp: at.getTime() });
+  return totpCodeFor(SECRET, at);
 }
 
 async function seedCredential(userId: string): Promise<void> {

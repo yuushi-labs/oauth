@@ -56,6 +56,8 @@ const requiredEnvSchema = z.object({
   WEBAUTHN_RP_ID: z.string().optional(),
   WEBAUTHN_RP_NAME: z.string().optional(),
   WEBAUTHN_ALLOWED_ORIGINS: z.string().optional(),
+  // 不審ログイン検知（§57）の強制レベル。既定は通知のみで既存挙動を変えない（D-38-03）。
+  RISK_ENFORCEMENT: z.enum(['notify', 'challenge', 'hold']).default('notify'),
 });
 
 export type Env = z.infer<typeof requiredEnvSchema>;

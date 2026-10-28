@@ -15,6 +15,7 @@ import { findUserByEmailOrUsername } from '@/lib/db/queries/users';
 import { findTotpByUserId } from '@/lib/db/queries/totp';
 import { sessionMaxAgeSecondsForRole } from '@/lib/auth/admin-policy';
 import { isFirstSessionFromDevice, notifyNewDeviceLogin } from '@/lib/auth/notifications';
+import { evaluateAndRecordLoginRisk } from '@/lib/auth/login-risk';
 import { z } from 'zod';
 
 const loginSchema = z.object({
@@ -125,6 +126,19 @@ export async function POST(request: NextRequest) {
         await setSessionCookie(token);
         await setAnonCookie(session.csrfSecret);
         // login_success も新規デバイス通知も**まだ記録しない**（2FA 未完了・T14）。
+        // リスク評価だけは保留時点で記録する（昇格時に通知・§57）。
+        try {
+          await evaluateAndRecordLoginRisk({
+            userId: user.id,
+            currentSessionId: session.id,
+            ipHash: session.ipHash,
+            deviceName: session.deviceName,
+            ip,
+            userAgent,
+          });
+        } catch {
+          // リスク評価の失敗でログインは失敗させない
+        }
         return handleSuccess({ twoFactorRequired: true });
       }
 
@@ -148,6 +162,20 @@ export async function POST(request: NextRequest) {
         }
       } catch {
         // 通知判定の失敗でもログインは成功として扱う
+      }
+
+      // 不審ログイン検知（§57）。既定は通知のみで、判定の失敗でログインは失敗させない。
+      try {
+        await evaluateAndRecordLoginRisk({
+          userId: user.id,
+          currentSessionId: session.id,
+          ipHash: session.ipHash,
+          deviceName: session.deviceName,
+          ip,
+          userAgent,
+        });
+      } catch {
+        // リスク評価の失敗でもログインは成功として扱う
       }
 
       await recordSecurityEvent('login_success', user.id, ip, userAgent);

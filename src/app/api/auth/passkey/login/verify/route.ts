@@ -15,6 +15,7 @@ import { rateLimiter } from '@/lib/auth/rate-limit';
 import { RATE_LIMITS } from '@/config/rate-limits';
 import { rateLimitKeys } from '@/lib/auth/rate-limit-keys';
 import { isFirstSessionFromDevice, notifyNewDeviceLogin } from '@/lib/auth/notifications';
+import { evaluateAndRecordLoginRisk } from '@/lib/auth/login-risk';
 
 /**
  * POST /api/auth/passkey/login/verify — ログイン応答を検証して**新セッション**を発行する（§8.5）。
@@ -123,6 +124,20 @@ export async function POST(request: NextRequest) {
       }
     } catch {
       // 通知判定の失敗でもログインは成功として扱う
+    }
+
+    // 不審ログイン検知（§57）。既定は通知のみ・失敗してもログインは失敗にしない。
+    try {
+      await evaluateAndRecordLoginRisk({
+        userId: user.id,
+        currentSessionId: session.id,
+        ipHash: session.ipHash,
+        deviceName: session.deviceName,
+        ip,
+        userAgent,
+      });
+    } catch {
+      // リスク評価の失敗でもログインは成功として扱う
     }
 
     await recordSecurityEvent('login_success', user.id, ip, userAgent, { method: 'passkey' });
