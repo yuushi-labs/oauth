@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth/session';
 import { findUserById } from '@/lib/db/queries/users';
 import { runCorePipeline } from '@/lib/auth/pipeline';
 import { logger } from '@/lib/util/logger';
+import { normalizeRequestId, runWithRequestId } from '@/lib/util/request-context';
 import type { SessionData } from '@/lib/auth/session';
 import type { User } from '@/lib/db/schema';
 import { getAnonCookieName, getSessionCookieName } from '@/lib/auth/cookie';
@@ -80,6 +81,10 @@ export async function withAuthPipeline(
   };
 
   try {
+    const requestId = normalizeRequestId(request.headers.get('x-request-id'));
+    if (requestId) {
+      return await runWithRequestId(requestId, () => runCorePipeline(deps, options, handler));
+    }
     return await runCorePipeline(deps, options, handler);
   } catch (error) {
     return handleApiError(error);

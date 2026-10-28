@@ -107,4 +107,32 @@ describe('Phase 2 web protections', () => {
     expect(isAllowedOrigin(null, 'https://evil.example/path')).toBe(false);
     expect(isAllowedOrigin(null, null)).toBe(false);
   });
+
+  it('sets hardening headers (noindex / nosniff / referrer-policy) on every response', () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'http://localhost:3000');
+    const response = middleware(new NextRequest('http://localhost:3000/login'));
+    expect(response.headers.get('x-robots-tag')).toBe('noindex, nofollow');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(response.headers.get('referrer-policy')).toBe('strict-origin-when-cross-origin');
+    expect(response.headers.get('x-frame-options')).toBe('DENY');
+  });
+
+  it('adopts a well-formed incoming X-Request-Id and generates one when absent or malformed', () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'http://localhost:3000');
+    const adopted = middleware(new NextRequest('http://localhost:3000/', {
+      headers: { 'x-request-id': 'trace-abc-123456' },
+    }));
+    expect(adopted.headers.get('x-request-id')).toBe('trace-abc-123456');
+
+    const generated = middleware(new NextRequest('http://localhost:3000/'));
+    expect(generated.headers.get('x-request-id')).toMatch(/^[0-9a-f-]{36}$/);
+
+    const malformed = middleware(new NextRequest('http://localhost:3000/', {
+      headers: { 'x-request-id': 'bad id' },
+    }));
+    expect(malformed.headers.get('x-request-id')).not.toBe('bad id');
+    expect(malformed.headers.get('x-request-id')).toMatch(/^[0-9a-f-]{36}$/);
+  });
 });

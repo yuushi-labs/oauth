@@ -207,6 +207,16 @@ function downStatementsFor(file: string, sql: string): string[] {
       statements.push(`ALTER TABLE "${table}" ALTER COLUMN "${column}" DROP DEFAULT`);
       continue;
     }
+    if (/^ALTER TABLE "([^"]+)" ALTER COLUMN "([^"]+)" DROP NOT NULL/i.test(statement)) {
+      const [, table, column] = /^ALTER TABLE "([^"]+)" ALTER COLUMN "([^"]+)" DROP NOT NULL/i.exec(statement)!;
+      statements.push(`ALTER TABLE "${table}" ALTER COLUMN "${column}" SET NOT NULL`);
+      continue;
+    }
+    if (/^ALTER TABLE "([^"]+)" ALTER COLUMN "([^"]+)" SET NOT NULL/i.test(statement)) {
+      const [, table, column] = /^ALTER TABLE "([^"]+)" ALTER COLUMN "([^"]+)" SET NOT NULL/i.exec(statement)!;
+      statements.push(`ALTER TABLE "${table}" ALTER COLUMN "${column}" DROP NOT NULL`);
+      continue;
+    }
     if (/^(UPDATE|INSERT|DELETE)\s/i.test(statement)) {
       // Data migrations are not reversible, but every statement they precede or follow in this
       // project creates or drops a column/table, so the object removal below already discards the

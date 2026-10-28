@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     await recordAdminAudit({
       action: 'admin_user_viewed',
       actorUserId: user.id,
+      actorUsername: user.username,
       ip: getRequestClientIp(request),
       userAgent: request.headers.get('user-agent') ?? '',
       metadata: { count: users.length },

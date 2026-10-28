@@ -125,11 +125,15 @@ describe('admin_audit_logs (§61)', () => {
     }
   });
 
-  it('actor_user_id は NOT NULL、target_user_id は NULL 許可（D-35-08）', () => {
+  it('actor_user_id / target_user_id は NULL 許可で、表示名スナップショット列を持つ（D-35-08 緩和）', () => {
     const actor = config.columns.find((c) => c.name === 'actor_user_id');
     const target = config.columns.find((c) => c.name === 'target_user_id');
-    expect(actor?.notNull).toBe(true);
+    // 保持期間後のユーザー物理削除で FK が SET NULL になるため NULL を許可する。
+    expect(actor?.notNull).toBe(false);
     expect(target?.notNull).toBe(false);
+    // 監査一覧の表示名は追記時にスナップショットする。
+    expect(config.columns.find((c) => c.name === 'actor_username')).toBeTruthy();
+    expect(config.columns.find((c) => c.name === 'target_username')).toBeTruthy();
   });
 
   it('created_at / actor_user_id / target_user_id に index がある', () => {

@@ -70,6 +70,7 @@ async function main(): Promise<void> {
     roleId,
     maxRank: roleRank(ROLE_IDS.superadmin),
     actorUserId: actor?.id ?? null,
+    actorUsername: actor?.username ?? null,
     ip: '',
     userAgent: 'admin-grant-cli',
   });

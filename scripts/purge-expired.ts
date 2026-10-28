@@ -71,9 +71,40 @@ export async function purgeExpired(db: Pick<DbClient, 'execute'> = getDb()): Pro
       WHERE expires_at < NOW() OR consumed_at < NOW() - INTERVAL '1 day'
       ORDER BY expires_at ASC LIMIT ${BATCH_SIZE} FOR UPDATE SKIP LOCKED
     ) RETURNING id`],
+    // セキュリティイベントの保持は 180 日（§20 / D-13）。異常アクセス判定に使う生 IP を
+    // 無期限に持たないため、期間経過分は物理削除する。
+    ['security event', sql`DELETE FROM security_events WHERE id IN (
+      SELECT id FROM security_events
+      WHERE created_at < NOW() - INTERVAL '180 days'
+      ORDER BY created_at ASC LIMIT ${BATCH_SIZE} FOR UPDATE SKIP LOCKED
+    ) RETURNING id`],
   ] as const;
   const results = await Promise.all(jobs.map(async ([label, statement]) => [label, await deleteInBatches(db, statement)] as const));
-  return Object.fromEntries(results);
+  const userPurge = await purgeDeletedUsers(db);
+  return { ...Object.fromEntries(results), 'deleted user': userPurge };
+}
+
+/**
+ * 論理削除済みユーザーを保持期間（30 日）経過後に物理削除する（§24）。
+ *
+ * `users` を消すと、本人データ（sessions / totp / recovery_codes / webauthn_credentials /
+ * accounts / oauth_* / 各トークン / user_preferences / oidc_user_*）は `ON DELETE CASCADE` で
+ * 消える。`security_events` / `oauth_clients.owner_user_id` / `admin_audit_logs` は `SET NULL`
+ * なので監査・イベントは匿名化して残る（D-13 / D-35-08）。
+ */
+export async function purgeDeletedUsers(db: Pick<DbClient, 'execute'>): Promise<number> {
+  let total = 0;
+  while (true) {
+    const result = await db.execute(sql`DELETE FROM users WHERE id IN (
+      SELECT id FROM users
+      WHERE status = 'deleted' AND deleted_at IS NOT NULL
+        AND deleted_at < NOW() - INTERVAL '30 days'
+      ORDER BY deleted_at ASC LIMIT ${BATCH_SIZE} FOR UPDATE SKIP LOCKED
+    ) RETURNING id`);
+    const removed = result.rows.length;
+    total += removed;
+    if (removed < BATCH_SIZE) return total;
+  }
 }
 
 async function deleteInBatches(db: Pick<DbClient, 'execute'>, statement: ReturnType<typeof sql>): Promise<number> {

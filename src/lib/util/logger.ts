@@ -1,3 +1,5 @@
+import { getRequestId } from '@/lib/util/request-context';
+
 export const REDACTED = '***';
 
 const MAX_DEPTH = 6;
@@ -95,9 +97,11 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 export type LogMeta = Record<string, unknown>;
 
 function write(level: LogLevel, message: string, meta?: LogMeta): void {
+  const requestId = getRequestId();
   const payload = {
     level,
     time: new Date().toISOString(),
+    ...(requestId ? { requestId } : {}),
     message: redactText(message),
     ...(meta ? (redact(meta) as LogMeta) : {}),
   };

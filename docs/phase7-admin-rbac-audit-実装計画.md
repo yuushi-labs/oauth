@@ -126,7 +126,7 @@
 | D-35-05 | 管理 API の再認証 | 管理 API は **GET を含めすべて** `requireReauth: true`（5 分猶予） | §51「再認証」。一覧・監査ログも機微情報なので例外を作らない |
 | D-35-06 | `admin_user_viewed` の記録点 | `GET /api/admin/users` の成功時に 1 件（metadata に `count`）。専用の詳細 API は作らない | 計画 §11.6 に詳細 API が無い。5 アクションを全て記録できる最小構成 |
 | D-35-07 | 監査ログの保存先 | `admin_audit_logs` に**別テーブル**で保存。`security_events` には入れない | §61「通常のセキュリティログとは別」 |
-| D-35-08 | 監査ログの actor / target | `actor_user_id` は **NOT NULL**（FK, no cascade）。`target_user_id` は nullable（FK）。物理削除しないので FK は保持できる | 論理削除のみ運用。監査証跡を消さない |
+| D-35-08 | 監査ログの actor / target | `actor_user_id` / `target_user_id` は nullable（FK, `ON DELETE SET NULL`）。表示名は追記時に `actor_username` / `target_username` へ**スナップショット**する | 当初は「論理削除のみ運用なので `actor_user_id` は NOT NULL」としたが、保持期間経過後の**物理削除**（§24 / D-36-09）で FK が切れるため D-36-09 で緩和。監査証跡は表示名スナップショットで保持する |
 | D-35-09 | 監査ログの metadata | `count` / `reason` / `status` など**許可キーだけ**を残す（`security_events` と同じ方針）。secret は入れない | §45 |
 | D-35-10 | 自己操作の禁止 | 自分自身の suspend / delete は **409 `CANNOT_TARGET_SELF`** | 管理者が自分を停止・削除してロックアウトされるのを防ぐ |
 | D-35-11 | 対象が見つからない場合 | 存在しない・論理削除済みの user への操作は **404 `ADMIN_NOT_FOUND`**（他人の存在を教えない） | §49 |

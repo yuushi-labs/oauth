@@ -32,7 +32,11 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
   変更時は `src/test/security/*` の SessionData フィクスチャ（7 ファイル）を確認する。
 - `src/lib/auth/rate-limit.ts` — PostgreSQL が唯一の正本（D-05）。`src/config/rate-limits.ts` に値、
   `src/lib/auth/rate-limit-keys.ts` にキー生成を集約（コード散在禁止）。
-- `src/lib/db/schema.ts` — 全テーブル。migration は `drizzle/`（up のみ）。最新は `0016`。
+- `src/lib/db/schema.ts` — 全テーブル。migration は `drizzle/`（up のみ）。最新は `0021`。
+- `scripts/purge-expired.ts` — 保持期間パージ（`pnpm purge`）。期限切れ token/session/OIDC artifact に加え、
+  `security_events` は 180 日（D-13）、論理削除済みユーザーは 30 日経過後に**物理削除**（§24 / D-36-09）。
+  ユーザー物理削除は本人データを `ON DELETE CASCADE`、`security_events` / `oauth_clients` /
+  `admin_audit_logs` を `SET NULL`（匿名化保持）で処理する。追加ジョブは `jobs` 配列に足す。
 - `scripts/server.ts` — OIDC interaction UI（login / consent）を素の HTML で描画。CSP は script 禁止。
 - `src/lib/util/logger.ts` — secret redaction。機密キーは `SENSITIVE_KEYS` に追加する。
 - `src/messages/ja.ts` — UI 文言・メール文面の一元管理（D-30-18）。`m('a.b.c')` で型安全に引く。

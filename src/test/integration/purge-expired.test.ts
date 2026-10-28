@@ -52,6 +52,12 @@ beforeAll(async () => {
     scopes text[] NOT NULL DEFAULT ARRAY['openid']::text[], created_at timestamptz NOT NULL DEFAULT NOW(),
     updated_at timestamptz NOT NULL DEFAULT NOW(), last_used_at timestamptz, revoked_at timestamptz
   )`));
+  await db.execute(sql.raw(`CREATE TEMP TABLE security_events (
+    id text PRIMARY KEY, created_at timestamptz NOT NULL DEFAULT NOW()
+  )`));
+  await db.execute(sql.raw(`CREATE TEMP TABLE users (
+    id text PRIMARY KEY, status text NOT NULL DEFAULT 'active', deleted_at timestamptz
+  )`));
 });
 
 afterAll(async () => {
@@ -106,6 +112,15 @@ describe('expired data cleanup', () => {
       ('wch_consumed_old', 'authentication', 'c2', NOW() + INTERVAL '1 hour', NOW() - INTERVAL '2 days'),
       ('wch_consumed_recent', 'authentication', 'c3', NOW() + INTERVAL '1 hour', NOW() - INTERVAL '10 minutes'),
       ('wch_valid', 'registration', 'c4', NOW() + INTERVAL '10 minutes', NULL)`);
+    await db.execute(sql`INSERT INTO security_events (id, created_at) VALUES
+      ('event-old', NOW() - INTERVAL '181 days'),
+      ('event-boundary', NOW() - INTERVAL '179 days'),
+      ('event-recent', NOW() - INTERVAL '1 day')`);
+    await db.execute(sql`INSERT INTO users (id, status, deleted_at) VALUES
+      ('usr_deleted_old', 'deleted', NOW() - INTERVAL '31 days'),
+      ('usr_deleted_recent', 'deleted', NOW() - INTERVAL '1 day'),
+      ('usr_suspended_old', 'suspended', NOW() - INTERVAL '31 days'),
+      ('usr_active', 'active', NULL)`);
 
     const result = await purgeExpired(db);
 
@@ -122,6 +137,8 @@ describe('expired data cleanup', () => {
       'oauth state': 2,
       'social claim': 2,
       'webauthn challenge': 2,
+      'security event': 1,
+      'deleted user': 1,
     });
 
     const reservations = await db.execute(sql`SELECT reservation_id, status FROM rate_limit_reservations ORDER BY reservation_id`);
@@ -143,5 +160,13 @@ describe('expired data cleanup', () => {
     expect(claims.rows).toEqual([{ state_hash: 'claim-consumed-recent' }, { state_hash: 'claim-valid' }]);
     const challenges = await db.execute(sql`SELECT id FROM webauthn_challenges ORDER BY id`);
     expect(challenges.rows).toEqual([{ id: 'wch_consumed_recent' }, { id: 'wch_valid' }]);
+    const events = await db.execute(sql`SELECT id FROM security_events ORDER BY id`);
+    expect(events.rows).toEqual([{ id: 'event-boundary' }, { id: 'event-recent' }]);
+    const remainingUsers = await db.execute(sql`SELECT id FROM users ORDER BY id`);
+    expect(remainingUsers.rows).toEqual([
+      { id: 'usr_active' },
+      { id: 'usr_deleted_recent' },
+      { id: 'usr_suspended_old' },
+    ]);
   });
 });

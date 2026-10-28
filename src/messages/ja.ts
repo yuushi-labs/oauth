@@ -100,6 +100,12 @@ export const messages = {
     },
   },
   ui: {
+    error: {
+      notFoundTitle: 'ページが見つかりません',
+      notFoundDescription: 'お探しのページは存在しないか、移動した可能性があります。',
+      unexpectedTitle: '問題が発生しました',
+      unexpectedDescription: '一時的なエラーが発生しました。しばらくしてからもう一度お試しください。',
+    },
     settings: {
       title: '設定',
       menu: '設定メニュー',
@@ -177,6 +183,7 @@ export const messages = {
       save: '保存',
       retry: '再試行',
       backToLogin: 'ログインに戻る',
+      backToHome: 'ホームへ戻る',
       error: '操作に失敗しました。もう一度お試しください。',
     },
     theme: {

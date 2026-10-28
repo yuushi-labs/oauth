@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { configuredOriginList, isTrustedOrigin } from '@/lib/auth/origin';
+import { normalizeRequestId } from '@/lib/util/request-context';
 
 function contentSecurityPolicy(nonce: string): string {
   const scriptDirective = [
@@ -93,15 +94,22 @@ export function middleware(request: NextRequest) {
   const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
   const nonce = btoa(String.fromCharCode(...nonceBytes));
   const csp = contentSecurityPolicy(nonce);
+  // リクエスト相関 ID（P9-04）。クライアント/プロキシの値を信頼せず形式を検証し、
+  // 不正なら採番する。ログと応答ヘッダーで同じ ID を使う。
+  const requestId = normalizeRequestId(request.headers.get('x-request-id')) ?? crypto.randomUUID();
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-nonce', nonce);
+  requestHeaders.set('x-request-id', requestId);
   requestHeaders.set('Content-Security-Policy', csp);
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set('Content-Security-Policy', csp);
+  response.headers.set('X-Request-Id', requestId);
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set('X-Frame-Options', 'DENY');
+  // 認証画面・管理画面は検索エンジンにインデックスさせない。
+  response.headers.set('X-Robots-Tag', 'noindex, nofollow');
   let normalizedOrigin = '';
   try { if (origin && origin !== 'null') normalizedOrigin = new URL(origin).origin; } catch { /* invalid Origin gets no CORS grant */ }
   if (normalizedOrigin && allowedCorsOrigins.has(normalizedOrigin) && isApi) {

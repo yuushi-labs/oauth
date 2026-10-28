@@ -34,7 +34,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     await recordAdminAudit({
       action: 'admin_account_deleted',
       actorUserId: user.id,
+      actorUsername: user.username,
       targetUserId: target.id,
+      targetUsername: target.username,
       ip,
       userAgent,
       metadata: { status: 'deleted' },

@@ -60,14 +60,15 @@ export async function changeUserRole(input: {
 /**
  * role 変更を適用し、監査ログとセキュリティイベントを残す（API / CLI 共通）。
  *
- * `actorUserId` が無い場合（CLI の bootstrap）は `admin_audit_logs.actor_user_id` が
- * NOT NULL のため監査ログには記録せず、`security_events` にのみ記録する（D-36-05）。
+ * `actorUserId` が無い場合（CLI の bootstrap）は、記録すべき操作主体が存在しないため
+ * 監査ログには記録せず、`security_events` にのみ記録する（D-36-05）。
  */
 export async function applyRoleChange(input: {
   target: User;
   roleId: string;
   maxRank: number;
   actorUserId: string | null;
+  actorUsername?: string | null;
   ip: string;
   userAgent: string;
 }): Promise<ChangeRoleResult> {
@@ -83,7 +84,9 @@ export async function applyRoleChange(input: {
     await recordAdminAudit({
       action: 'admin_role_changed',
       actorUserId: input.actorUserId,
+      actorUsername: input.actorUsername,
       targetUserId: input.target.id,
+      targetUsername: input.target.username,
       ip: input.ip,
       userAgent: input.userAgent,
       metadata: { role: result.roleId, previous_role: result.previousRoleId },

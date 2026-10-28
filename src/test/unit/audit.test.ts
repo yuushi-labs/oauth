@@ -2,15 +2,22 @@ import { describe, expect, it, vi } from 'vitest';
 
 const dbMock = vi.hoisted(() => ({
   values: vi.fn(async (_row: Record<string, unknown>) => undefined),
+  // lookupUsername の `select(...).from(...).where(...).limit(1)` を解決する。
+  select: vi.fn(() => ({
+    from: () => ({
+      where: () => ({ limit: async () => [{ username: 'looked_up' }] }),
+    }),
+  })),
 }));
 vi.mock('@/lib/db/client', () => ({
-  getDb: () => ({ insert: () => ({ values: dbMock.values }) }),
+  getDb: () => ({ insert: () => ({ values: dbMock.values }), select: dbMock.select }),
 }));
 
 import { recordAdminAudit } from '@/lib/auth/audit';
 
 const base = {
   actorUserId: 'usr_admin',
+  actorUsername: 'admin',
   ip: '203.0.113.42',
   userAgent: 'vitest',
 };
@@ -24,9 +31,17 @@ describe('recordAdminAudit', () => {
     expect(String(row.id)).toMatch(/^aud_/);
     expect(row.action).toBe('admin_user_viewed');
     expect(row.actorUserId).toBe('usr_admin');
+    expect(row.actorUsername).toBe('admin');
     expect(row.ip).toBe('203.0.113.42');
     expect(row.ipMasked).toBe('203.0.113.xxx');
     expect(row.metadata).toEqual({ count: 3 });
+  });
+
+  it('actorUsername 未指定なら DB から解決してスナップショットする', async () => {
+    dbMock.values.mockClear();
+    await recordAdminAudit({ action: 'admin_user_viewed', actorUserId: 'usr_admin', ip: '203.0.113.42', userAgent: 'vitest' });
+    const row = dbMock.values.mock.calls[0]![0];
+    expect(row.actorUsername).toBe('looked_up');
   });
 
   it('metadata は許可キーだけを残す（§45）', async () => {

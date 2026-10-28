@@ -633,11 +633,13 @@ export const adminAuditLogs = pgTable(
   'admin_audit_logs',
   {
     id: text('id').primaryKey(),
-    actorUserId: text('actor_user_id')
-      .notNull()
-      .references(() => users.id),
+    // 保持期間経過後にユーザーを物理削除すると FK が切れるため、actor/target の
+    // 表示名を追記時にスナップショットする（監査証跡を残す・D-35-08 の緩和）。
+    actorUserId: text('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    actorUsername: text('actor_username'),
     action: text('action').notNull(),
-    targetUserId: text('target_user_id').references(() => users.id),
+    targetUserId: text('target_user_id').references(() => users.id, { onDelete: 'set null' }),
+    targetUsername: text('target_username'),
     targetSessionId: text('target_session_id'),
     ip: text('ip'),
     ipMasked: text('ip_masked'),

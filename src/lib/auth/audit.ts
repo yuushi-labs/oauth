@@ -1,5 +1,6 @@
+import { eq } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
-import { adminAuditLogs, type AdminAuditAction } from '@/lib/db/schema';
+import { adminAuditLogs, users, type AdminAuditAction } from '@/lib/db/schema';
 import { newId } from '@/lib/util/id';
 import { maskIp } from '@/lib/util/ip';
 import { logger } from '@/lib/util/logger';
@@ -15,10 +16,23 @@ function filterMetadata(metadata: Record<string, unknown> | undefined): Record<s
   return Object.keys(filtered).length > 0 ? filtered : null;
 }
 
+async function lookupUsername(db: ReturnType<typeof getDb>, userId: string | null): Promise<string | null> {
+  if (!userId) return null;
+  const [row] = await db
+    .select({ username: users.username })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return row?.username ?? null;
+}
+
 export type AdminAuditInput = {
   action: AdminAuditAction;
   actorUserId: string;
+  /** 呼び出し側が既に持っている場合は渡す（余分な SELECT を避ける）。無ければ DB から引く。 */
+  actorUsername?: string | null;
   targetUserId?: string | null;
+  targetUsername?: string | null;
   targetSessionId?: string | null;
   ip: string;
   userAgent: string;
@@ -34,11 +48,20 @@ export type AdminAuditInput = {
 export async function recordAdminAudit(input: AdminAuditInput): Promise<void> {
   try {
     const db = getDb();
+    // actor/target の表示名は追記時にスナップショットする。保持期間後のユーザー物理削除で
+    // FK が SET NULL になっても、監査一覧に操作主体・対象を表示できるようにする（D-35-08）。
+    const actorUsername =
+      input.actorUsername ?? (await lookupUsername(db, input.actorUserId));
+    const targetUsername =
+      input.targetUsername ?? (await lookupUsername(db, input.targetUserId ?? null));
+
     await db.insert(adminAuditLogs).values({
       id: newId('aud'),
       actorUserId: input.actorUserId,
+      actorUsername: actorUsername ?? null,
       action: input.action,
       targetUserId: input.targetUserId ?? null,
+      targetUsername: targetUsername ?? null,
       targetSessionId: input.targetSessionId ?? null,
       ip: input.ip,
       ipMasked: input.ip ? maskIp(input.ip) : null,

@@ -26,6 +26,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       roleId,
       maxRank: roleRank(ROLE_IDS.admin),
       actorUserId: user.id,
+      actorUsername: user.username,
       ip: getRequestClientIp(request),
       userAgent: request.headers.get('user-agent') ?? '',
     });

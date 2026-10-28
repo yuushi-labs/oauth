@@ -65,10 +65,11 @@ Phase 7 完了時点（`docs/phase-verification-report-2026-10-26.md`）で、�
 | D-36-02 | **自分自身の role は変更できない**。対象＝自分は 409 `CANNOT_TARGET_SELF`（既存コードを再利用） | 自己降格によるロックアウト防止。既存 `resolveAdminTarget` が既に保証する |
 | D-36-03 | **最後の有効な管理者を降格できない** → 409 `LAST_ADMIN`（新コード） | 「有効な管理者」= `deleted_at IS NULL` かつ `status='active'` かつ rank ≥ admin。CLI の誤操作で管理者が 0 人になるのを防ぐ |
 | D-36-04 | role 変更時に**セッションを失効させない** | 認可は全リクエストで `findUserById` を引き直す（`pipeline.ts:103`）。role 変更は次リクエストから即時反映されるため失効不要。失効させると昇格直後の管理者がログアウトされ UX を損なう |
-| D-36-05 | 監査は `admin_audit_logs`（API）＋ `security_events`（API/CLI 共通）。CLI は `--actor` がある時だけ `admin_audit_logs` にも記録 | `admin_audit_logs.actor_user_id` は NOT NULL（D-35-08）。初回 bootstrap には actor が存在しないため、CLI は actor 任意・イベントは必須とする |
+| D-36-05 | 監査は `admin_audit_logs`（API）＋ `security_events`（API/CLI 共通）。CLI は `--actor` がある時だけ `admin_audit_logs` にも記録 | 初回 bootstrap には actor が存在しないため、CLI は actor 任意・イベントは必須とする |
 | D-36-06 | CLI は trusted operator として動く（`requireRole` を通らない）。`--role` は 4 種すべて許可 | CLI は DB 直アクセス権を持つ運用者専用。API の制約（D-36-01）と分ける |
 | D-36-07 | 管理 UI の入口は `/admin/*`。`SettingsNav` には**role ≥ admin のときだけ**リンクを出す。認可はサーバー側（§49）で再判定する | フロントの表示制御は UX。認可は必ずサーバー側 |
 | D-36-08 | 管理 UI の 2FA 未設定時は「有効化を促す案内」を出す（403 の連発にしない） | §51。`requireAdminAccess` と同じ判定をサーバー側で行い、UI で先回りする |
+| D-36-09 | 論理削除済みユーザーは保持期間（**30 日**）経過後に**物理削除**する。`admin_audit_logs.actor_user_id` / `target_user_id` を `SET NULL` に緩め、表示名を追記時に `actor_username` / `target_username` へスナップショットする（D-35-08 を改訂） | §24「必要な保持期間を経過した後に完全削除する」＋ D-13（生 IP を無期限に保持しない）。物理削除で `ON DELETE CASCADE` により本人データを確実に消し、監査・イベントは匿名化して残す |
 
 ---
 

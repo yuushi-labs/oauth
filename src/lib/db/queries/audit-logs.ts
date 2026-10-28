@@ -10,7 +10,7 @@ import { adminAuditLogs, users } from '@/lib/db/schema';
 export type AdminAuditLogRow = {
   id: string;
   action: string;
-  actorUserId: string;
+  actorUserId: string | null;
   actorUsername: string | null;
   targetUserId: string | null;
   targetUsername: string | null;
@@ -32,9 +32,9 @@ export async function listAdminAuditLogs(options: {
       id: adminAuditLogs.id,
       action: adminAuditLogs.action,
       actorUserId: adminAuditLogs.actorUserId,
-      actorUsername: actor.username,
+      actorUsername: sql<string | null>`coalesce(${adminAuditLogs.actorUsername}, ${actor.username})`,
       targetUserId: adminAuditLogs.targetUserId,
-      targetUsername: target.username,
+      targetUsername: sql<string | null>`coalesce(${adminAuditLogs.targetUsername}, ${target.username})`,
       ipMasked: adminAuditLogs.ipMasked,
       metadata: adminAuditLogs.metadata,
       createdAt: adminAuditLogs.createdAt,

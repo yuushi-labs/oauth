@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { REDACTED, isSensitiveKey, redact, redactText, logger } from '@/lib/util/logger';
+import { normalizeRequestId, runWithRequestId } from '@/lib/util/request-context';
 
 describe('isSensitiveKey', () => {
   it('秘密情報のキーを判定する（仕様45）', () => {
@@ -96,5 +97,40 @@ describe('logger', () => {
 
     expect(String(spy.mock.calls[0]?.[0])).not.toContain('raw-token-value');
     spy.mockRestore();
+  });
+
+  it('runWithRequestId のスコープ内では requestId を付ける（P9-04）', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    runWithRequestId('req-abc-12345678', () => {
+      logger.info('scoped log');
+    });
+
+    const payload = JSON.parse(String(spy.mock.calls[0]?.[0])) as { requestId?: string };
+    expect(payload.requestId).toBe('req-abc-12345678');
+    spy.mockRestore();
+  });
+
+  it('スコープ外のログには requestId を付けない', () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    logger.info('unscoped log');
+
+    const payload = JSON.parse(String(spy.mock.calls[0]?.[0])) as { requestId?: string };
+    expect(payload.requestId).toBeUndefined();
+    spy.mockRestore();
+  });
+});
+
+describe('normalizeRequestId', () => {
+  it('妥当な ID はそのまま通し、前後の空白を落とす', () => {
+    expect(normalizeRequestId('  abc12345-ab_cd  ')).toBe('abc12345-ab_cd');
+  });
+
+  it('短すぎる・長すぎる・不正文字は null（採番に委ねる）', () => {
+    expect(normalizeRequestId('short')).toBeNull();
+    expect(normalizeRequestId('a'.repeat(65))).toBeNull();
+    expect(normalizeRequestId('bad id with spaces')).toBeNull();
+    expect(normalizeRequestId('<script>alert(1)</script>')).toBeNull();
+    expect(normalizeRequestId(null)).toBeNull();
+    expect(normalizeRequestId(undefined)).toBeNull();
   });
 });
