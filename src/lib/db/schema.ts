@@ -292,6 +292,33 @@ export const emailChangeRequests = pgTable(
   ],
 );
 
+/**
+ * セルフサービス退会のメール確認待ち（§24）。
+ *
+ * `/settings/account` の削除フローは、2FA / Passkey / メール確認のいずれか 1 つで
+ * 本人確認する。メール確認を選んだ場合はこの行にトークンを発行し、メール内リンクの
+ * 消費（`used_at` を 1 文 UPDATE で埋める・D-16）をもって削除を確定する。
+ * 未消費の行は削除要求をやり直すたびに無効化する（`invalidateAccountDeletionRequests`）。
+ */
+export const accountDeletionRequests = pgTable(
+  'account_deletion_requests',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    purpose: text('purpose').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('account_deletion_requests_user_id_idx').on(table.userId),
+    index('account_deletion_requests_expires_at_idx').on(table.expiresAt),
+  ],
+);
+
 export const SECURITY_EVENT_TYPES = [
   'register',
   'login_success',
@@ -312,6 +339,7 @@ export const SECURITY_EVENT_TYPES = [
   'oauth_unlinked',
   'session_revoked',
   'account_deleted',
+  'account_deletion_requested',
   'account_suspended',
   'account_unsuspended',
   'role_changed',
@@ -538,6 +566,8 @@ export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type NewPasswordResetToken = typeof passwordResetTokens.$inferInsert;
 export type EmailChangeRequest = typeof emailChangeRequests.$inferSelect;
 export type NewEmailChangeRequest = typeof emailChangeRequests.$inferInsert;
+export type AccountDeletionRequest = typeof accountDeletionRequests.$inferSelect;
+export type NewAccountDeletionRequest = typeof accountDeletionRequests.$inferInsert;
 export type SecurityEvent = typeof securityEvents.$inferSelect;
 export type UserPreferences = typeof userPreferences.$inferSelect;
 export type NewSecurityEvent = typeof securityEvents.$inferInsert;

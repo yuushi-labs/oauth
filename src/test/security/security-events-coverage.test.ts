@@ -23,7 +23,8 @@ describe('Phase 2 security event coverage', () => {
       ['password/reset/route.ts', ['password_reset']],
       ['password/set/route.ts', ['password_changed']],
       ['email/change/confirm/route.ts', ['email_changed']],
-      ['account/route.ts', ['account_deleted']],
+      ['account/route.ts', ['rate_limited']],
+      ['account/delete/request/route.ts', ['account_deletion_requested', 'rate_limited']],
     ];
     for (const [relativePath, eventTypes] of routeEvents) {
       const source = readFileSync(resolve(process.cwd(), 'src/app/api/auth', relativePath), 'utf8');
@@ -32,6 +33,14 @@ describe('Phase 2 security event coverage', () => {
         expect(source, `${relativePath} should record ${eventType}`).toContain(`'${eventType}'`);
       }
     }
+  });
+
+  it('アカウント削除の副作用は account-deletion ヘルパに集約し account_deleted を記録する（§24）', () => {
+    // 削除は「パスワード＋コード」「Passkey」「メール確認」の 3 経路から同じヘルパを通る。
+    // イベント記録を各ルートに散らさず 1 か所に固定する。
+    const source = readFileSync(resolve(process.cwd(), 'src/lib/auth/account-deletion.ts'), 'utf8');
+    expect(source).toContain('recordSecurityEvent');
+    expect(source).toContain("'account_deleted'");
   });
 
   it('stores a masked display IP and passes only caller-supplied contextual metadata', async () => {

@@ -98,6 +98,11 @@ export const messages = {
       html: () => emailLayout('アカウント削除のお知らせ', '<p>アカウントは削除予定です。30日間の保持期間後に完全に削除されます。</p>'),
       text: () => `${APP_NAME}のアカウントは削除予定です。30日間の保持期間後に完全に削除されます。`,
     },
+    accountDeletionConfirm: {
+      subject: `${APP_NAME}: アカウント削除の確認`,
+      html: (url: string) => emailLayout('アカウント削除の確認', `<p>アカウント削除のリクエストを受け付けました。下のボタンを押すと削除が確定します。</p>${emailButton(url, 'アカウント削除を確定する')}<p style="color:#64748b;font-size:13px">このリンクは30分間有効です。心当たりがない場合は、このメールを無視してください。削除は行われません。</p>`),
+      text: (url: string) => `アカウント削除のリクエストを受け付けました。以下のURLを開くと削除が確定します（30分間有効）。\n${url}\n\n心当たりがない場合は、このメールを無視してください。削除は行われません。`,
+    },
   },
   ui: {
     error: {
@@ -322,6 +327,7 @@ export const messages = {
         email_verified: 'メールアドレスを確認',
         session_revoked: 'セッションを無効化',
         account_deleted: 'アカウントを削除',
+        account_deletion_requested: 'アカウント削除をリクエスト',
         account_suspended: 'アカウントを停止',
         account_unsuspended: 'アカウントの停止を解除',
         role_changed: '権限を変更',
@@ -388,6 +394,33 @@ export const messages = {
       sameAsCurrent: '現在と同じメールアドレスには変更できません。',
       failed: '確認メールを送信できませんでした。',
       reauthHint: 'メールアドレスの変更には本人確認が必要です。パスワードを入力してください。',
+    },
+    accountDelete: {
+      title: 'アカウントの削除',
+      description:
+        'アカウントを削除すると、すべてのセッション・連携・Passkey が無効になります。30日間の保持期間後に完全に削除されます。',
+      warningTitle: 'この操作は取り消せません',
+      warningBody:
+        '削除すると、このアカウントではログインできなくなります。連携していた外部アカウントは解除され、登録した Passkey も削除されます。',
+      open: 'アカウントを削除する',
+      confirmHint: '削除を確定するには、本人確認を行ってください。',
+      methodIntro: '本人確認の方法を選んでください。',
+      methodTwoFactor: '2 段階認証コード',
+      methodPasskey: 'Passkey',
+      methodEmail: 'メールで確認',
+      twoFactorRequired:
+        '2 段階認証が有効になっていないため、コードでの確認はできません。Passkey かメール確認を使ってください。',
+      passkeyRequired: 'Passkey が登録されていないため、Passkey での確認はできません。',
+      emailIntro: '登録済みのメールアドレスに確認リンクを送信します。リンクを開くと削除が確定します。',
+      emailSend: '確認メールを送信',
+      emailSent: '確認メールを送信しました。メール内のリンクを開くと削除が確定します。',
+      emailFailed: '確認メールを送信できませんでした。時間をおいて再度お試しください。',
+      confirm: '削除する',
+      confirmTitle: 'アカウントを削除しますか？',
+      cancelled: '削除を中止しました。',
+      done: 'アカウントを削除しました。ご利用ありがとうございました。',
+      failed: 'アカウントを削除できませんでした。',
+      backToLogin: 'ログイン画面へ',
     },
     oauth: {
       title: '連携アカウント',

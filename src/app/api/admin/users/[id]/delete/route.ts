@@ -2,17 +2,16 @@ import { NextRequest } from 'next/server';
 import { withAdminPipeline } from '@/lib/api/admin';
 import { handleSuccess } from '@/lib/api/utils';
 import { resolveAdminTarget } from '@/lib/api/admin-target';
-import { softDeleteUser } from '@/lib/db/queries/users';
-import { revokeAllSessions, getRequestClientIp } from '@/lib/auth/session';
-import { invalidateAllUserTokens } from '@/lib/db/queries/tokens';
-import { revokeUserOidcGrants } from '@/lib/oidc/grants';
+import { getRequestClientIp } from '@/lib/auth/session';
 import { recordAdminAudit } from '@/lib/auth/audit';
-import { recordSecurityEvent } from '@/lib/auth/security-events';
+import { performAccountDeletion } from '@/lib/auth/account-deletion';
 
 /**
  * POST /api/admin/users/{id}/delete — ユーザーを論理削除する（§11.6）。
  *
- * 論理削除（`deleted_at`）＋ 全セッション・全トークン・OIDC grant の失効。自己削除は禁止（D-35-10）。
+ * 論理削除（`deleted_at`）＋ 全セッション・全トークン・Passkey・OIDC grant の失効。
+ * 副作用は利用者自身の削除と同じ `performAccountDeletion` に集約する（§24）。
+ * 自己削除は禁止（D-35-10）。
  */
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   return withAdminPipeline(request, 'mutation', async ({ user }) => {
@@ -22,15 +21,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const ip = getRequestClientIp(request);
     const userAgent = request.headers.get('user-agent') ?? '';
 
-    await softDeleteUser(target.id);
-    await revokeAllSessions(target.id, 'admin_delete');
-    await invalidateAllUserTokens(target.id);
-    const revokedClients = await revokeUserOidcGrants(target.id);
+    await performAccountDeletion({ userId: target.id, ip, userAgent, metadata: { by: user.id } });
 
-    await recordSecurityEvent('account_deleted', target.id, ip, userAgent, {
-      by: user.id,
-      revokedOidcClients: revokedClients.length,
-    });
     await recordAdminAudit({
       action: 'admin_account_deleted',
       actorUserId: user.id,

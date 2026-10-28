@@ -36,13 +36,21 @@ vi.mock('@/lib/auth/session', async () => {
   return { ...actual, getSession: vi.fn(async () => session), revokeAllSessions: vi.fn(async () => undefined) };
 });
 vi.mock('@/lib/auth/rate-limit', () => ({
-  rateLimiter: { check: vi.fn(async () => ({ allowed: true, resetAt: Date.now() + 60_000, logRateLimited: false })) },
+  rateLimiter: {
+    check: vi.fn(async () => ({ allowed: true, resetAt: Date.now() + 60_000, logRateLimited: false })),
+    reserveFailedAttempt: vi.fn(async () => ({
+      allowed: true,
+      reservation: { reservationId: 'res_1', key: 'k', generation: 1, captchaRequired: false, resetAt: Date.now() + 60_000 },
+    })),
+    finishFailedAttempt: vi.fn(async () => undefined),
+  },
 }));
 vi.mock('@/lib/auth/security-events', () => ({ recordSecurityEvent: vi.fn(async () => undefined) }));
-vi.mock('@/lib/auth/reauth', async () => {
-  const actual = await vi.importActual('@/lib/auth/reauth');
-  return { ...actual, checkReauth: vi.fn(() => undefined) };
-});
+// 削除は強い再認証（パスワード＋コード / Passkey）必須（§8 / §24）。ここでは検証済みとして固定する。
+vi.mock('@/lib/auth/strong-reauth', () => ({
+  requireStrongReauth: vi.fn(async () => ({ method: 'password' as const })),
+}));
+vi.mock('@/lib/db/queries/webauthn', () => ({ deleteCredentialsByUser: vi.fn(async () => 0) }));
 vi.mock('@/lib/auth/breached', () => ({ checkBreached: vi.fn(async () => ({ breached: false, failOpen: false })) }));
 vi.mock('@/lib/auth/password', async () => {
   const actual = await vi.importActual('@/lib/auth/password');
@@ -95,7 +103,7 @@ describe('Security - 通知メール送信失敗でも変更系 API は成功応
   });
 
   it('account 削除: 送信失敗でも 200 を返す（500 にしない）', async () => {
-    const response = await deleteAccount(request('/api/auth/account', 'DELETE'));
+    const response = await deleteAccount(request('/api/auth/account', 'DELETE', { code: '123456' }));
     expect(response.status).toBe(200);
     expect(emailBoom).toHaveBeenCalled();
   });
