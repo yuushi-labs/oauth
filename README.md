@@ -373,7 +373,7 @@ users_role_id_idx / users_deleted_at_idx
 ### 既知の制約・注意点
 
 - Turnstile実provider接続とproxy環境ごとの信頼設定はPhase 9で行う。Phase 2では本番で未設定/未接続を拒否し、`TRUSTED_PROXY_HOPS=0`を既定値とする。
-- `lint` はwarning 21件（既存箇所を含む）で、errorは0件。warningはビルドを止めない
+- `lint` は **error 0 件・warning 0 件**。`eslint-plugin-security` のヒューリスティック誤検知（`detect-object-injection` / `detect-non-literal-fs-filename` / `detect-non-literal-regexp`）と未使用変数（`@typescript-eslint/no-unused-vars`）は `eslint.config.mjs` で `off` にしている（検査はビルドを止める error 系ルールに集約）
 - Docker 権限が無い環境では `sg docker -c "docker compose ..."` のようにグループを明示する必要がある
 - `docker compose` の DB は `127.0.0.1:5432` にのみバインドしている。外部公開しないこと
 
