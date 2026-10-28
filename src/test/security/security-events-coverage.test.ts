@@ -110,3 +110,24 @@ describe('Phase 5 security event coverage (2fa/**)', () => {
     expect(source).toContain('recordSecurityEvent');
   });
 });
+
+describe('Phase 8 security event coverage (risk / §57)', () => {
+  it('リスク検知は login_risk を login-risk ヘルパに集約して記録する（D-38-07）', () => {
+    // 記録は各ルートに散らさず、集計・判定・記録を担う login-risk ヘルパ 1 か所に固定する。
+    const source = readFileSync(resolve(process.cwd(), 'src/lib/auth/login-risk.ts'), 'utf8');
+    expect(source).toContain('recordSecurityEvent');
+    expect(source).toContain("'login_risk'");
+  });
+
+  it('ログイン / OAuth コールバック / Passkey ログインがリスク評価を呼ぶ', () => {
+    const routes = [
+      'login/route.ts',
+      'oauth/[provider]/callback/route.ts',
+      'passkey/login/verify/route.ts',
+    ];
+    for (const relativePath of routes) {
+      const source = readFileSync(resolve(process.cwd(), 'src/app/api/auth', relativePath), 'utf8');
+      expect(source, `${relativePath} should evaluate login risk`).toContain('evaluateAndRecordLoginRisk');
+    }
+  });
+});

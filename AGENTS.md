@@ -77,10 +77,22 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
   手で DROP しても `pnpm db:migrate` は「success」と言うだけで再作成しない（その SQL を直接流すか、
   該当行を消して以降を再適用する）。schema を疑ったら `pnpm db:verify-migrations` で往復検証する。
 
-## 現在の到達点（2026-10-28 時点）
+## 現在の到達点（2026-10-25 時点）
 
-M0〜M7.6 完了（Phase 0 / 1 / 2 / 2.5 / 2.6 / 3 / 4 / 4-B / 5 / 6 / 7 / 7.5 / **7.6**）。**次は Phase 8（M8）: リスク検知 / テスト完成**。
-Phase 8 の計画は `docs/phase8-risk-tests-実装計画.md`（D-38-01〜D-38-07）、実行タスクは `docs/phase8-実行Todo.md`（いずれも実装前の設計）。
+M0〜M8 完了（Phase 0 / 1 / 2 / 2.5 / 2.6 / 3 / 4 / 4-B / 5 / 6 / 7 / 7.5 / 7.6 / **8**）。**次は Phase 9（M9）: 運用デプロイ**。
+Phase 8 の計画は `docs/phase8-risk-tests-実装計画.md`（D-38-01〜D-38-07）、実行タスクは `docs/phase8-実行Todo.md`。
+
+Phase 8 の要点（リスク検知・§57 / §48 テスト完成）:
+- 不審ログイン検知は **純関数** `src/lib/auth/risk.ts`（信号判定 → スコア → `allow`/`notify`/`challenge`/`hold`）。
+  重み・閾値は `src/config/risk.ts` に集約（D-38-02）。DB / HTTP に触れないので単体テストしやすい。
+- 既定は **通知のみ**（`RISK_ENFORCEMENT='notify'`・D-38-03）。高スコアでもログインは成功し、既存挙動を変えない。
+  強制を上げたい環境だけ `'challenge'` / `'hold'` を設定する。判定は `src/lib/auth/login-risk.ts` の
+  `evaluateAndRecordLoginRisk`（集計 → 判定 → `login_risk` 記録）が担い、ログイン / OAuth callback / Passkey login へ配線済み。
+- 「短時間で複数地域」は外部 geo-IP を持ち込まず、短期間の複数 `ip_hash` で代理する（D-38-01・`sessions.ip_country` は常に null）。
+- §48 の各カテゴリは**正規ファイル名**に 1:1 対応（`security/{auth,session,oauth-redirect,oauth-replay,risk}.test.ts` ほか・D-38-05）。
+- E2E は **Playwright を導入しない**。`src/test/e2e/auth-journey.test.ts` が `startTestAppServer` で実 HTTP を通す（D-38-04）。
+  メール本文は Next のバンドル境界を跨げないため、確認メールの「クリック」は DB 状態を直接確定させて代替する。
+- テスト基盤は `src/test/helpers/{fixtures,rate-limit,totp}.ts` に集約（D-38-06）。時間依存は `vi.useFakeTimers()` を使い実時間待ちをしない。
 
 Phase 7.6 の要点（アカウント削除フロー・§8 / §21 / §24）:
 - 削除の副作用は `src/lib/auth/account-deletion.ts` の **`performAccountDeletion` に集約**（D-37-01）。論理削除・全セッション・

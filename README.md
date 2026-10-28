@@ -28,7 +28,7 @@
 | `docs/phase7-admin-rbac-audit-実装計画.md` / `docs/phase7-実行Todo.md` | 管理者 / RBAC / 監査ログ（M7） |
 | `docs/phase7.5-admin-ui-cli-実装計画.md` | 管理者の付与（管理 UI ＋ CLI）（M7.5） |
 | `docs/phase7.6-account-deletion-実装計画.md` | アカウント削除フロー＋アカウント保護イベント（M7.6） |
-| `docs/phase8-risk-tests-実装計画.md` / `docs/phase8-実行Todo.md` | リスク検知 ＋ セキュリティテスト完成（M8・実装前の設計） |
+| `docs/phase8-risk-tests-実装計画.md` / `docs/phase8-実行Todo.md` | リスク検知 ＋ セキュリティテスト完成（M8） |
 | `docs/phase-verification-report-2026-10-26.md` | Phase 7 完了時点の検証レポート |
 | `.env.example` | 環境変数の定義 |
 
@@ -247,6 +247,7 @@ oauth/
 | `GOOGLE_*` / `GITHUB_*` / `DISCORD_*` | 遅延評価 | OAuth 資格情報（Apple は除外: C-01） | Phase 4 |
 | `TURNSTILE_SECRET_KEY` | 遅延評価 | CAPTCHA。Phase 2では未設定時500、secret設定済みでprovider未接続なら503 | Phase 2 / Phase 9（実接続） |
 | `WEBAUTHN_RP_ID` / `WEBAUTHN_RP_NAME` / `WEBAUTHN_ALLOWED_ORIGINS` | 遅延評価 | Passkey の rpID / rpName / 許可 origin（カンマ区切り）。**環境ごとに別値を明示設定**（host からの自動導出はしない）。dev 既定は `localhost` / `http://localhost:3000` | Phase 6 |
+| `RISK_ENFORCEMENT` | 任意（既定 `notify`） | 不審ログイン検知（§57）の強制レベル。`notify`（通知のみ）/ `challenge`（追加認証）/ `hold`（セッション保留）。既定は通知のみで挙動不変 | Phase 8 |
 | `NODE_ENV` | 任意（既定 `development`） | 実行モード | Phase 0 |
 | `POSTGRES_USER` / `POSTGRES_DB` / `POSTGRES_PASSWORD` | ローカル専用 | `compose.yaml` が参照（アプリ側では参照しない） | Phase 0 |
 
@@ -293,10 +294,10 @@ oauth/
 | M7 | Phase 7 | 管理者 / RBAC / 監査ログ | **完了（2026-10-27）**（RBAC ガード・管理 API 6 本・監査ログ・8h セッション） |
 | M7.5 | Phase 7.5 | 管理者の付与（管理 UI ＋ CLI） | **完了（2026-10-27）**（`/admin/users`・`/admin/audit-logs`・`POST /api/admin/users/{id}/role`・`pnpm admin:grant`。最後の管理者ガード・自己降格禁止） |
 | M7.6 | Phase 7.6 | アカウント削除フロー（メール確認）＋ アカウント保護イベント | **完了（2026-10-28）**（削除の副作用を `performAccountDeletion` に集約・§24 の Passkey 失効漏れを解消。メール確認退会・管理 API を同一ヘルパへ） |
-| M8 | Phase 8 | リスク検知 ＋ セキュリティテスト完成 | **設計完了（2026-10-28・実装前）**（`docs/phase8-risk-tests-実装計画.md` / `docs/phase8-実行Todo.md`。D-38-01〜D-38-07） |
+| M8 | Phase 8 | リスク検知 ＋ セキュリティテスト完成 | **完了（2026-10-25）**（§57 不審ログイン検知 `src/lib/auth/risk.ts` ＋ §48 全カテゴリの green テスト。D-38-01〜D-38-07） |
 | M9 | Phase 9 | 運用デプロイ | 未着手 |
 
-進捗の正本は `実装Todo.md` のチェックボックスです。最新のテスト実績は **119 files / 812 tests green**（`pnpm test`。e2e は Go ツールチェーン未導入時 interop をスキップ）。
+進捗の正本は `実装Todo.md` のチェックボックスです。最新のテスト実績は **127 files / 865 tests green**（`pnpm test`。e2e は Go ツールチェーン未導入時 interop をスキップ）。
 
 ---
 
@@ -618,6 +619,35 @@ migration は不要でした（`admin_audit_logs.action` / `security_events.even
 | 確認メール爆撃 | 利用者 5 回/時・IP 10 回/時のレート制限（D-37-06） |
 
 **検証**: 追加テスト 6 件（`account-deletion-flow`）。全 **119 files / 812 tests green**、typecheck 0 error、lint 0 warning。migration は up / down / 往復 / restore すべて成功。
+
+---
+
+## Phase 8 実装詳細（2026-10-25 / 実装完了）
+
+計画: `docs/phase8-risk-tests-実装計画.md`（D-38-01〜D-38-07）
+
+§57（不審ログイン検知）の「構造」を実装し、§48（セキュリティテスト）の全カテゴリを**正規ファイル名**で green にしました。migration は不要です。
+
+| 追加・変更 | 内容 |
+|---|---|
+| リスク判定（純関数） | `src/lib/auth/risk.ts` — 観測値から信号（`new_device` / `new_ip` / `rapid_distinct_ips` / `failed_burst` / `automated_client`）を判定し、スコア → `allow` / `notify` / `challenge` / `hold` へ写像する。DB にも HTTP にも触れない |
+| 設定の集約 | `src/config/risk.ts` — 重み・閾値・ウィンドウ・件数下限を 1 か所に集約。`RISK_ENFORCEMENT`（既定 `notify`）がアクションの上限を決める |
+| DB 集計と配線 | `countDistinctRecentIpHashes` / `countRecentFailedLogins` を `src/lib/db/queries/security-events.ts` に追加。`src/lib/auth/login-risk.ts` の `evaluateAndRecordLoginRisk` が集計 → 判定 → `login_risk` 記録を行う。ログイン（2FA 有無の両方）・OAuth コールバック・Passkey ログインへ配線（判定失敗でログインは失敗させない） |
+| イベント種 | `security_events` に `login_risk` を追加。metadata は `level` / `signals` / `action` のみで、生 IP・UA 全文・PII を入れない（§45） |
+| テスト（§48 正規名） | `src/test/security/{auth,session,oauth-redirect,oauth-replay,risk}.test.ts`、`src/test/unit/notify-events.test.ts`、`src/test/integration/risk-queries.test.ts`、`src/test/e2e/auth-journey.test.ts` を新設 |
+| テスト基盤 | `src/test/helpers/{fixtures,rate-limit,totp}.ts` にユーザー生成・レート制限キー掃除・TOTP コード生成を集約（D-38-06） |
+
+| 決定 | 内容 |
+|---|---|
+| D-38-01 | 「短時間で複数地域」は外部 geo-IP を持ち込まず、短期間の複数 `ip_hash` で代理する（`sessions.ip_country` は常に `null`） |
+| D-38-02 | スコア → 3 段階アクションを `src/config/risk.ts` に集約し、`risk.ts` にマジックナンバーを置かない |
+| D-38-03 | 既定は通知のみ（`RISK_ENFORCEMENT='notify'`）。高スコアでもログインは成功し、既存挙動を変えない |
+| D-38-04 | E2E は Playwright を導入せず、既存の vitest ＋ 実 HTTP（`startTestAppServer`）方式を維持 |
+| D-38-05 | §48 の各カテゴリを正規ファイル名に 1:1 対応させ、トラッカーを機械的に閉じられるようにする |
+| D-38-06 | テスト基盤を `src/test/helpers/fixtures.ts` に集約。時間依存テストは `vi.useFakeTimers()` を使い実時間待ちをしない |
+| D-38-07 | リスクイベントは `login_risk`（metadata は `level` / `signals` / `action` のみ） |
+
+**検証**: 全 **127 files / 865 tests green**、typecheck 0 error、lint 0 error / 0 warning、`pnpm build` 成功。
 
 ---
 

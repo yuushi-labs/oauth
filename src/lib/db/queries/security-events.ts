@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm';
+import { and, count, countDistinct, desc, eq, gte } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
 import { securityEvents, type NewSecurityEvent, type SecurityEvent } from '@/lib/db/schema';
 
@@ -20,6 +20,9 @@ const ALLOWED_METADATA_KEYS = new Set([
   'self',
   'all',
   'clientId',
+  'level',
+  'signals',
+  'action',
 ]);
 
 function filterMetadata(metadata: unknown): Record<string, unknown> {
@@ -56,4 +59,35 @@ export async function listRecentSecurityEventsByUser(
     createdAt: row.createdAt,
     metadata: filterMetadata(row.metadata),
   }));
+}
+
+/**
+ * 直近ウィンドウ内で観測された異なる生 IP の数（§57 の「短時間で複数地域」の代理指標・D-38-01）。
+ * 生 IP を返さず件数だけを返す（§45）。
+ */
+export async function countDistinctRecentIpHashes(userId: string, windowMs: number): Promise<number> {
+  const db = getDb();
+  const since = new Date(Date.now() - windowMs);
+  const [row] = await db
+    .select({ value: countDistinct(securityEvents.ip) })
+    .from(securityEvents)
+    .where(and(eq(securityEvents.userId, userId), gte(securityEvents.createdAt, since)));
+  return Number(row?.value ?? 0);
+}
+
+/** 直近ウィンドウ内の `login_failed` 件数（§57 の「大量ログイン試行」）。 */
+export async function countRecentFailedLogins(userId: string, windowMs: number): Promise<number> {
+  const db = getDb();
+  const since = new Date(Date.now() - windowMs);
+  const [row] = await db
+    .select({ value: count() })
+    .from(securityEvents)
+    .where(
+      and(
+        eq(securityEvents.userId, userId),
+        eq(securityEvents.eventType, 'login_failed'),
+        gte(securityEvents.createdAt, since),
+      ),
+    );
+  return Number(row?.value ?? 0);
 }

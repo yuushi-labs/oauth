@@ -330,6 +330,7 @@ export const SECURITY_EVENT_TYPES = [
   'email_change_notification_failed',
   'security_notification_failed',
   'new_device_login',
+  'login_risk',
   'email_verified',
   '2fa_enabled',
   '2fa_disabled',

@@ -14,6 +14,7 @@ import {
 } from '@/lib/auth/cookie';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
 import { isFirstSessionFromDevice, notifyNewDeviceLogin } from '@/lib/auth/notifications';
+import { evaluateAndRecordLoginRisk } from '@/lib/auth/login-risk';
 import { getCookieToken, handleApiError, rateLimitResponse } from '@/lib/api/utils';
 import { ApiError } from '@/lib/errors';
 import { getProvider } from '@/lib/auth/oauth/registry';
@@ -244,6 +245,20 @@ async function completeLoginCallback(args: {
     }
   } catch {
     // 通知の判定・送信に失敗してもログイン自体は失敗にしない（best-effort）
+  }
+
+  // 不審ログイン検知（§57）。既定は通知のみ・失敗してもログインは失敗にしない。
+  try {
+    await evaluateAndRecordLoginRisk({
+      userId: outcome.user.id,
+      currentSessionId: session.id,
+      ipHash: session.ipHash,
+      deviceName: session.deviceName,
+      ip,
+      userAgent,
+    });
+  } catch {
+    // リスク評価の失敗でもログインは成功として扱う
   }
 
   await recordSecurityEvent('login_success', outcome.user.id, ip, userAgent, { provider });
