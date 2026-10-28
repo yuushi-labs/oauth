@@ -547,13 +547,22 @@ Phase 4 の本体内で未だった 2 点（BUG-12 後の実ブラウザ検証�
 
 ## 10. Phase 8 — リスク検知 ＋ テスト完成（1.5〜2日）
 
+> 計画: `docs/phase8-risk-tests-実装計画.md`（v1.0 / D-38-01〜D-38-07）
+> 実行: `docs/phase8-実行Todo.md`（実装単位のチェックリスト）
+> 状態: **実装着手前（設計）**
+
 - [ ] **P8-01** `lib/auth/risk.ts`: 新規デバイス、短時間多数地域、異常速度（geo距離/時間）、大量試行（`failed_logins` 集計）
+  - 注: 「短時間多数地域」は外部 geo-IP を持ち込まず、短期間の複数 `ip_hash` で代理する（D-38-01）。`sessions.ip_country` は常に `null`
 - [ ] **P8-02** リスクスコア → **3段階**（追加認証要求 / メール通知 / セッション保留）★
+  - 注: 重み・閾値は `src/config/risk.ts` に集約（D-38-02）。既定は `RISK_ENFORCEMENT='notify'`（通知のみ・挙動不変・D-38-03）
 - [ ] **P8-03** `src/test/security/risk.test.ts`
 - [ ] **P8-04** `src/test/security/**` で仕様48章の全カテゴリを充足（下記11章の表）
-- [ ] **P8-05** E2E: Playwright（登録→確認→ログイン→2FA→passkey→設定→削除まで通し）
+  - 正規ファイル名を新設: `auth.test.ts` / `session.test.ts` / `oauth-redirect.test.ts` / `oauth-replay.test.ts`（D-38-05）
+- [ ] **P8-05** E2E: 登録→確認→ログイン→2FA→passkey→設定→削除まで通し（`src/test/e2e/auth-journey.test.ts`）
+  - 注: Playwright は導入せず、既存の vitest ＋ 実 HTTP（`startTestAppServer`）方式（D-38-04）
 - [ ] **P8-06** `pnpm test` / `pnpm test:e2e` / `pnpm test:security` が全て green
 - [ ] **P8-07** テスト基盤: fixtures（通常/未検証/suspended/PW無し/admin）、oauth-mock（`jose` で署名したID token）、webauthn-mock、totp、fake rate-limit store、fake timers（時間依存テストの flaky 防止・★）
+  - 注: 集約先は `src/test/helpers/{fixtures,rate-limit,totp}.ts`（D-38-06）
 
 **DoD（Phase 8）**
 - [ ] 仕様48章チェックリストに1:1で green テストが対応
@@ -595,24 +604,26 @@ Phase 4 の本体内で未だった 2 点（BUG-12 後の実ブラウザ検証�
 
 | 仕様 | テストファイル | 主要ケース | 状態 |
 |---|---|---|---|
-| 認証 | `src/test/security/auth.test.ts` | 正PW/誤PW/存在しないemail/未認証email/session期限切れ/logout後のAPI拒否 | [ ] |
-| 一意制約(§3.1/§24) | `src/test/security/uniq.test.ts` | 大文字小文字違いで重複不可／論理削除済みは再利用可／partial index で二重登録拒否 | [ ] |
-| パスワード | `src/test/security/password.test.ts` | 7文字拒否/8文字OK/**128文字OK/129文字拒否**/Unicode+スペース/空白のみ拒否/reset token再利用拒否 | [ ] |
-| 漏洩PW(§5.2) | `src/test/unit/breached.test.ts` | ①漏洩検出 ②漏洩PW拒否 ③timeout=**fail-open で許可** | [ ] |
-| OAuth | `src/test/security/oauth-{state,nonce,pkce,redirect,replay,account-linking}.test.ts` | state改ざん/code再利用/PKCE不一致/redirect_uri改ざん/nonce改ざん/未登録provider/**email一致自動統合の拒否** | [ ] |
-| セッション | `src/test/security/session.test.ts` | Cookie属性/fixation(前後でID変化)/logout-all後の旧Cookie拒否/DBはhash保存 | [ ] |
-| Web | `src/test/security/web.test.ts` | XSS/CSRF（Origin偽装・token欠落・**Route Handler と Server Action 双方**）/SQLi/Open Redirect/Clickjacking/CORS(`*`拒否)/Header不足 | [ ] |
-| 2FA | `src/test/security/2fa.test.ts` | TOTP誤入力/総当たり(recovery code再利用)/無効化時の再認証 | [ ] |
-| 2FA 並行(D-16) | `src/test/security/2fa-concurrent-replay.test.ts` | 同一TOTP 2並行送信 → 成功1件・他方拒否 | [ ] |
-| Passkey | `src/test/security/webauthn-*.test.ts` | challenge再利用/origin不一致/rpID不一致/削除済みcredential拒否/sign_count更新 | [ ] |
-| RBAC/管理者 | `src/test/security/{rbac,admin,audit-access,idor}.test.ts` | 権限判定/secret非露出/監査遮断/他者リソース参照拒否 | [ ] |
-| リスク検知(§57) | `src/test/security/risk.test.ts` | 新規デバイス/地域移動/大量試行 | [ ] |
-| ログ秘匿(§45) | `src/test/unit/log-redaction.test.ts` | PW/hash/client secret/token/TOTP secret/session token が出ない | [ ] |
-| その他単体 | `src/test/unit/{id,time,ip,crypto,notify-events}.test.ts` | prefix付きULID(26文字)/UTC/203.0.113.xxx/AES-GCM/通知イベント | [ ] |
-| E2E | `src/test/e2e/{login,register,theme,sessions,email-change,account-delete}.spec.ts` | 画面フロー（モバイル viewport） | [ ] |
+| 認証 | `src/test/security/auth.test.ts` | 正PW/誤PW/存在しないemail/未認証email/session期限切れ/logout後のAPI拒否 | [ ] **新設（Phase 8）** |
+| 一意制約(§3.1/§24) | `src/test/security/uniq.test.ts` | 大文字小文字違いで重複不可／論理削除済みは再利用可／partial index で二重登録拒否 | [x] |
+| パスワード | `src/test/unit/password.test.ts` | 7文字拒否/8文字OK/**128文字OK/129文字拒否**/Unicode+スペース/空白のみ拒否/reset token再利用拒否 | [x] |
+| 漏洩PW(§5.2) | `src/test/unit/breached.test.ts` | ①漏洩検出 ②漏洩PW拒否 ③timeout=**fail-open で許可** | [x] |
+| OAuth | `src/test/security/oauth-{state,nonce,pkce,redirect,replay,account-linking}.test.ts` | state改ざん/code再利用/PKCE不一致/redirect_uri改ざん/nonce改ざん/未登録provider/**email一致自動統合の拒否** | [ ] `redirect`/`replay` は**新設（Phase 8）**、他は [x] |
+| セッション | `src/test/security/session.test.ts` | Cookie属性/fixation(前後でID変化)/logout-all後の旧Cookie拒否/DBはhash保存 | [ ] **新設（Phase 8・`session-attr`/`session-management` を包含）** |
+| Web | `src/test/security/web.test.ts` | XSS/CSRF（Origin偽装・token欠落・**Route Handler と Server Action 双方**）/SQLi/Open Redirect/Clickjacking/CORS(`*`拒否)/Header不足 | [x] |
+| 2FA | `src/test/security/2fa.test.ts` | TOTP誤入力/総当たり(recovery code再利用)/無効化時の再認証 | [x] |
+| 2FA 並行(D-16) | `src/test/security/2fa-concurrent-replay.test.ts` | 同一TOTP 2並行送信 → 成功1件・他方拒否 | [x] |
+| Passkey | `src/test/security/webauthn-*.test.ts` | challenge再利用/origin不一致/rpID不一致/削除済みcredential拒否/sign_count更新 | [x] |
+| RBAC/管理者 | `src/test/security/{rbac,admin,audit-access,idor}.test.ts` | 権限判定/secret非露出/監査遮断/他者リソース参照拒否 | [x] |
+| リスク検知(§57) | `src/test/security/risk.test.ts` | 新規デバイス/複数IP/大量試行/自動化UA/3段階写像 | [ ] **新設（Phase 8）** |
+| ログ秘匿(§45) | `src/test/security/log-redaction.test.ts` | PW/hash/client secret/token/TOTP secret/session token が出ない | [x] |
+| 通知イベント(§18) | `src/test/unit/notify-events.test.ts` | 変更系9種の通知が漏れなく発火/本文に秘密が無い | [ ] **新設（Phase 8）** |
+| その他単体 | `src/test/unit/{id,time,ip,crypto}.test.ts` | prefix付きULID(26文字)/UTC/203.0.113.xxx/AES-GCM | [x] |
+| E2E | `src/test/e2e/auth-journey.test.ts` | 登録→確認→ログイン→2FA→Passkey→設定→削除の通し（`startTestAppServer` 方式・D-38-04） | [ ] **新設（Phase 8）** |
 
-> `src/test/unit/` の `id` / `time` / `ip` / `crypto` / `logger` / `env` / `schema` / `validate` は **Phase 0 で作成済み**（9ファイル）。`log-redaction` / `password` / `breached` / `notify-events` は各フェーズで追加する。
+> `src/test/unit/` の `id` / `time` / `ip` / `crypto` / `logger` / `env` / `schema` / `validate` は **Phase 0 で作成済み**（9ファイル）。`password` / `breached` は各フェーズで追加済み。`notify-events`（§18）は Phase 8 で追加する。
 > `crypto.test.ts` は Phase 0 で hash/HMAC/pepper を、Phase 5 で AES-256-GCM をカバーする。
+> ログ秘匿（§45）の実ファイルは `src/test/security/log-redaction.test.ts`（`unit/log-redaction.test.ts` ではない）。
 
 ---
 
@@ -706,4 +717,5 @@ Phase 4 の本体内で未だった 2 点（BUG-12 後の実ブラウザ検証�
 | 2026-10-24 | **Phase 5 設計書の改訂（v1.1・設計のみ、コード変更なし）** | ユーザー指示 3 件を反映。①無効化・再生成を「パスワード＋現在のコード」の**強い再認証**に（計画 D-33-23〜25。`strong-reauth.ts` を新設し Phase 6 の Passkey を検証器 1 件で差し込む）②**`qrcode` を採用**（D-33-02 を反転）③**未確認 email はログインを 403 `EMAIL_NOT_VERIFIED` で止め、未認証でも再送できる**（D-33-21 / D-33-22）。**D-01 を改訂**（「メール未認証でもログイン可」→「不可」）。`deleted-account-login.test.ts` の期待値反転を §5.2 に明記。工数 21.0h → 27.8h。反映先: `docs/phase5-totp-2fa-実装計画.md` v1.1 / `docs/phase5-実行Todo.md` / 本 Todo の §7・D-01・P1-D-02・P1-D-06 |
 | 2026-10-27 | **ユーザー報告の3件を是正（BUG-17〜19）** | ①メールアドレス変更 UI（`/settings/security`、再認証必須・確認リンク確定方式）②タイムゾーン既定を `Asia/Tokyo` へ（DB default / migration `0020` / 外観ページに `TimezoneForm`＋ブラウザ設定採用。IP 国判定は外部依存を持ち込まないため不採用）③ログイン画面のテーマ切替ラベルの縦書きを解消（`whitespace-nowrap` ＋ ヘッダー `flex-wrap`）。テスト 115 ファイル / 790 件 green、typecheck 0 error |
 | 2026-10-27 | **セキュリティ監査（PR #28 の新規機能へ実攻撃）** — SEC-1〜3 を修正 | 稼働サーバ（Postgres 16）へ攻撃試験を実施。**SEC-1（高）**: email 変更確定で既存アドレス指定時に unique 違反が未処理 500 → 列挙オラクル・PII/argon2 のログ漏洩・トークン消費。消費前の衝突検査で 409 `EMAIL_CONFLICT`（トークン温存）＋ unique 違反の正規化。**SEC-2（中）**: email 変更要求にレート制限なし（15/15 が 200）→ 利用者 5/時・IP 10/時を追加。**SEC-3（中）**: 失敗クエリのバインド値（argon2 ハッシュ）が error ログに平文 → redaction パターン追加。防御確認: CSRF/再認証/厳格スキーマ/XSS・SQLi/目的混同/トークン再利用/Host 注入/Cookie フラグ/CSP。テスト 116 ファイル / 795 件 green、typecheck 0 error |
-| 2026-10-28 | **Phase 8-A: アカウント削除フロー＋アカウント保護イベント（M8-A 達成）** | §8・§21・§24 の実装ギャップを解消。①セルフサービス退会を**メール確認**でも可能に（`POST /api/auth/account/delete/request` → 303 転送のみの GET → `/account/delete/confirm` の POST で確定。§25・D-37-04）②削除の副作用（論理削除・全セッション・全トークン・**Passkey**・OIDC grant 失効・`account_deleted` 記録・通知）を `src/lib/auth/account-deletion.ts` の `performAccountDeletion` に集約（D-37-01）③管理 API の論理削除に**Passkey 失効が漏れていた** §24 違反を同ヘルパへの集約で解消④削除は強い再認証（パスワード＋コード / Passkey）またはメール確認を必須（D-37-02）⑤再要求で旧トークン無効化・消費は単文 UPDATE（D-37-05・D-16）⑥確認メールに利用者 5/時・IP 10/時のレート制限（D-37-06）。migration `0022_tan_oracle.sql`（`account_deletion_requests`）。新規テスト 6 件（`account-deletion-flow`）。テスト 119 ファイル / 812 件 green、typecheck 0 error、lint 0 warning、migration up/down/往復/restore 成功 |
+| 2026-10-28 | **Phase 7.6: アカウント削除フロー＋アカウント保護イベント（M7.6 達成）** | §8・§21・§24 の実装ギャップを解消。①セルフサービス退会を**メール確認**でも可能に（`POST /api/auth/account/delete/request` → 303 転送のみの GET → `/account/delete/confirm` の POST で確定。§25・D-37-04）②削除の副作用（論理削除・全セッション・全トークン・**Passkey**・OIDC grant 失効・`account_deleted` 記録・通知）を `src/lib/auth/account-deletion.ts` の `performAccountDeletion` に集約（D-37-01）③管理 API の論理削除に**Passkey 失効が漏れていた** §24 違反を同ヘルパへの集約で解消④削除は強い再認証（パスワード＋コード / Passkey）またはメール確認を必須（D-37-02）⑤再要求で旧トークン無効化・消費は単文 UPDATE（D-37-05・D-16）⑥確認メールに利用者 5/時・IP 10/時のレート制限（D-37-06）。migration `0022_tan_oracle.sql`（`account_deletion_requests`）。新規テスト 6 件（`account-deletion-flow`）。テスト 119 ファイル / 812 件 green、typecheck 0 error、lint 0 warning、migration up/down/往復/restore 成功 |
+| 2026-10-28 | **Phase 8 の実装計画と実行 Todo を作成（設計のみ・コード変更なし）** | 次フェーズ（M8: リスク検知＋テスト完成）の計画 `docs/phase8-risk-tests-実装計画.md`（D-38-01〜D-38-07）と実行チェックリスト `docs/phase8-実行Todo.md` を起票。**D-38-01**: §57 の「短時間多数地域」は外部 geo-IP を持ち込まず短期間の複数 `ip_hash` で代理（`sessions.ip_country` は常に null）。**D-38-02/03**: スコア→3段階アクションを `src/config/risk.ts` に集約し、既定 `RISK_ENFORCEMENT='notify'` で挙動不変・段階強化可。**D-38-04**: E2E は Playwright を導入せず既存の vitest＋実 HTTP 方式を維持。**D-38-05**: §48 の正規ファイル名（`auth`/`session`/`oauth-redirect`/`oauth-replay`）を新設しトラッカーを 1:1 化。**D-38-06**: テスト基盤を `src/test/helpers/{fixtures,rate-limit,totp}.ts` に集約・fake timers 必須化。**D-38-07**: リスクイベントは `login_risk`（metadata は `level`/`signals` のみ）。migration 不要。§12 トラッカーを実ファイル名で更新 |

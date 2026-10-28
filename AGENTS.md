@@ -77,9 +77,19 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
   手で DROP しても `pnpm db:migrate` は「success」と言うだけで再作成しない（その SQL を直接流すか、
   該当行を消して以降を再適用する）。schema を疑ったら `pnpm db:verify-migrations` で往復検証する。
 
-## 現在の到達点（2026-10-27 時点）
+## 現在の到達点（2026-10-28 時点）
 
-M0〜M7 完了（Phase 0 / 1 / 2 / 2.5 / 2.6 / 3 / 4 / 4-B / 5 / 6 / **7**）。**次は Phase 8（M8）: リスク検知 / テスト完成**。
+M0〜M7.6 完了（Phase 0 / 1 / 2 / 2.5 / 2.6 / 3 / 4 / 4-B / 5 / 6 / 7 / 7.5 / **7.6**）。**次は Phase 8（M8）: リスク検知 / テスト完成**。
+Phase 8 の計画は `docs/phase8-risk-tests-実装計画.md`（D-38-01〜D-38-07）、実行タスクは `docs/phase8-実行Todo.md`（いずれも実装前の設計）。
+
+Phase 7.6 の要点（アカウント削除フロー・§8 / §21 / §24）:
+- 削除の副作用は `src/lib/auth/account-deletion.ts` の **`performAccountDeletion` に集約**（D-37-01）。論理削除・全セッション・
+  全トークン・**Passkey**・OIDC grant 失効・`account_deleted` 記録・削除通知を 1 か所で行う。自己削除・メール確認・
+  管理 API の 3 経路すべてがこれを呼ぶ（管理 API に Passkey 失効が漏れていた §24 違反を解消）。
+- メール確認退会: `POST /api/auth/account/delete/request` → `GET /api/auth/account/delete/confirm`（**303 転送のみ**・§25）
+  → `/account/delete/confirm` の POST でトークンを 1 回限り消費して確定（専用テーブル `account_deletion_requests`・D-37-03）。
+- 削除は**強い再認証**（パスワード＋コード / Passkey）またはメール確認を必須（D-37-02）。確認メールは利用者 5/時・IP 10/時。
+
 Phase 7 の計画は `docs/phase7-admin-rbac-audit-実装計画.md`（D-35-01〜D-35-12）。**UI はスコープ外**（§34 に管理画面が無い）。
 
 Phase 7 の要点:

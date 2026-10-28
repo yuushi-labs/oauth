@@ -27,7 +27,8 @@
 | `docs/phase6-passkey-webauthn-実装計画.md` / `docs/phase6-実行Todo.md` | Passkey / WebAuthn（M6） |
 | `docs/phase7-admin-rbac-audit-実装計画.md` / `docs/phase7-実行Todo.md` | 管理者 / RBAC / 監査ログ（M7） |
 | `docs/phase7.5-admin-ui-cli-実装計画.md` | 管理者の付与（管理 UI ＋ CLI）（M7.5） |
-| `docs/phase8-account-deletion-実装計画.md` | アカウント削除フロー＋アカウント保護イベント（M8-A） |
+| `docs/phase7.6-account-deletion-実装計画.md` | アカウント削除フロー＋アカウント保護イベント（M7.6） |
+| `docs/phase8-risk-tests-実装計画.md` / `docs/phase8-実行Todo.md` | リスク検知 ＋ セキュリティテスト完成（M8・実装前の設計） |
 | `docs/phase-verification-report-2026-10-26.md` | Phase 7 完了時点の検証レポート |
 | `.env.example` | 環境変数の定義 |
 
@@ -291,8 +292,9 @@ oauth/
 | M6 | Phase 6 | Passkey / WebAuthn | **完了（2026-10-25）**（登録・ログイン・削除 API と UI。実機手動確認は実ブラウザ環境で未実施） |
 | M7 | Phase 7 | 管理者 / RBAC / 監査ログ | **完了（2026-10-27）**（RBAC ガード・管理 API 6 本・監査ログ・8h セッション） |
 | M7.5 | Phase 7.5 | 管理者の付与（管理 UI ＋ CLI） | **完了（2026-10-27）**（`/admin/users`・`/admin/audit-logs`・`POST /api/admin/users/{id}/role`・`pnpm admin:grant`。最後の管理者ガード・自己降格禁止） |
-| M8-A | Phase 8-A | アカウント削除フロー（メール確認）＋ アカウント保護イベント | **完了（2026-10-28）**（削除の副作用を `performAccountDeletion` に集約・§24 の Passkey 失効漏れを解消。メール確認退会・管理 API を同一ヘルパへ） |
-| M8 | Phase 8-9 | リスク検知 / セキュリティテスト完成 / 運用デプロイ | 未着手 |
+| M7.6 | Phase 7.6 | アカウント削除フロー（メール確認）＋ アカウント保護イベント | **完了（2026-10-28）**（削除の副作用を `performAccountDeletion` に集約・§24 の Passkey 失効漏れを解消。メール確認退会・管理 API を同一ヘルパへ） |
+| M8 | Phase 8 | リスク検知 ＋ セキュリティテスト完成 | **設計完了（2026-10-28・実装前）**（`docs/phase8-risk-tests-実装計画.md` / `docs/phase8-実行Todo.md`。D-38-01〜D-38-07） |
+| M9 | Phase 9 | 運用デプロイ | 未着手 |
 
 進捗の正本は `実装Todo.md` のチェックボックスです。最新のテスト実績は **119 files / 812 tests green**（`pnpm test`。e2e は Go ツールチェーン未導入時 interop をスキップ）。
 
@@ -594,9 +596,9 @@ migration は不要でした（`admin_audit_logs.action` / `security_events.even
 
 ---
 
-## Phase 8-A 実装詳細（2026-10-28 / 実装完了）
+## Phase 7.6 実装詳細（2026-10-28 / 実装完了）
 
-計画: `docs/phase8-account-deletion-実装計画.md`（D-37-01〜D-37-06）
+計画: `docs/phase7.6-account-deletion-実装計画.md`（D-37-01〜D-37-06）
 
 §8（再認証）・§21（security_events）・§24（アカウント削除）の実装ギャップを埋めました。
 
