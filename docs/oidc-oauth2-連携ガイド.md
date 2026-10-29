@@ -3,6 +3,7 @@
 > 対象: 本アプリを **OpenID Provider（OP）/ OAuth 2.0 Authorization Server（AS）** として使い、自作サービス（RP）のログインを委譲したい開発者・運用者。
 > 正本: `超本格アカウント・認証システム仕様書 v1.3.md` §69 ／ 実装計画: `docs/phase2.5-実装計画.md`（M2.5）・`docs/phase2.6-oidc-client-console-実装計画.md`（M2.6）
 > このガイドは**実装済みの挙動**だけを記載する。未実装の機能は「対応しない」と明記する。
+> 「OAuth 2.0 / OIDC とは何か」という**概念から確認したい**場合は [`docs/oauth2-oidc-解説.md`](oauth2-oidc-解説.md) を先に読むとよい。
 
 本アプリは `oidc-provider` v9 を使った OIDC Provider を内蔵しています。RP は本アプリのパスワードやセッション Cookie を一切受け取らず、**認可コード（Authorization Code）** と **ID Token** だけを使ってユーザーを識別します。
 
@@ -377,6 +378,7 @@ OIDC 関連で記録されるイベント（`security_events.event_type`）:
 
 | ドキュメント | 内容 |
 |---|---|
+| `docs/oauth2-oidc-解説.md` | OAuth 2.0 / OIDC の概念解説（ロール・フロー・claim・誤解） |
 | `docs/phase2.5-実装計画.md` | OIDC Provider の詳細計画・完了タスクの根拠（P25-*） |
 | `docs/phase2.5-threat-model.md` | 脅威モデル |
 | `docs/phase2.5-gate-a.md` | 統合 Spike・adapter 評価・統合判断 |
