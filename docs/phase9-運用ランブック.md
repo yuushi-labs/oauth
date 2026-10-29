@@ -8,6 +8,9 @@
 キーローテ・インシデント対応）はここに従う。実装の詳細は
 `docs/phase9-運用デプロイ-実装計画.md` を参照。
 
+> **サーバーへの初期デプロイ**（OS 設定 / Node / PostgreSQL / env / migration / systemd / Nginx + TLS）は
+> **[`docs/phase9-デプロイ手順.md`](phase9-デプロイ手順.md)** にまとめている。
+
 ---
 
 ## 0. 前提

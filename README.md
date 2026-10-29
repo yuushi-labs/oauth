@@ -33,6 +33,7 @@
 | `docs/phase8-risk-tests-実装計画.md` / `docs/phase8-実行Todo.md` | リスク検知 ＋ セキュリティテスト完成（M8） |
 | `docs/phase9-運用デプロイ-実装計画.md` / `docs/phase9-実行Todo.md` | 運用デプロイ（M9。CAPTCHA 実接続・バックアップ復元・監視・ログ漏洩対策） |
 | `docs/phase9-運用ランブック.md` | 本番運用の手順（suspend / 復旧 / キーローテ / §54-55 手動復旧フロー / インシデント） |
+| `docs/phase9-デプロイ手順.md` | ほぼ初期状態のサーバーへのデプロイ手順（OS 設定 / Node / PostgreSQL / env / migration / systemd / Nginx+TLS / cron） |
 | `docs/phase9-バックアップ復元手順.md` | バックアップ暗号化・復元・復元テストの手順（§53） |
 | `deploy/log-security-checklist.md` | 認証トークン付き URL のログ漏洩対策チェックリスト（§17.2.1） |
 | `docs/phase-verification-report-2026-10-26.md` | Phase 7 完了時点の検証レポート |
@@ -66,6 +67,10 @@
 - GitHub CLI（`gh`）— リポジトリ操作時のみ
 
 ## セットアップ
+
+> **本番サーバーへデプロイする場合**は、ローカル開発用の下記手順ではなく
+> **[`docs/phase9-デプロイ手順.md`](docs/phase9-デプロイ手順.md)** に従ってください
+> （OS 初期設定・Node.js / PostgreSQL 16 の導入・環境変数・migration・systemd・Nginx + TLS・cron まで記載）。
 
 ```bash
 # 1. 依存関係
