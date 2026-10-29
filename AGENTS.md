@@ -58,6 +58,12 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
 - `cookies()`（Next の request scope）は **Route Handler を直接呼ぶテストで 500 になる**。
   Cookie の読みは `request.cookies`、書きは `Set-Cookie` ヘッダを使う（Phase 4-B D-32-17 / BUG-15）。
 - Server Component の描画中は Cookie を**変更できない**。発行は Route Handler で行う（BUG-15）。
+- ルート `src/app/loading.tsx` は置かない。`loading.tsx` を挟むとストリーミングが始まり、
+  auth guard の `redirect()` が HTTP 3xx を返さず 200 + クライアント側遷移になり、`notFound()` も 404 を
+  返さなくなる（e2e のリダイレクト/ステータス検証が落ちる）。共通ローディングはセグメント単位に留める。
+- この環境の `HOSTNAME` はコンテナ名（`runtime-...`）なので、`pnpm dev` は素で起動すると
+  `0.0.0.0` ではなくその名前で bind する。work URL から到達させるには `PORT=12000 HOSTNAME=0.0.0.0 pnpm dev`
+  （`scripts/server.ts` は `process.env.HOSTNAME` を bind 先に使う）。
 - `process.env` を読むモジュール（OAuth registry 等）をクライアントコンポーネントから import すると
   hydration mismatch になる（BUG-11）。サーバ側で読んで props で渡す。
 - OAuth callback では `Origin` / `Referer` を検証しない（provider からの top-level GET のため必ず 403 になる。
