@@ -13,6 +13,7 @@
 | `実装Todo.md` | タスク一覧（進捗は同ファイルのチェックボックスで管理） |
 | `docs/phase0-設計.md` | Phase 0 の設計ドキュメント（実装前に作成） |
 | `docs/phase2.5-実装計画.md` | 自作サービス向けOAuth 2.0 / OIDC Providerの詳細計画と実装状況 |
+| `docs/oidc-oauth2-連携ガイド.md` | RP 実装者・運用者向けの OIDC / OAuth 2.0 連携ガイド（エンドポイント・フロー・claim・運用） |
 | `docs/phase2.5-gate-a.md` | Gate A（統合Spike・adapter評価・統合判断） |
 | `docs/phase2.5-threat-model.md` | OIDC Providerの脅威モデル |
 | `docs/phase2.5-review.md` | セキュリティレビュー・依存監査・相互運用レポート |
@@ -95,6 +96,8 @@ pnpm dev
 Providerは`pnpm dev` / `pnpm start`のcustom Node server経由で動作します。TLSをreverse proxyで終端する本番環境では、proxyがHostと`X-Forwarded-Proto`を上書きし、信頼proxy hopを環境変数へ明示してください。署名鍵をrotationするときは新しいprivate JWKと旧public JWKを同時に`OIDC_JWKS_JSON`へ渡し、旧鍵は発行済みID Tokenの有効期限を過ぎるまで残します。`OIDC_ADAPTER_ENCRYPTION_KEY`を変更すると暗号化されたclient secretとProvider stateを復号できなくなるため、データ移行と同時に行ってください。`oidc-provider` v9 は logger 注入に非対応（`debug` のみ）のため、本番では `DEBUG` が `oidc-provider` 名前空間を有効にしていると起動時に失敗します。アカウント停止・削除時はadapter がaccess token/grantの解決を拒否し、interactionでは遮断イベントを記録します。
 
 docker へ権限が無い環境では、执行用户在 `docker` グループへ追加してください（`sudo usermod -aG docker $USER` → 再ログイン）。現在のシェルだけで済ませる場合は `sg docker -c "docker compose up -d"` のように実行できます。
+
+> RP 実装者・運用者向けの詳細（エンドポイント一覧・Discovery の値・認可コードフローの手順・claim・失効・セキュリティ上の注意・対応しない機能）は **[`docs/oidc-oauth2-連携ガイド.md`](docs/oidc-oauth2-連携ガイド.md)** にまとめています。
 
 ## 管理画面からOIDCアプリを作成・接続テストする（M2.6）
 
