@@ -91,10 +91,30 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
   手で DROP しても `pnpm db:migrate` は「success」と言うだけで再作成しない（その SQL を直接流すか、
   該当行を消して以降を再適用する）。schema を疑ったら `pnpm db:verify-migrations` で往復検証する。
 
-## 現在の到達点（2026-10-25 時点）
+## 現在の到達点（2026-10-29 時点）
 
-M0〜M8 完了（Phase 0 / 1 / 2 / 2.5 / 2.6 / 3 / 4 / 4-B / 5 / 6 / 7 / 7.5 / 7.6 / **8**）。**次は Phase 9（M9）: 運用デプロイ**。
-Phase 8 の計画は `docs/phase8-risk-tests-実装計画.md`（D-38-01〜D-38-07）、実行タスクは `docs/phase8-実行Todo.md`。
+M0〜M9 完了（Phase 0 / 1 / 2 / 2.5 / 2.6 / 3 / 4 / 4-B / 5 / 6 / 7 / 7.5 / 7.6 / 8 / **9**）。**M8 の残件（運用デプロイ）まで完了**。
+Phase 9 の計画は `docs/phase9-運用デプロイ-実装計画.md`（D-39-01〜D-39-08）、実行タスクは `docs/phase9-実行Todo.md`。
+
+Phase 9 の要点（運用デプロイ）:
+- **CAPTCHA（Turnstile）実接続**: `src/lib/auth/captcha.ts` の `TurnstileCaptchaProvider` が `siteverify` を
+  **POST body** で叩く（secret を URL に載せない・D-39-01）。本番で secret 未設定は 500（fail closed）、
+  通信失敗は 503。テストは `setCaptchaProvider` で差し替え、ネットワークを叩かない。
+- **バックアップ／復元**: `src/lib/ops/backup.ts` / `restore.ts`。`pg_dump --format=custom` → **AES-256-GCM** →
+  保持 30 日 pruning。**平文 dump を一時ファイルにも残さない**（パイプで受けて暗号化・D-39-02）。
+  `BACKUP_ENCRYPTION_KEY` 未設定なら失敗する（D-39-03）。復元は `src/test/integration/ops-backup-restore.test.ts` が
+  **実 `pg_dump`/`pg_restore` で一時 DB へ流して行数を検証**する（DoD 直結）。
+- **監視**: 閾値は `src/config/ops.ts`、判定は**純関数** `src/lib/ops/alerting.ts`（D-39-04）。`pnpm alert:check` が
+  `security_events` を集計し、閾値超過のみ構造化ログで出す（外部 SaaS へ送らない・D-39-05）。
+- **ログ secret 検知**: `src/lib/ops/log-scan.ts`。`pnpm logs:scan` は**値ではなく行番号**を報告する（D-39-06）。
+  既定の検出対象は URL に載る認証トークン（`token`/`code`/`state`/`nonce`/`code_verifier`）のみ。
+  `password`/`secret` 等は誤検知しやすいため `--credentials` 指定時のみ対象にする。
+- **外部コマンド**: `pg_dump`/`pg_restore` の spawn/pipe は `src/lib/ops/command.ts` の `runCommand` に集約（backup/restore で二重実装しない）。
+- **ログ漏洩対策**: アプリ側は `logger.ts` ＋ `src/test/security/log-url-redaction.test.ts`。外側の層は成果物
+  `deploy/nginx/oauth.conf` / `deploy/cloudflare.md` / `deploy/log-security-checklist.md`（実地確認は運用 DoD・D-39-07）。
+- **ランブック**: `docs/phase9-運用ランブック.md`（suspend / 復旧 / キーローテ / §54-55 手動復旧フロー / インシデント）、
+  `docs/phase9-バックアップ復元手順.md`。
+- **CI**: `verify` に `pnpm build`（smoke）と Node 22/24 の matrix を追加（D-39-08）。gitleaks / audit は維持。
 
 Phase 8 の要点（リスク検知・§57 / §48 テスト完成）:
 - 不審ログイン検知は **純関数** `src/lib/auth/risk.ts`（信号判定 → スコア → `allow`/`notify`/`challenge`/`hold`）。

@@ -28,6 +28,10 @@
     "seed": "tsx scripts/seed.ts",
     "admin:grant": "tsx scripts/admin-grant.ts",
     "purge": "tsx scripts/purge-expired.ts",
+    "backup": "tsx scripts/backup.ts",
+    "restore": "tsx scripts/restore.ts",
+    "alert:check": "tsx scripts/alert-check.ts",
+    "logs:scan": "tsx scripts/log-scan.ts",
     "secrets:gen": "tsx scripts/generate-secrets.ts"
   },
   "dependencies": {

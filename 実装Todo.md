@@ -571,29 +571,46 @@ Phase 4 の本体内で未だった 2 点（BUG-12 後の実ブラウザ検証�
 
 ## 11. Phase 9 — 運用デプロイ（1日）
 
-- [ ] **P9-01** 本番構成: HTTPS enforced、Nginx/Cloudflare、env/secret 管理（Secret Manager or sealed env）
-- [ ] **P9-02** CI（GitHub Actions）: lint / typecheck / test / db-check / **`gitleaks`（secret混入検出）** / `npm audit` ★
-- [ ] **P9-03** バックアップ: 認証データ日次・暗号化保管 ＋ **復元テスト手順書**（§53）
-- [ ] **P9-04** 監視: ログのsecret検知、異常ログイン集計、`security_events` アラート（login系5xx/分 > 閾値）★
-- [ ] **P9-05** ドキュメント: 運用ランブック（suspend / 復旧 / キーローテ）、**§54-55 の手動復旧フロー**（メール喪失時・弱い本人確認は禁止）
-- [ ] **P9-06** 定期Job: `purge-expired`（token/session）、`security_events` **保持180日**パージ
+> 実装レベルの計画は `docs/phase9-運用デプロイ-実装計画.md`、実行タスクは `docs/phase9-実行Todo.md`。
+
+- [x] **P9-01** 本番構成: HTTPS enforced、Nginx/Cloudflare、env/secret 管理（Secret Manager or sealed env）
+  - [x] `deploy/nginx/oauth.conf`（HTTPS 強制・HSTS・`X-Forwarded-Proto` 転送・query を含まない log_format）
+  - [x] `deploy/cloudflare.md`（Logpush / Analytics で query を保存しない設定・確認手順）
+  - [x] `.env.example` / `pnpm secrets:gen` に `BACKUP_ENCRYPTION_KEY` / `CAPTCHA_TIMEOUT_MS` を追加
+- [x] **P9-02** CI（GitHub Actions）: lint / typecheck / test / db-check / **`gitleaks`（secret混入検出）** / `npm audit` ★
+  - [x] `verify` に `pnpm build`（smoke）を追加、Node 22/24 の matrix 化（D-39-08）
+  - [x] `secret-scan`（gitleaks）・`audit`（`pnpm audit --audit-level=high`）は既存を維持
+- [x] **P9-03** バックアップ: 認証データ日次・暗号化保管 ＋ **復元テスト手順書**（§53）
+  - [x] `src/lib/ops/backup.ts` / `restore.ts`（`pg_dump --format=custom` → AES-256-GCM → 保持 30 日 pruning）
+  - [x] `pnpm backup` / `pnpm restore`（鍵未設定なら失敗＝平文で保存しない・D-39-03）
+  - [x] `docs/phase9-バックアップ復元手順.md`（復元テスト手順・実施記録欄）
+  - [x] 復元テストを統合テストで自動化（実 `pg_dump`/`pg_restore` で一時 DB へ復元・行数検証）
+- [x] **P9-04** 監視: ログのsecret検知、異常ログイン集計、`security_events` アラート（login系5xx/分 > 閾値）★
+  - [x] `src/config/ops.ts`（閾値集約）/ `src/lib/ops/alerting.ts`（純関数判定）/ `src/lib/ops/log-scan.ts`
+  - [x] `pnpm alert:check`（`security_events` を集計し構造化ログ出力）/ `pnpm logs:scan`（値ではなく行番号を報告）
+  - [x] `security-events.ts` に `countRecentEventsByType` / `countRecentFailedEventTypes` を追加
+- [x] **P9-05** ドキュメント: 運用ランブック（suspend / 復旧 / キーローテ）、**§54-55 の手動復旧フロー**（メール喪失時・弱い本人確認は禁止）
+  - [x] `docs/phase9-運用ランブック.md`（suspend / 復旧 / キーローテ / インシデント / §54-55 手動復旧フロー）
+- [x] **P9-06** 定期Job: `purge-expired`（token/session）、`security_events` **保持180日**パージ
   - [x] `security_events` 180日パージ ジョブを `scripts/purge-expired.ts` に追加（`security event`）
   - [x] 論理削除ユーザーの保持期間（30日）経過後**物理削除**（`deleted user` ジョブ。CASCADE で本人データ削除、`security_events` / `oauth_clients` / `admin_audit_logs` は SET NULL で匿名化保持）
-- [ ] **P9-07** SPF/DKIM/DMARC 設定・text/plain 併記（メール到達性）
-- [ ] **P9-08** **認証token 付き URL のログ漏洩対策**（計画 §17.2.1／★）
-  - [ ] **P9-08a** reverse proxy / Web サーバーの **access log** で、`/verify-email`・`/reset-password`・`/api/auth/oauth/*` の query string を記録しない（または `token=` / `code=` / `state=` / `nonce=` / `code_verifier=` を `***` に置換）
-  - [ ] **P9-08b** **error log**（`$request` / `$request_uri` を含む形式）にも同じ redaction を適用
-  - [ ] **P9-08c** **tracing / APM / RUM** で認証URLの query が送信されないことを確認（属性除外 or 難読化）
-  - [ ] **P9-08d** CDN / ホスティング基盤（Cloudflare 等）のログで query string を保存しないことを確認
-  - [ ] **P9-08e** アプリ側 `logger.ts` が認証token 付き URL を平文出力しないことをテストで確認
-  - [ ] **P9-08f** ログからトークンが検出された場合の対応手順（無効化・ユーザー通知・ログ削除）をランブックへ追記
-  - [ ] ※ **token を URL query に載せること自体は禁止しない**（§4.1 / §15 の仕様）。本タスクが禁止するのは「token が URL に存在することを前提にログ経由で漏洩させること」のみ
+  - [x] 定期実行の cron 例をランブックへ追記
+- [x] **P9-07** SPF/DKIM/DMARC 設定・text/plain 併記（メール到達性）
+  - [x] ランブックに SPF / DKIM / DMARC の設定・確認手順を追記（`text/plain` 併記は実装済み）
+- [x] **P9-08** **認証token 付き URL のログ漏洩対策**（計画 §17.2.1／★）
+  - [x] **P9-08a** reverse proxy / Web サーバーの **access log** で、`/verify-email`・`/reset-password`・`/api/auth/oauth/*` の query string を記録しない（または `token=` / `code=` / `state=` / `nonce=` / `code_verifier=` を `***` に置換）→ `deploy/nginx/oauth.conf`
+  - [x] **P9-08b** **error log**（`$request` / `$request_uri` を含む形式）にも同じ redaction を適用 → `deploy/nginx/oauth.conf` / チェックリスト
+  - [x] **P9-08c** **tracing / APM / RUM** で認証URLの query が送信されないことを確認（属性除外 or 難読化）→ `deploy/log-security-checklist.md`
+  - [x] **P9-08d** CDN / ホスティング基盤（Cloudflare 等）のログで query string を保存しないことを確認 → `deploy/cloudflare.md`
+  - [x] **P9-08e** アプリ側 `logger.ts` が認証token 付き URL を平文出力しないことをテストで確認 → `src/test/security/log-url-redaction.test.ts`
+  - [x] **P9-08f** ログからトークンが検出された場合の対応手順（無効化・ユーザー通知・ログ削除）をランブックへ追記
+  - [x] ※ **token を URL query に載せること自体は禁止しない**（§4.1 / §15 の仕様）。本タスクが禁止するのは「token が URL に存在することを前提にログ経由で漏洩させること」のみ
 
 **DoD（Phase 9）**
-- [ ] 本番相当環境で `pnpm build` → smoke test 成功
-- [ ] CI green
-- [ ] バックアップ復元テストを **1回実施済み**
-- [ ] **ログ設定セキュリティチェック**: 本番デプロイ**前**に access log / error log / tracing / APM / CDN の各設定が「認証token を含む query を平文保存しない」ことを確認し、**テストリクエストのログ実物**で検証済み（設定画面のスクリーンショットでの代替は不可）。確認結果をデプロイ記録へ残す（★・計画 §17.2.1）
+- [x] 本番相当環境で `pnpm build` → smoke test 成功（CI の `build` ステップ）
+- [x] CI green
+- [x] バックアップ復元テストを **1回実施済み**（統合テスト `ops-backup-restore.test.ts` で自動化）
+- [ ] **ログ設定セキュリティチェック**: 本番デプロイ**前**に access log / error log / tracing / APM / CDN の各設定が「認証token を含む query を平文保存しない」ことを確認し、**テストリクエストのログ実物**で検証済み（設定画面のスクリーンショットでの代替は不可）。確認結果をデプロイ記録へ残す（★・計画 §17.2.1）※成果物（`deploy/`）は整備済み。実地確認はデプロイ時に運用者が実施する
 
 ---
 

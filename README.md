@@ -31,6 +31,10 @@
 | `docs/phase7.5-admin-ui-cli-実装計画.md` | 管理者の付与（管理 UI ＋ CLI）（M7.5） |
 | `docs/phase7.6-account-deletion-実装計画.md` | アカウント削除フロー＋アカウント保護イベント（M7.6） |
 | `docs/phase8-risk-tests-実装計画.md` / `docs/phase8-実行Todo.md` | リスク検知 ＋ セキュリティテスト完成（M8） |
+| `docs/phase9-運用デプロイ-実装計画.md` / `docs/phase9-実行Todo.md` | 運用デプロイ（M9。CAPTCHA 実接続・バックアップ復元・監視・ログ漏洩対策） |
+| `docs/phase9-運用ランブック.md` | 本番運用の手順（suspend / 復旧 / キーローテ / §54-55 手動復旧フロー / インシデント） |
+| `docs/phase9-バックアップ復元手順.md` | バックアップ暗号化・復元・復元テストの手順（§53） |
+| `deploy/log-security-checklist.md` | 認証トークン付き URL のログ漏洩対策チェックリスト（§17.2.1） |
 | `docs/phase-verification-report-2026-10-26.md` | Phase 7 完了時点の検証レポート |
 | `.env.example` | 環境変数の定義 |
 
@@ -157,6 +161,10 @@ docker へ権限が無い環境では、実行ユーザーを `docker` グルー
 | `pnpm oidc:load --scenario all` | OIDCレート制限値の負荷検証（一時サーバを起動し実HTTPで計測。結果は `docs/phase2.5-load-test.md`） | 実装済 |
 | `pnpm admin:grant <email\|username> [--role <role>] [--actor <email\|id>]` | 既存ユーザーへ role を付与・変更（初回 bootstrap 用。`--actor` 省略時は監査ログに残さず警告） | 実装済 |
 | `pnpm db:verify-migrations` | migrationのup/down/往復/restoreを検証（一時DBを作成し終了時に削除） | 実装済 |
+| `pnpm backup [--out <dir>] [--keep <days>]` | 暗号化バックアップを取得（`pg_dump` → AES-256-GCM。鍵未設定なら失敗。既定 保持30日） | 実装済（M9） |
+| `pnpm restore --file <path> [--database <url>]` | 暗号化バックアップを復元（`--database` 省略時は `DATABASE_URL`） | 実装済（M9） |
+| `pnpm alert:check` | `security_events` を集計し、閾値超過のアラートを構造化ログで出力 | 実装済（M9） |
+| `pnpm logs:scan <file\|-> [--credentials]` | ログの認証トークン混入を走査（**値ではなく行番号**を報告）。既定は URL トークンのみ、`--credentials` で `password`/`secret` 等も対象 | 実装済（M9） |
 
 ## ディレクトリ構成
 
@@ -300,7 +308,7 @@ oauth/
 | M7.5 | Phase 7.5 | 管理者の付与（管理 UI ＋ CLI） | **完了（2026-10-27）**（`/admin/users`・`/admin/audit-logs`・`POST /api/admin/users/{id}/role`・`pnpm admin:grant`。最後の管理者ガード・自己降格禁止） |
 | M7.6 | Phase 7.6 | アカウント削除フロー（メール確認）＋ アカウント保護イベント | **完了（2026-10-28）**（削除の副作用を `performAccountDeletion` に集約・§24 の Passkey 失効漏れを解消。メール確認退会・管理 API を同一ヘルパへ） |
 | M8 | Phase 8 | リスク検知 ＋ セキュリティテスト完成 | **完了（2026-10-25）**（§57 不審ログイン検知 `src/lib/auth/risk.ts` ＋ §48 全カテゴリの green テスト。D-38-01〜D-38-07） |
-| M9 | Phase 9 | 運用デプロイ | 未着手 |
+| M9 | Phase 9 | 運用デプロイ | **完了（2026-10-29）**（CAPTCHA（Turnstile）実接続・暗号化バックアップ／復元・監視アラート・ログ secret 検知・ログ漏洩対策・ランブック。D-39-01〜D-39-08。※本番の実地確認はデプロイ時に運用者が実施） |
 
 進捗の正本は `実装Todo.md` のチェックボックスです。最新のテスト実績は **127 files / 865 tests green**（`pnpm test`。e2e は Go ツールチェーン未導入時 interop をスキップ）。
 
@@ -653,6 +661,41 @@ migration は不要でした（`admin_audit_logs.action` / `security_events.even
 | D-38-07 | リスクイベントは `login_risk`（metadata は `level` / `signals` / `action` のみ） |
 
 **検証**: 全 **127 files / 865 tests green**、typecheck 0 error、lint 0 error / 0 warning、`pnpm build` 成功。
+
+---
+
+## Phase 9 実装詳細（2026-10-29 / 実装完了）
+
+計画: `docs/phase9-運用デプロイ-実装計画.md`（D-39-01〜D-39-08）
+
+M8 の残件（運用デプロイ）を実装しました。migration は不要です（監視は既存 `security_events` の集計のみ）。
+
+| 追加・変更 | 内容 |
+|---|---|
+| CAPTCHA 実接続 | `src/lib/auth/captcha.ts` に `TurnstileCaptchaProvider`（`siteverify` を POST body で叩く）。`setCaptchaProvider` の差し替え口を追加。本番で secret 未設定は 500、通信失敗は 503（fail closed） |
+| バックアップ | `src/lib/ops/backup.ts` — `pg_dump --format=custom` → AES-256-GCM → 保持 30 日 pruning。`BACKUP_ENCRYPTION_KEY` 未設定なら失敗。`pnpm backup` |
+| 復元 | `src/lib/ops/restore.ts` — 復号して `pg_restore`（標準入力）。`pnpm restore --file <path> [--database <url>]` |
+| 監視 | `src/config/ops.ts`（閾値集約）/ `src/lib/ops/alerting.ts`（純関数 `evaluateAlerts`）/ `pnpm alert:check`。`security-events.ts` に `countRecentEventsByType` / `countRecentFailedEventTypes` |
+| ログ secret 検知 | `src/lib/ops/log-scan.ts` — `pnpm logs:scan <file\|->`。**値ではなく行番号**を報告。既定は URL トークン（`token`/`code`/`state`/`nonce`/`code_verifier`）のみ、`--credentials` で `password`/`secret` 等も対象 |
+| 外部コマンド | `src/lib/ops/command.ts` の `runCommand` に `pg_dump`/`pg_restore` の spawn/pipe を集約（backup/restore で二重実装しない） |
+| ログ漏洩対策 | `deploy/nginx/oauth.conf`（query を含まない log_format）/ `deploy/cloudflare.md` / `deploy/log-security-checklist.md` |
+| ランブック | `docs/phase9-運用ランブック.md` / `docs/phase9-バックアップ復元手順.md` |
+| CI | `verify` に `pnpm build`（smoke）と Node 22/24 の matrix。gitleaks / audit は維持 |
+| 環境変数 | `BACKUP_ENCRYPTION_KEY` / `CAPTCHA_TIMEOUT_MS` を追加（`.env.example` / `pnpm secrets:gen` も更新） |
+| テスト | `src/test/unit/ops-{backup,alerting,log-scan}.test.ts`、`src/test/integration/{ops-backup-restore,alert-queries}.test.ts`、`src/test/security/log-url-redaction.test.ts`、`captcha.test.ts` 更新 |
+
+| 決定 | 内容 |
+|---|---|
+| D-39-01 | CAPTCHA は Turnstile を `fetch` で直接呼び、secret は POST body で送る。provider は差し替え可能 |
+| D-39-02 | バックアップは `pg_dump --format=custom` → AES-256-GCM。復元は一時 DB へ流して行数検証する統合テストを必須にする |
+| D-39-03 | 暗号鍵は `BACKUP_ENCRYPTION_KEY`（Base64 32B）。鍵未設定なら `pnpm backup` は失敗（平文で書かない） |
+| D-39-04 | 監視の閾値は `src/config/ops.ts` に集約し、`alerting.ts` は純関数にする |
+| D-39-05 | アラートは外部送信せず、`pnpm alert:check` が構造化ログで出す |
+| D-39-06 | ログ secret 検知は `logger.ts` のパターンを再利用し、行番号のみ報告する。既定は URL トークンのみ、`password`/`secret` 等は `--credentials` 時のみ |
+| D-39-07 | §17.2.1 の対策は成果物（nginx / Cloudflare / チェックリスト）＋アプリ側テストまでを実装し、実地確認は運用 DoD へ残す |
+| D-39-08 | CI に `build` smoke と Node 22/24 matrix を追加 |
+
+**検証**: 全 **132 files / 900+ tests green**（unit + security + integration + e2e）、typecheck 0 error、lint 0 error / 0 warning、`pnpm build` 成功。復元テストは実 `pg_dump`/`pg_restore` で一時 DB へ復元し行数を検証済み。
 
 ---
 

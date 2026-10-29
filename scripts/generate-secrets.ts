@@ -10,6 +10,7 @@ const SECRET_KEYS = [
   'IP_HASH_PEPPER',
   'CSRF_SECRET',
   'TOTP_ENCRYPTION_KEY',
+  'BACKUP_ENCRYPTION_KEY',
 ] as const;
 
 const DEFAULTS: Record<string, string> = {
@@ -17,13 +18,16 @@ const DEFAULTS: Record<string, string> = {
   NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
   HIBP_TIMEOUT_MS: '1500',
   BREACH_CHECK_FAIL_OPEN: 'true',
+  CAPTCHA_TIMEOUT_MS: '3000',
   POSTGRES_USER: 'app',
   POSTGRES_DB: 'app',
   POSTGRES_PASSWORD: 'dev_password',
 };
 
 function generateValue(key: (typeof SECRET_KEYS)[number]): string {
-  return key === 'TOTP_ENCRYPTION_KEY' ? generateTotpEncryptionKey() : generatePepper();
+  return key === 'TOTP_ENCRYPTION_KEY' || key === 'BACKUP_ENCRYPTION_KEY'
+    ? generateTotpEncryptionKey()
+    : generatePepper();
 }
 
 function main(): void {

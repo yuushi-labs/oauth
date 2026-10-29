@@ -58,6 +58,18 @@ const requiredEnvSchema = z.object({
   WEBAUTHN_ALLOWED_ORIGINS: z.string().optional(),
   // 不審ログイン検知（§57）の強制レベル。既定は通知のみで既存挙動を変えない（D-38-03）。
   RISK_ENFORCEMENT: z.enum(['notify', 'challenge', 'hold']).default('notify'),
+  // CAPTCHA（Turnstile）のタイムアウト（Phase 9 / D-39-01）。
+  CAPTCHA_TIMEOUT_MS: z.coerce.number().int().positive().default(3000),
+  // バックアップ暗号鍵（Phase 9 / D-39-03）。Base64 32 バイト。未設定なら `pnpm backup` は失敗する。
+  BACKUP_ENCRYPTION_KEY: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z
+      .string()
+      .refine((value) => isBase64OfLength(value, TOTP_KEY_BYTES), {
+        message: `BACKUP_ENCRYPTION_KEY は Base64 エンコードされた ${TOTP_KEY_BYTES} バイトである必要があります`,
+      })
+      .optional(),
+  ),
 });
 
 export type Env = z.infer<typeof requiredEnvSchema>;

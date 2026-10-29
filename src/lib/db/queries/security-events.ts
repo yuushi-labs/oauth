@@ -1,6 +1,6 @@
-import { and, count, countDistinct, desc, eq, gte } from 'drizzle-orm';
+import { and, count, countDistinct, desc, eq, gte, like } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
-import { securityEvents, type NewSecurityEvent, type SecurityEvent } from '@/lib/db/schema';
+import { securityEvents, type NewSecurityEvent, type SecurityEvent, type SecurityEventType } from '@/lib/db/schema';
 
 export async function insertSecurityEvent(data: NewSecurityEvent): Promise<void> {
   const db = getDb();
@@ -89,5 +89,36 @@ export async function countRecentFailedLogins(userId: string, windowMs: number):
         gte(securityEvents.createdAt, since),
       ),
     );
+  return Number(row?.value ?? 0);
+}
+
+/**
+ * 直近ウィンドウ内の指定イベント種の件数（Phase 9 の監視・D-39-04）。
+ * ユーザー横断で数える（アラートはサービス全体の異常を捉えるため）。
+ */
+export async function countRecentEventsByType(
+  eventType: SecurityEventType,
+  windowMs: number,
+): Promise<number> {
+  const db = getDb();
+  const since = new Date(Date.now() - windowMs);
+  const [row] = await db
+    .select({ value: count() })
+    .from(securityEvents)
+    .where(and(eq(securityEvents.eventType, eventType), gte(securityEvents.createdAt, since)));
+  return Number(row?.value ?? 0);
+}
+
+/**
+ * 直近ウィンドウ内の「失敗系」イベントの合計件数（Phase 9 の監視）。
+ * 5xx 相当の内部失敗を表す `*_failed` を対象にする。
+ */
+export async function countRecentFailedEventTypes(windowMs: number): Promise<number> {
+  const db = getDb();
+  const since = new Date(Date.now() - windowMs);
+  const [row] = await db
+    .select({ value: count() })
+    .from(securityEvents)
+    .where(and(like(securityEvents.eventType, '%_failed'), gte(securityEvents.createdAt, since)));
   return Number(row?.value ?? 0);
 }
