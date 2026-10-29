@@ -113,7 +113,8 @@ Phase 9 の要点（運用デプロイ）:
 - **ログ漏洩対策**: アプリ側は `logger.ts` ＋ `src/test/security/log-url-redaction.test.ts`。外側の層は成果物
   `deploy/nginx/oauth.conf` / `deploy/cloudflare.md` / `deploy/log-security-checklist.md`（実地確認は運用 DoD・D-39-07）。
 - **ランブック**: `docs/phase9-運用ランブック.md`（suspend / 復旧 / キーローテ / §54-55 手動復旧フロー / インシデント）、
-  `docs/phase9-デプロイ手順.md`（初期状態のサーバーからのデプロイ一式）、
+  `docs/phase9-デプロイ手順.md`（初期状態のサーバーからのデプロイ一式・Nginx + TLS 方式）、
+  `deploy/cloudflare-tunnel/README.md` ＋ `install.sh`（Cloudflare Tunnel 方式・Nginx / 証明書 / ポート開放なし）、
   `docs/phase9-バックアップ復元手順.md`。
 - **CI**: `verify` に `pnpm build`（smoke）と Node 22/24 の matrix を追加（D-39-08）。gitleaks / audit は維持。
 

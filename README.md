@@ -34,6 +34,7 @@
 | `docs/phase9-運用デプロイ-実装計画.md` / `docs/phase9-実行Todo.md` | 運用デプロイ（M9。CAPTCHA 実接続・バックアップ復元・監視・ログ漏洩対策） |
 | `docs/phase9-運用ランブック.md` | 本番運用の手順（suspend / 復旧 / キーローテ / §54-55 手動復旧フロー / インシデント） |
 | `docs/phase9-デプロイ手順.md` | ほぼ初期状態のサーバーへのデプロイ手順（OS 設定 / Node / PostgreSQL / env / migration / systemd / Nginx+TLS / cron） |
+| `deploy/cloudflare-tunnel/README.md` + `install.sh` | Cloudflare Tunnel 方式のデプロイ手順と自動化スクリプト（Nginx / 証明書 / ポート開放が不要） |
 | `docs/phase9-バックアップ復元手順.md` | バックアップ暗号化・復元・復元テストの手順（§53） |
 | `deploy/log-security-checklist.md` | 認証トークン付き URL のログ漏洩対策チェックリスト（§17.2.1） |
 | `docs/phase-verification-report-2026-10-26.md` | Phase 7 完了時点の検証レポート |
@@ -71,6 +72,11 @@
 > **本番サーバーへデプロイする場合**は、ローカル開発用の下記手順ではなく
 > **[`docs/phase9-デプロイ手順.md`](docs/phase9-デプロイ手順.md)** に従ってください
 > （OS 初期設定・Node.js / PostgreSQL 16 の導入・環境変数・migration・systemd・Nginx + TLS・cron まで記載）。
+>
+> Nginx も証明書取得もポート開放も使いたくない場合は、
+> **Cloudflare Tunnel 方式**の **[`deploy/cloudflare-tunnel/README.md`](deploy/cloudflare-tunnel/README.md)** と
+> 自動化スクリプト **[`deploy/cloudflare-tunnel/install.sh`](deploy/cloudflare-tunnel/install.sh)** を使ってください
+> （外向きトンネルのみ・固定 IP 不要・TLS は Cloudflare が管理）。
 
 ```bash
 # 1. 依存関係
@@ -684,6 +690,7 @@ M8 の残件（運用デプロイ）を実装しました。migration は不要�
 | ログ secret 検知 | `src/lib/ops/log-scan.ts` — `pnpm logs:scan <file\|->`。**値ではなく行番号**を報告。既定は URL トークン（`token`/`code`/`state`/`nonce`/`code_verifier`）のみ、`--credentials` で `password`/`secret` 等も対象 |
 | 外部コマンド | `src/lib/ops/command.ts` の `runCommand` に `pg_dump`/`pg_restore` の spawn/pipe を集約（backup/restore で二重実装しない） |
 | ログ漏洩対策 | `deploy/nginx/oauth.conf`（query を含まない log_format）/ `deploy/cloudflare.md` / `deploy/log-security-checklist.md` |
+| Cloudflare Tunnel 方式 | `deploy/cloudflare-tunnel/README.md`（手順）/ `install.sh`（自動化）/ `config.yml.example`（ローカル管理トンネル） |
 | ランブック | `docs/phase9-運用ランブック.md` / `docs/phase9-バックアップ復元手順.md` |
 | CI | `verify` に `pnpm build`（smoke）と Node 22/24 の matrix。gitleaks / audit は維持 |
 | 環境変数 | `BACKUP_ENCRYPTION_KEY` / `CAPTCHA_TIMEOUT_MS` を追加（`.env.example` / `pnpm secrets:gen` も更新） |

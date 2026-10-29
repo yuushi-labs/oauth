@@ -8,6 +8,11 @@
 > `deploy/nginx/oauth.conf`・`deploy/cloudflare.md`・`deploy/log-security-checklist.md`（ログ漏洩対策・§17.2.1）/
 > `.env.example`（環境変数の正本）
 >
+> **別方式**: Nginx・証明書取得・ポート開放を使わずに公開したい場合は
+> **Cloudflare Tunnel 方式**（`deploy/cloudflare-tunnel/README.md` ＋ `install.sh`）を使う。
+> 外向きトンネルのみ・固定 IP 不要・TLS は Cloudflare が管理する。アプリ側の `.env` は
+> `TRUSTED_PROXY_HEADER` が `x-forwarded-for` ではなく **`cf-connecting-ip`** になる点だけ異なる。
+>
 > 想定 OS: **Ubuntu 22.04 / 24.04 LTS**（Debian 系）。RHEL 系はパッケージコマンドを読み替える。
 > 想定構成: 単一ホストに「アプリ（Next.js custom server）＋ PostgreSQL 16 ＋ Nginx（TLS 終端）」。
 > DB を別ホストにする場合は §4・§6 の接続先を読み替える。

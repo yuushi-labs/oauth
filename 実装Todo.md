@@ -592,6 +592,7 @@ Phase 4 の本体内で未だった 2 点（BUG-12 後の実ブラウザ検証�
 - [x] **P9-05** ドキュメント: 運用ランブック（suspend / 復旧 / キーローテ）、**§54-55 の手動復旧フロー**（メール喪失時・弱い本人確認は禁止）
   - [x] `docs/phase9-運用ランブック.md`（suspend / 復旧 / キーローテ / インシデント / §54-55 手動復旧フロー）
   - [x] `docs/phase9-デプロイ手順.md`（ほぼ初期状態のサーバーからのデプロイ一式: OS / Node / PostgreSQL / env / migration / systemd / Nginx+TLS / cron）
+  - [x] `deploy/cloudflare-tunnel/README.md` ＋ `install.sh`（Cloudflare Tunnel 方式の手順と自動化。Nginx / 証明書 / ポート開放なし）
 - [x] **P9-06** 定期Job: `purge-expired`（token/session）、`security_events` **保持180日**パージ
   - [x] `security_events` 180日パージ ジョブを `scripts/purge-expired.ts` に追加（`security event`）
   - [x] 論理削除ユーザーの保持期間（30日）経過後**物理削除**（`deleted user` ジョブ。CASCADE で本人データ削除、`security_events` / `oauth_clients` / `admin_audit_logs` は SET NULL で匿名化保持）

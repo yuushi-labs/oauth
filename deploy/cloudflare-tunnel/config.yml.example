@@ -1,0 +1,34 @@
+# Cloudflare Tunnel の設定例（ローカル管理トンネル方式・方式 B）
+#
+# 使い方:
+#   sudo mkdir -p /etc/cloudflared
+#   sudo cp config.yml.example /etc/cloudflared/config.yml
+#   sudo cp ~/.cloudflared/<TUNNEL_UUID>.json /etc/cloudflared/
+#   sudo sed -i "s/<TUNNEL_UUID>/<実際のUUID>/g" /etc/cloudflared/config.yml
+#   sudo cloudflared service install
+#   sudo systemctl restart cloudflared
+#
+# リモート管理トンネル（方式 A・トークン）を使う場合は本ファイルは不要:
+#   sudo cloudflared service install <TUNNEL_TOKEN>
+#
+# ★ ホスト名（auth.example.com）は環境に合わせて 1 か所だけ変更する。
+#   変更するのは本ファイルの hostname と、アプリの .env（NEXT_PUBLIC_APP_URL / OIDC_ISSUER /
+#   ALLOWED_HOSTS / WEBAUTHN_*）だけでよい。サーバー自身のホスト名は変更しない。
+
+tunnel: <TUNNEL_UUID>
+credentials-file: /etc/cloudflared/<TUNNEL_UUID>.json
+
+# ログ（必要に応じて）
+loglevel: info
+# logfile: /var/log/cloudflared.log
+
+ingress:
+  # 公開ホスト名 → ローカルのアプリ
+  - hostname: auth.example.com
+    service: http://127.0.0.1:3000
+    # originRequest:
+    #   httpHostHeader は「設定しない」こと。
+    #   設定すると Host が固定され、OIDC の validOidcRequestOrigin が失敗する。
+
+  # マッチしないホストは明示的に拒否する（最後に必ず置く）
+  - service: http_status:404
