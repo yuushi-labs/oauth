@@ -43,11 +43,13 @@ export function EmailChangeForm({ token }: { token: string }) {
           <Alert variant="success">
             <AlertDescription>{message}</AlertDescription>
           </Alert>
-          <Link className="text-sm text-primary underline" href="/login">{m('auth.submitLogin')}</Link>
+          <Link className="text-sm text-primary underline" href="/login">
+            {m('auth.submitLogin')}
+          </Link>
         </>
       ) : (
-        <Button onClick={() => void confirmEmail()} disabled={!token || submitting} aria-busy={submitting}>
-          {submitting ? m('common.loading') : m('auth.emailChangeAction')}
+        <Button onClick={() => void confirmEmail()} disabled={!token} loading={submitting}>
+          {m('auth.emailChangeAction')}
         </Button>
       )}
     </div>

@@ -1,11 +1,20 @@
 import { notFound } from 'next/navigation';
+import type { Metadata } from 'next';
 import { requireSettingsUser } from '@/app/settings/layout';
 import { ApplicationDetail } from '@/app/settings/applications/[clientId]/application-detail';
-import { findOidcClient, OidcClientForbiddenError, OidcClientNotFoundError, requireManageableClient } from '@/lib/oidc/clients';
+import {
+  findOidcClient,
+  OidcClientForbiddenError,
+  OidcClientNotFoundError,
+  requireManageableClient,
+} from '@/lib/oidc/clients';
 import { connectionTestRedirectUri } from '@/lib/oidc/client-validation';
 import { getEnv } from '@/lib/env';
+import { m } from '@/messages/ja';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = { title: m('applications.detailTitle') };
 
 type PageProps = { params: Promise<{ clientId: string }> };
 
@@ -16,7 +25,8 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
   try {
     await requireManageableClient(clientId, user.id);
   } catch (error) {
-    if (error instanceof OidcClientNotFoundError || error instanceof OidcClientForbiddenError) notFound();
+    if (error instanceof OidcClientNotFoundError || error instanceof OidcClientForbiddenError)
+      notFound();
     throw error;
   }
 
@@ -27,7 +37,7 @@ export default async function ApplicationDetailPage({ params }: PageProps) {
   const issuer = env.OIDC_ISSUER ?? new URL(env.NEXT_PUBLIC_APP_URL).origin;
 
   return (
-    <main>
+    <main id="main-content">
       <ApplicationDetail
         client={{
           clientId: client.clientId,

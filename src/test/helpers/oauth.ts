@@ -1,6 +1,6 @@
 /**
  * authorize URL から state を抜き出すテストヘルパ。
- * 認可フローのテストは「start → callback」を往復시키せるので、
+ * 認可フローのテストは「start → callback」を往復させるので、
  * state の受け渡しを毎回手で書く必要がないようにしておく。
  */
 export function extractCallbackState(location: string): string | null {

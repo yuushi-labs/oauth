@@ -66,7 +66,11 @@ export function SocialConfirmForm({
       router.replace('/');
       router.refresh();
     } catch (caught) {
-      setError(caught instanceof ApiClientError ? messageFor(caught.code) : m('oauth.confirm.error.internal'));
+      setError(
+        caught instanceof ApiClientError
+          ? messageFor(caught.code)
+          : m('oauth.confirm.error.internal'),
+      );
       setBusy('');
     }
   }
@@ -108,8 +112,12 @@ export function SocialConfirmForm({
       </Card>
 
       {canSignup && (
-        <Button onClick={() => void run('signup')} disabled={busy !== ''} aria-busy={busy === 'signup'}>
-          {busy === 'signup' ? m('oauth.confirm.submitting') : m('oauth.confirm.signupAction')}
+        <Button
+          onClick={() => void run('signup')}
+          loading={busy === 'signup'}
+          disabled={busy !== ''}
+        >
+          {m('oauth.confirm.signupAction')}
         </Button>
       )}
 
@@ -148,8 +156,8 @@ export function SocialConfirmForm({
               value={password}
             />
           </Label>
-          <Button type="submit" disabled={busy !== ''} aria-busy={busy === 'password'}>
-            {busy === 'password' ? m('oauth.confirm.submitting') : m('oauth.confirm.passwordAction')}
+          <Button type="submit" loading={busy === 'password'} disabled={busy !== ''}>
+            {m('oauth.confirm.passwordAction')}
           </Button>
           <Link className="text-sm text-primary underline" href="/login">
             {m('oauth.confirm.loginElsewhereAction')}
@@ -161,7 +169,12 @@ export function SocialConfirmForm({
         </Link>
       )}
 
-      <Button variant="outline" onClick={() => void cancel()} disabled={busy !== ''} aria-busy={busy === 'cancel'}>
+      <Button
+        variant="outline"
+        onClick={() => void cancel()}
+        loading={busy === 'cancel'}
+        disabled={busy !== ''}
+      >
         {m('oauth.confirm.cancel')}
       </Button>
     </div>

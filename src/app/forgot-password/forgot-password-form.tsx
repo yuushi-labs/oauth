@@ -54,8 +54,8 @@ export function ForgotPasswordForm() {
           <AlertDescription>{message}</AlertDescription>
         </Alert>
       ) : (
-        <Button type="submit" disabled={submitting} aria-busy={submitting}>
-          {submitting ? m('common.loading') : m('auth.forgotAction')}
+        <Button type="submit" loading={submitting}>
+          {m('auth.forgotAction')}
         </Button>
       )}
     </form>

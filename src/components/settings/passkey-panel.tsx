@@ -137,7 +137,9 @@ export function PasskeyPanel({
                   <span className="text-xs text-muted-fg">
                     {m('passkey.createdAt')}: {formatLocalDateTime(row.created_at, timezone)} ・{' '}
                     {m('passkey.lastUsedAt')}:{' '}
-                    {row.last_used_at ? formatLocalDateTime(row.last_used_at, timezone) : m('passkey.neverUsed')}
+                    {row.last_used_at
+                      ? formatLocalDateTime(row.last_used_at, timezone)
+                      : m('passkey.neverUsed')}
                   </span>
                 </div>
                 <Button
@@ -176,8 +178,8 @@ export function PasskeyPanel({
             </Alert>
           )}
           <div>
-            <Button type="submit" disabled={busy}>
-              {busy ? m('common.loading') : m('passkey.add')}
+            <Button type="submit" loading={busy}>
+              {m('passkey.add')}
             </Button>
           </div>
         </form>

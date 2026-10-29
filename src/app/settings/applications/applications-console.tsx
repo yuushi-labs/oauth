@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 
 export type ApplicationSummary = {
   clientId: string;
@@ -34,14 +37,23 @@ export function useCsrfToken(): string {
     let active = true;
     fetch('/api/auth/csrf', { cache: 'no-store' })
       .then(async (response) => (await response.json()) as ApiResponse<{ csrfToken: string }>)
-      .then((body) => { if (active && body.success && body.data?.csrfToken) setCsrfToken(body.data.csrfToken); })
+      .then((body) => {
+        if (active && body.success && body.data?.csrfToken) setCsrfToken(body.data.csrfToken);
+      })
       .catch(() => undefined);
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, []);
   return csrfToken;
 }
 
-export async function postJson<T>(path: string, body: unknown, csrfToken: string, method = 'POST'): Promise<{ ok: boolean; data?: T; message: string }> {
+export async function postJson<T>(
+  path: string,
+  body: unknown,
+  csrfToken: string,
+  method = 'POST',
+): Promise<{ ok: boolean; data?: T; message: string }> {
   try {
     const response = await fetch(path, {
       method,
@@ -49,7 +61,11 @@ export async function postJson<T>(path: string, body: unknown, csrfToken: string
       body: JSON.stringify(body),
     });
     const result = (await response.json()) as ApiResponse<T>;
-    return { ok: response.ok && result.success, data: result.data, message: result.error?.message ?? '処理に失敗しました。' };
+    return {
+      ok: response.ok && result.success,
+      data: result.data,
+      message: result.error?.message ?? '処理に失敗しました。',
+    };
   } catch {
     return { ok: false, message: '通信に失敗しました。時間をおいて再度お試しください。' };
   }
@@ -58,8 +74,9 @@ export async function postJson<T>(path: string, body: unknown, csrfToken: string
 export function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <button
-      className="rounded border border-border px-2 py-1 text-xs disabled:opacity-60"
+    <Button
+      variant="outline"
+      size="sm"
       type="button"
       onClick={() => {
         void navigator.clipboard.writeText(value).then(() => {
@@ -69,15 +86,24 @@ export function CopyButton({ value, label }: { value: string; label: string }) {
       }}
     >
       {copied ? `${label}コピー済み` : `${label}をコピー`}
-    </button>
+    </Button>
   );
 }
 
 function listToLines(value: string): string[] {
-  return value.split('\n').map((line) => line.trim()).filter(Boolean);
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
-export function ApplicationCreateForm({ csrfToken, onCreated }: { csrfToken: string; onCreated: () => void }) {
+export function ApplicationCreateForm({
+  csrfToken,
+  onCreated,
+}: {
+  csrfToken: string;
+  onCreated: () => void;
+}) {
   const router = useRouter();
   const [name, setName] = useState('');
   const [operator, setOperator] = useState('');
@@ -125,31 +151,48 @@ export function ApplicationCreateForm({ csrfToken, onCreated }: { csrfToken: str
     <section className="rounded-lg border border-border bg-card p-6">
       <h2 className="text-lg font-semibold">新しいアプリを作成</h2>
       <p className="mt-2 text-sm text-muted-fg">
-        自作サービス向けの OIDC / OAuth 2.0 クライアントを登録します。client secret は作成時に一度だけ表示されます。
+        自作サービス向けの OIDC / OAuth 2.0 クライアントを登録します。client secret
+        は作成時に一度だけ表示されます。
       </p>
       <form className="mt-4 grid gap-4" onSubmit={submit}>
         <label className="grid gap-1 text-sm">
           <span>アプリ名</span>
-          <input className="rounded-md border border-border-strong px-3 py-2" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
+          <Input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="grid gap-1 text-sm">
           <span>運営者名（同意画面に表示されます）</span>
-          <input className="rounded-md border border-border-strong px-3 py-2" required maxLength={100} value={operator} onChange={(e) => setOperator(e.target.value)} />
+          <Input
+            required
+            maxLength={100}
+            value={operator}
+            onChange={(e) => setOperator(e.target.value)}
+          />
         </label>
         <label className="grid gap-1 text-sm">
           <span>種別（作成後は変更できません）</span>
-          <select className="rounded-md border border-border-strong px-3 py-2" value={clientType} onChange={(e) => setClientType(e.target.value as 'public' | 'confidential')}>
-            <option value="confidential">confidential（サーバーサイド。client secret を使用）</option>
+          <select
+            className="h-10 rounded-md border border-border-strong bg-bg px-3 text-sm text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+            value={clientType}
+            onChange={(e) => setClientType(e.target.value as 'public' | 'confidential')}
+          >
+            <option value="confidential">
+              confidential（サーバーサイド。client secret を使用）
+            </option>
             <option value="public">public（ブラウザ・ネイティブ。secret なし）</option>
           </select>
         </label>
         <label className="grid gap-1 text-sm">
           <span>リダイレクト URI（1行に 1 つ。https 必須。loopback のみ http 可）</span>
-          <textarea className="rounded-md border border-border-strong px-3 py-2" rows={3} required value={redirectUris} onChange={(e) => setRedirectUris(e.target.value)} />
+          <Textarea
+            rows={3}
+            required
+            value={redirectUris}
+            onChange={(e) => setRedirectUris(e.target.value)}
+          />
         </label>
         <label className="grid gap-1 text-sm">
           <span>Web origin（public のみ。1行に 1 つ）</span>
-          <textarea className="rounded-md border border-border-strong px-3 py-2" rows={2} value={webOrigins} onChange={(e) => setWebOrigins(e.target.value)} />
+          <Textarea rows={2} value={webOrigins} onChange={(e) => setWebOrigins(e.target.value)} />
         </label>
         <fieldset className="grid gap-1 text-sm">
           <legend>許可する scope</legend>
@@ -159,27 +202,44 @@ export function ApplicationCreateForm({ csrfToken, onCreated }: { csrfToken: str
                 type="checkbox"
                 checked={scopes.includes(scope)}
                 disabled={scope === 'openid'}
-                onChange={(e) => setScopes((current) => (e.target.checked ? [...current, scope] : current.filter((item) => item !== scope)))}
+                onChange={(e) =>
+                  setScopes((current) =>
+                    e.target.checked
+                      ? [...current, scope]
+                      : current.filter((item) => item !== scope),
+                  )
+                }
               />
-              <span>{label}（{scope}）</span>
+              <span>
+                {label}（{scope}）
+              </span>
             </label>
           ))}
         </fieldset>
-        {error && <p className="text-sm text-danger" role="alert">{error}</p>}
-        <button className="rounded-md border border-border-strong px-4 py-2 text-sm disabled:opacity-60" type="submit" disabled={busy || !csrfToken}>
-          {busy ? '作成中…' : 'アプリを作成する'}
-        </button>
+        {error && (
+          <p className="text-sm text-danger" role="alert">
+            {error}
+          </p>
+        )}
+        <Button className="justify-self-start" type="submit" loading={busy} disabled={!csrfToken}>
+          アプリを作成する
+        </Button>
       </form>
       {createdId && (
         <div className="mt-4 rounded-md border border-border p-4 text-sm">
-          <p>appsを作成しました。</p>
+          <p>アプリを作成しました。</p>
           <p className="mt-2 flex items-center gap-2">
             <code className="break-all">{createdId}</code>
             <CopyButton value={createdId} label="client_id" />
           </p>
           {secret && <SecretNotice secret={secret} onClose={() => setSecret(null)} />}
           <p className="mt-2">
-            <Link className="underline" href={`/settings/applications/${encodeURIComponent(createdId)}`}>詳細を設定する</Link>
+            <Link
+              className="underline"
+              href={`/settings/applications/${encodeURIComponent(createdId)}`}
+            >
+              詳細を設定する
+            </Link>
           </p>
         </div>
       )}
@@ -195,8 +255,14 @@ export function SecretNotice({ secret, onClose }: { secret: string; onClose?: ()
         <code className="break-all">{secret}</code>
         <CopyButton value={secret} label="secret" />
       </p>
-      <p className="mt-2 text-muted-fg">保存後は再表示できません。 잃った場合は再生成してください。</p>
-      {onClose && <button className="mt-2 rounded-md border border-border-strong px-3 py-1 text-xs" type="button" onClick={onClose}>閉じる</button>}
+      <p className="mt-2 text-muted-fg">
+        保存後は再表示できません。紛失した場合は再生成してください。
+      </p>
+      {onClose && (
+        <Button className="mt-2" variant="outline" size="sm" type="button" onClick={onClose}>
+          閉じる
+        </Button>
+      )}
     </div>
   );
 }
@@ -215,31 +281,48 @@ export function ApplicationsConsole({
       <section className="rounded-lg border border-border bg-card p-6">
         <h1 className="text-xl font-semibold">アプリケーション</h1>
         <p className="mt-2 text-sm text-muted-fg">
-          作成した OIDC / OAuth 2.0 クライアントの一覧です（{clients.length} / {maxClientsPerUser} 件）。
+          作成した OIDC / OAuth 2.0 クライアントの一覧です（{clients.length} / {maxClientsPerUser}{' '}
+          件）。
         </p>
         {clients.length === 0 ? (
           <p className="mt-4 text-sm">まだアプリを作成していません。</p>
         ) : (
           <ul className="mt-4 divide-y divide-border">
             {clients.map((client) => (
-              <li key={client.clientId} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <li
+                key={client.clientId}
+                className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between"
+              >
                 <div>
                   <h2 className="font-medium">
-                    <Link className="underline" href={`/settings/applications/${encodeURIComponent(client.clientId)}`}>{client.name}</Link>
+                    <Link
+                      className="underline"
+                      href={`/settings/applications/${encodeURIComponent(client.clientId)}`}
+                    >
+                      {client.name}
+                    </Link>
                   </h2>
                   <p className="mt-1 text-xs text-muted-fg">
-                    {client.clientType} ・ 運営者: {client.operator} ・ scope: {client.allowedScopes.join(' ')}
+                    {client.clientType} ・ 運営者: {client.operator} ・ scope:{' '}
+                    {client.allowedScopes.join(' ')}
                   </p>
                   <p className="mt-1 text-xs text-muted-fg">
                     接続中のユーザー: {client.grantCount} 名
-                    {client.lastUsedAt ? ` ・ 最終利用: ${new Date(client.lastUsedAt).toLocaleString('ja-JP')}` : ''}
+                    {client.lastUsedAt
+                      ? ` ・ 最終利用: ${new Date(client.lastUsedAt).toLocaleString('ja-JP')}`
+                      : ''}
                   </p>
-                  {!client.active && <p className="mt-1 text-xs text-danger">このアプリは利用停止されています。</p>}
+                  {!client.active && (
+                    <p className="mt-1 text-xs text-danger">このアプリは利用停止されています。</p>
+                  )}
                   {!client.isOwner && client.ownerUsername && (
                     <p className="mt-1 text-xs text-muted-fg">登録者: {client.ownerUsername}</p>
                   )}
                 </div>
-                <Link className="rounded-md border border-border-strong px-3 py-2 text-sm" href={`/settings/applications/${encodeURIComponent(client.clientId)}`}>
+                <Link
+                  className="rounded-md border border-border-strong px-3 py-2 text-sm"
+                  href={`/settings/applications/${encodeURIComponent(client.clientId)}`}
+                >
                   設定する
                 </Link>
               </li>

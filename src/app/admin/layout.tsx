@@ -62,7 +62,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           {twoFactorEnabled ? (
             children
           ) : (
-            <main className="flex flex-col gap-4">
+            <main id="main-content" className="flex flex-col gap-4">
               <h1 className="text-2xl font-bold">{m('admin.title')}</h1>
               <Alert variant="warning">
                 <AlertDescription>

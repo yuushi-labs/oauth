@@ -43,10 +43,10 @@ export function EmailUnverifiedNotice({
   return (
     <div className="flex flex-col gap-4">
       <h2 className="text-lg font-semibold">{m('twoFactor.emailNotVerifiedTitle')}</h2>
-      <p className="text-sm text-muted-fg">
-        {m('twoFactor.emailNotVerifiedBody', { email })}
+      <p className="text-sm text-muted-fg">{m('twoFactor.emailNotVerifiedBody', { email })}</p>
+      <p aria-live="polite" className="text-sm text-muted-fg">
+        {email}
       </p>
-      <p aria-live="polite" className="text-sm text-muted-fg">{email}</p>
       {message && (
         <Alert variant="success" size="sm">
           <AlertDescription>{message}</AlertDescription>
@@ -59,8 +59,8 @@ export function EmailUnverifiedNotice({
       )}
       <div className="flex flex-col gap-2">
         {resendAvailable && (
-          <Button onClick={resend} disabled={busy} aria-busy={busy}>
-            {busy ? m('common.loading') : m('twoFactor.emailNotVerifiedResend')}
+          <Button onClick={resend} loading={busy}>
+            {m('twoFactor.emailNotVerifiedResend')}
           </Button>
         )}
         <Button variant="secondary" onClick={onBack}>

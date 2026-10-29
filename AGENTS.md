@@ -40,6 +40,12 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
 - `scripts/server.ts` — OIDC interaction UI（login / consent）を素の HTML で描画。CSP は script 禁止。
 - `src/lib/util/logger.ts` — secret redaction。機密キーは `SENSITIVE_KEYS` に追加する。
 - `src/messages/ja.ts` — UI 文言・メール文面の一元管理（D-30-18）。`m('a.b.c')` で型安全に引く。
+- `src/components/layout/auth-shell.tsx` — 認証系画面（login/register/forgot/reset/verify/email-change/delete-confirm）の共通枠。
+  `<h1>` は 1 ページ 1 つ、`#main-content` はここで付ける。`src/components/layout/skip-link.tsx` は root layout に設置。
+- `src/components/ui/button.tsx` — `loading` prop（スピナー＋`aria-busy`＋`disabled`、ラベル据え置き）。
+  送信ボタンは `busy ? m('common.loading') : label` ではなく `loading={busy}` に統一する。
+- SEO は `src/app/layout.tsx`（`metadata` + `viewport`）に集約。各 `page.tsx` は `metadata.title` のみ足す
+  （ルート `page.tsx` は同セグメントのため `title.absolute`）。`robots.ts` / `manifest.ts` は全画面 noindex 前提。
 
 ## 決定事項の慣習
 
@@ -57,6 +63,8 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
 - OAuth callback では `Origin` / `Referer` を検証しない（provider からの top-level GET のため必ず 403 になる。
   CSRF は `state` 1 回限り消費 + PKCE で担保。BUG-12）。
 - 一意性は **partial unique index**（`deleted_at IS NULL`）のみ。通常 UNIQUE は付けない（D-04）。
+- ルート `app/loading.tsx` を置くと、認証ガードの 3xx リダイレクトと 404 がストリーミング 200 に化ける
+  （`redirect()` / `notFound()` が HTTP ステータスを返さなくなる）。共通ローディングはセグメント単位に留める。
 - 「1 回限り」の値（token / state / claim）は **`UPDATE ... WHERE <未消費>` の更新行数**で消費する。
   read → 判定 → write の 2 段書きは禁止（D-16）。
 - **partial unique index 違反を 500 にしない**。`deleted_at IS NULL` の一意制約に当たる更新

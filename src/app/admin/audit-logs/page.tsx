@@ -2,7 +2,10 @@ import { requireAdminUser } from '@/app/admin/layout';
 import { listAdminAuditLogs } from '@/lib/db/queries/audit-logs';
 import { Card, CardContent } from '@/components/ui/card';
 import { formatLocalDateTime } from '@/lib/util/datetime';
+import type { Metadata } from 'next';
 import { m, messages } from '@/messages/ja';
+
+export const metadata: Metadata = { title: m('admin.auditLogs') };
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +25,7 @@ export default async function AdminAuditLogsPage() {
   const actionLabel = (action: string) => ACTION_LABELS[action] ?? action;
 
   return (
-    <main className="flex flex-col gap-4">
+    <main id="main-content" className="flex flex-col gap-4">
       <header>
         <h1 className="text-2xl font-bold">{m('admin.auditLogs')}</h1>
         <p className="mt-1 text-sm text-muted-fg">{m('admin.auditLogsHint')}</p>
@@ -48,14 +51,10 @@ export default async function AdminAuditLogsPage() {
                   <tr key={log.id} className="border-b border-border align-top last:border-0">
                     <td className="px-4 py-3">
                       <p className="font-medium">{actionLabel(log.action)}</p>
-                      <p className="text-xs text-muted-fg">
-                        {formatLocalDateTime(log.createdAt)}
-                      </p>
+                      <p className="text-xs text-muted-fg">{formatLocalDateTime(log.createdAt)}</p>
                     </td>
                     <td className="px-4 py-3">{log.actorUsername ?? log.actorUserId}</td>
-                    <td className="px-4 py-3">
-                      {log.targetUsername ?? log.targetUserId ?? '—'}
-                    </td>
+                    <td className="px-4 py-3">{log.targetUsername ?? log.targetUserId ?? '—'}</td>
                     <td className="px-4 py-3 text-xs text-muted-fg">{log.ipMasked ?? '—'}</td>
                     <td className="px-4 py-3 text-xs text-muted-fg">
                       {log.metadata ? JSON.stringify(log.metadata) : '—'}

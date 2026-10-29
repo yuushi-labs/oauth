@@ -1,6 +1,9 @@
+import type { Metadata } from 'next';
 import { AuthForm } from '@/app/auth-form';
 import { LoginButtons } from '@/components/auth/login-buttons';
 import { m, type UiMessagePath } from '@/messages/ja';
+
+export const metadata: Metadata = { title: m('auth.loginTitle') };
 
 /** OAuth コールバックが `?error=` で返しうる値だけを受け付ける（§12.2）。 */
 const OAUTH_ERROR_PATHS: readonly UiMessagePath[] = [

@@ -6,7 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { m } from '@/messages/ja';
 
 /**
@@ -74,8 +81,8 @@ export function ReauthDialog({
             <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={busy}>
               {m('common.cancel')}
             </Button>
-            <Button type="submit" disabled={busy || !password}>
-              {busy ? m('common.loading') : m('reauth.submit')}
+            <Button type="submit" disabled={!password} loading={busy}>
+              {m('reauth.submit')}
             </Button>
           </DialogFooter>
         </form>

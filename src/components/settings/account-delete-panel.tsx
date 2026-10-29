@@ -8,7 +8,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { apiClient, ApiClientError, resetCsrfCache } from '@/lib/api/client';
 import { m } from '@/messages/ja';
@@ -133,7 +140,9 @@ export function AccountDeletePanel({
   }
 
   const tabs = [
-    ...(supportsTwoFactor ? [{ value: 'twofactor', label: m('accountDelete.methodTwoFactor') }] : []),
+    ...(supportsTwoFactor
+      ? [{ value: 'twofactor', label: m('accountDelete.methodTwoFactor') }]
+      : []),
     ...(supportsPasskey ? [{ value: 'passkey', label: m('accountDelete.methodPasskey') }] : []),
     { value: 'email', label: m('accountDelete.methodEmail') },
   ];
@@ -169,8 +178,13 @@ export function AccountDeletePanel({
           <Button variant="secondary" onClick={() => setOpen(false)} disabled={busy}>
             {m('common.cancel')}
           </Button>
-          <Button type="submit" variant="destructive" disabled={busy || code.length < 6 || !password}>
-            {busy ? m('common.loading') : m('accountDelete.confirm')}
+          <Button
+            type="submit"
+            variant="destructive"
+            disabled={code.length < 6 || !password}
+            loading={busy}
+          >
+            {m('accountDelete.confirm')}
           </Button>
         </DialogFooter>
       </form>
@@ -189,8 +203,8 @@ export function AccountDeletePanel({
           <Button variant="secondary" onClick={() => setOpen(false)} disabled={busy}>
             {m('common.cancel')}
           </Button>
-          <Button type="button" variant="destructive" onClick={submitPasskey} disabled={busy}>
-            {busy ? m('common.loading') : m('passkey.reauthTabPasskey')}
+          <Button type="button" variant="destructive" onClick={submitPasskey} loading={busy}>
+            {m('passkey.reauthTabPasskey')}
           </Button>
         </DialogFooter>
       </div>
@@ -215,8 +229,14 @@ export function AccountDeletePanel({
           <Button variant="secondary" onClick={() => setOpen(false)} disabled={busy}>
             {m('common.cancel')}
           </Button>
-          <Button type="button" variant="destructive" onClick={requestEmail} disabled={busy || emailSent}>
-            {busy ? m('common.loading') : m('accountDelete.emailSend')}
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={requestEmail}
+            disabled={emailSent}
+            loading={busy}
+          >
+            {m('accountDelete.emailSend')}
           </Button>
         </DialogFooter>
       </div>
@@ -286,7 +306,9 @@ export function AccountDeletePanel({
                     </TabsTrigger>
                   ))}
                 </TabsList>
-                <TabsContent value="twofactor">{supportsTwoFactor && renderTwoFactor()}</TabsContent>
+                <TabsContent value="twofactor">
+                  {supportsTwoFactor && renderTwoFactor()}
+                </TabsContent>
                 <TabsContent value="passkey">{supportsPasskey && renderPasskey()}</TabsContent>
                 <TabsContent value="email">{renderEmail()}</TabsContent>
               </Tabs>

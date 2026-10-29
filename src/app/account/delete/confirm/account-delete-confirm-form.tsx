@@ -43,16 +43,18 @@ export function AccountDeleteConfirmForm({ token }: { token: string }) {
           <Alert variant="success">
             <AlertDescription>{message}</AlertDescription>
           </Alert>
-          <Link className="text-sm text-primary underline" href="/login">{m('accountDelete.backToLogin')}</Link>
+          <Link className="text-sm text-primary underline" href="/login">
+            {m('accountDelete.backToLogin')}
+          </Link>
         </>
       ) : (
         <Button
           variant="destructive"
           onClick={() => void confirmDelete()}
-          disabled={!token || submitting}
-          aria-busy={submitting}
+          disabled={!token}
+          loading={submitting}
         >
-          {submitting ? m('common.loading') : m('accountDelete.confirm')}
+          {m('accountDelete.confirm')}
         </Button>
       )}
     </div>

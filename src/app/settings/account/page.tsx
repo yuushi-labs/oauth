@@ -7,7 +7,10 @@ import { findTotpByUserId } from '@/lib/db/queries/totp';
 import { availableStrongReauthMethods } from '@/lib/auth/strong-reauth';
 import { Card, CardContent } from '@/components/ui/card';
 import { AccountDeletePanel } from '@/components/settings/account-delete-panel';
+import type { Metadata } from 'next';
 import { m } from '@/messages/ja';
+
+export const metadata: Metadata = { title: m('settings.account') };
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +27,7 @@ export default async function AccountSettingsPage() {
   const strongReauthMethods = user ? await availableStrongReauthMethods(user) : ['password'];
 
   return (
-    <main className="flex flex-col gap-6">
+    <main id="main-content" className="flex flex-col gap-6">
       <header>
         <h1 className="text-2xl font-bold">{m('settings.account')}</h1>
         <p className="mt-2 text-sm text-muted-fg">アカウントの基本情報を確認します。</p>
@@ -42,7 +45,9 @@ export default async function AccountSettingsPage() {
               <dd className="flex items-center gap-2">
                 {user?.email}
                 <span className="rounded-full bg-success-soft px-2 py-0.5 text-xs font-semibold">
-                  {user?.emailVerified ? m('security.emailVerified') : m('security.emailUnverified')}
+                  {user?.emailVerified
+                    ? m('security.emailVerified')
+                    : m('security.emailUnverified')}
                 </span>
               </dd>
             </div>

@@ -15,13 +15,7 @@ import { m } from '@/messages/ja';
  * 「リカバリーコードを使う」で同じ入力欄を切り替える（`inputMode` を `text` に）。
  * 成功したら昇格（`totp_pending = false`）してトップへ遷移する。
  */
-export function TotpLoginStep({
-  returnTo,
-  onBack,
-}: {
-  returnTo?: string;
-  onBack: () => void;
-}) {
+export function TotpLoginStep({ returnTo, onBack }: { returnTo?: string; onBack: () => void }) {
   const [useRecovery, setUseRecovery] = React.useState(false);
   const [code, setCode] = React.useState('');
   const [error, setError] = React.useState('');
@@ -37,7 +31,9 @@ export function TotpLoginStep({
       const target = returnTo?.startsWith('/oauth2/interaction/') ? returnTo : '/';
       window.location.assign(target);
     } catch (caught) {
-      setError(caught instanceof ApiClientError ? caught.message : m('twoFactor.challengeInstruction'));
+      setError(
+        caught instanceof ApiClientError ? caught.message : m('twoFactor.challengeInstruction'),
+      );
       setCode('');
     } finally {
       setBusy(false);
@@ -80,12 +76,19 @@ export function TotpLoginStep({
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        <Button type="submit" disabled={busy || code.length === 0} aria-busy={busy}>
-          {busy ? m('common.loading') : m('twoFactor.verify')}
+        <Button type="submit" disabled={busy || code.length === 0} loading={busy}>
+          {m('twoFactor.verify')}
         </Button>
       </form>
       <div className="flex flex-col gap-2 text-sm text-muted-fg">
-        <button type="button" className="self-start underline" onClick={() => { setUseRecovery((v) => !v); setCode(''); }}>
+        <button
+          type="button"
+          className="self-start underline"
+          onClick={() => {
+            setUseRecovery((v) => !v);
+            setCode('');
+          }}
+        >
           {useRecovery ? m('twoFactor.useTotpCode') : m('twoFactor.useRecoveryCode')}
         </button>
         <button type="button" className="self-start underline" onClick={backToLogin}>

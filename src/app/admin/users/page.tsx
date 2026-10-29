@@ -1,7 +1,10 @@
 import { requireAdminUser } from '@/app/admin/layout';
 import { listAdminUsers } from '@/lib/db/queries/admin';
 import { AdminUsersPanel } from '@/app/admin/users/admin-users-panel';
+import type { Metadata } from 'next';
 import { m } from '@/messages/ja';
+
+export const metadata: Metadata = { title: m('admin.users') };
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +21,7 @@ export default async function AdminUsersPage() {
   const { users, total } = await listAdminUsers({ limit: PAGE_SIZE, offset: 0 });
 
   return (
-    <main className="flex flex-col gap-4">
+    <main id="main-content" className="flex flex-col gap-4">
       <header>
         <h1 className="text-2xl font-bold">{m('admin.users')}</h1>
         <p className="mt-1 text-sm text-muted-fg">{m('admin.usersHint')}</p>

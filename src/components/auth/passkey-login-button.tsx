@@ -47,9 +47,9 @@ export function PasskeyLoginButton({ returnTo }: { returnTo?: string }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <Button type="button" variant="outline" onClick={login} disabled={busy} aria-busy={busy}>
-        <Fingerprint aria-hidden className="size-4" />
-        {busy ? m('common.loading') : m('passkey.loginButton')}
+      <Button type="button" variant="outline" onClick={login} loading={busy}>
+        {!busy && <Fingerprint aria-hidden className="size-4" />}
+        {m('passkey.loginButton')}
       </Button>
       {error && (
         <Alert variant="danger" size="sm">

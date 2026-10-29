@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
 import { deriveCsrfToken } from '@/lib/auth/pipeline';
 import {
   getAnonCookieName,
@@ -11,7 +12,10 @@ import { getSession } from '@/lib/auth/session';
 import { peekSocialClaim } from '@/lib/auth/oauth/social-claim';
 import { OAUTH_PROVIDER_REGISTRY } from '@/lib/auth/oauth/registry';
 import { SocialConfirmForm } from '@/components/auth/social-confirm-form';
+import { AuthShell } from '@/components/layout/auth-shell';
 import { m } from '@/messages/ja';
+
+export const metadata: Metadata = { title: 'ログインの確認' };
 
 export const dynamic = 'force-dynamic';
 
@@ -42,7 +46,8 @@ export default async function SocialConfirmPage() {
 
   // 「このメールで作る」を出せるのは、検証済みかつ既存アカウントが無いときだけ。
   // 未検証 email で自動登録すると乗っ取りの入口になる（D-32-13）。
-  const canSignup = claim.emailVerified && Boolean(claim.providerEmail) && claim.emailOwnerId === null;
+  const canSignup =
+    claim.emailVerified && Boolean(claim.providerEmail) && claim.emailOwnerId === null;
   const hasExistingAccount = claim.emailOwnerId !== null;
 
   const csrfToken = await resolveCsrfToken(cookieStore);
@@ -50,14 +55,10 @@ export default async function SocialConfirmPage() {
   if (!csrfToken) redirect('/login');
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-6 py-12">
-      <header>
-        <h1 className="text-2xl font-bold">
-          {m('oauth.confirm.title', { provider: providerLabel })}
-        </h1>
-        <p className="mt-2 text-sm text-muted-fg">{m('oauth.confirm.intro')}</p>
-      </header>
-
+    <AuthShell
+      title={m('oauth.confirm.title', { provider: providerLabel })}
+      description={m('oauth.confirm.intro')}
+    >
       <SocialConfirmForm
         providerLabel={providerLabel}
         providerEmail={claim.providerEmail}
@@ -65,7 +66,7 @@ export default async function SocialConfirmPage() {
         hasExistingAccount={hasExistingAccount}
         csrfToken={csrfToken}
       />
-    </main>
+    </AuthShell>
   );
 }
 

@@ -42,7 +42,9 @@ export function TotpChallengeForm({
       }
       await onVerified?.(code);
     } catch (caught) {
-      setError(caught instanceof ApiClientError ? caught.message : '認証コードを確認できませんでした。');
+      setError(
+        caught instanceof ApiClientError ? caught.message : '認証コードを確認できませんでした。',
+      );
     } finally {
       setBusy(false);
     }
@@ -72,8 +74,8 @@ export function TotpChallengeForm({
         </Alert>
       )}
       {verifyEndpoint || onVerified ? (
-        <Button type="submit" disabled={busy || code.length !== 6} aria-busy={busy}>
-          {busy ? '確認中…' : '認証する'}
+        <Button type="submit" disabled={code.length !== 6} loading={busy}>
+          認証する
         </Button>
       ) : (
         <p className="text-xs text-muted-fg">2 段階認証は準備中です。</p>

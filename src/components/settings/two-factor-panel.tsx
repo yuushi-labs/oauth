@@ -21,9 +21,7 @@ type Status = {
 type SetupData = { secret: string; otpauth_uri: string; qr_svg: string };
 
 /** 強い再認証の body。パスワード＋コード、または Passkey assertion のどちらか（D-34-11）。 */
-type ReauthBody =
-  | { code: string }
-  | { passkey: unknown; challenge_id: string };
+type ReauthBody = { code: string } | { passkey: unknown; challenge_id: string };
 
 const LOW_THRESHOLD = 3;
 
@@ -140,8 +138,8 @@ export function TwoFactorPanel({ initial }: { initial: Status }) {
               </Alert>
             )}
             <div className="flex gap-2">
-              <Button type="submit" disabled={busy || code.length !== 6}>
-                {busy ? m('common.loading') : m('twoFactor.verify')}
+              <Button type="submit" disabled={code.length !== 6} loading={busy}>
+                {m('twoFactor.verify')}
               </Button>
               <Button variant="secondary" onClick={() => setSetupData(null)} disabled={busy}>
                 {m('common.cancel')}
@@ -156,7 +154,9 @@ export function TwoFactorPanel({ initial }: { initial: Status }) {
               </span>
               {status.enabled && (
                 <span className="text-xs text-muted-fg">
-                  {m('twoFactor.recoveryCodesRemaining', { count: status.recovery_codes_remaining })}
+                  {m('twoFactor.recoveryCodesRemaining', {
+                    count: status.recovery_codes_remaining,
+                  })}
                 </span>
               )}
             </div>

@@ -8,13 +8,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AuthShell } from '@/components/layout/auth-shell';
 import { PasswordStrength } from '@/components/auth/password-strength';
 import { TotpLoginStep } from '@/components/auth/totp-login-step';
 import { EmailUnverifiedNotice } from '@/components/auth/email-unverified-notice';
-import { ThemeToggle } from '@/components/theme/theme-toggle';
 import { apiClient, ApiClientError, resetCsrfCache } from '@/lib/api/client';
-import { APP_DESCRIPTION, APP_NAME } from '@/config/app';
 import { errorMessage, m } from '@/messages/ja';
+
+const ERROR_ID = 'auth-form-error';
 
 type AuthMode = 'login' | 'register';
 
@@ -51,7 +52,9 @@ export function AuthForm({
   const [error, setError] = useState(oauthError ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
-  const [unverified, setUnverified] = useState<{ email: string; resendAvailable: boolean } | null>(null);
+  const [unverified, setUnverified] = useState<{ email: string; resendAvailable: boolean } | null>(
+    null,
+  );
   const isRegister = mode === 'register';
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -70,7 +73,10 @@ export function AuthForm({
       const payload = isRegister
         ? { email: form.get('email'), username: form.get('username'), password: nextPassword }
         : { email_or_username: form.get('email_or_username'), password: nextPassword };
-      const result = await apiClient.post<{ message: string; twoFactorRequired?: boolean }>(`/api/auth/${mode}`, payload);
+      const result = await apiClient.post<{ message: string; twoFactorRequired?: boolean }>(
+        `/api/auth/${mode}`,
+        payload,
+      );
 
       if (isRegister) {
         setError('');
@@ -89,7 +95,11 @@ export function AuthForm({
       router.refresh();
     } catch (caught) {
       // 未確認 email は専用の案内（再送導線つき）を出す（D-33-21）。`data.email` が無ければ通常のエラー。
-      if (caught instanceof ApiClientError && caught.code === 'EMAIL_NOT_VERIFIED' && caught.email) {
+      if (
+        caught instanceof ApiClientError &&
+        caught.code === 'EMAIL_NOT_VERIFIED' &&
+        caught.email
+      ) {
         setUnverified({ email: caught.email, resendAvailable: caught.resendAvailable });
         return;
       }
@@ -100,109 +110,125 @@ export function AuthForm({
     }
   }
 
+  const title = isRegister ? m('auth.registerTitle') : m('auth.loginTitle');
+  // 2FA ステップ / 未確認メール案内は自前の見出しを持つため、シェルの h1 は出さない。
+  const showTitle = !twoFactorRequired && !unverified;
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-6 py-12">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 text-center">
-          <Link className="text-2xl font-bold" href="/login">{APP_NAME}</Link>
-          <p className="mt-2 text-sm text-muted-fg">{APP_DESCRIPTION}</p>
-        </div>
-        <ThemeToggle />
-      </header>
-
-      <section className="rounded-lg border border-border bg-card p-6 shadow-sm">
-        {twoFactorRequired ? (
-          <TotpLoginStep returnTo={returnTo} onBack={() => setTwoFactorRequired(false)} />
-        ) : unverified ? (
-          <EmailUnverifiedNotice
-            email={unverified.email}
-            resendAvailable={unverified.resendAvailable}
-            onBack={() => { setUnverified(null); setError(''); }}
-          />
-        ) : (
+    <AuthShell title={showTitle ? title : undefined}>
+      {twoFactorRequired ? (
+        <TotpLoginStep returnTo={returnTo} onBack={() => setTwoFactorRequired(false)} />
+      ) : unverified ? (
+        <EmailUnverifiedNotice
+          email={unverified.email}
+          resendAvailable={unverified.resendAvailable}
+          onBack={() => {
+            setUnverified(null);
+            setError('');
+          }}
+        />
+      ) : (
         <>
-        <h1 className="mb-6 text-xl font-semibold">
-          {isRegister ? m('auth.registerTitle') : m('auth.loginTitle')}
-        </h1>
-        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-          {isRegister ? (
-            <>
+          <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+            {isRegister ? (
+              <>
+                <Label className="flex flex-col gap-1">
+                  {m('auth.username')}
+                  <Input
+                    name="username"
+                    autoComplete="username"
+                    minLength={3}
+                    maxLength={32}
+                    pattern="[A-Za-z0-9_-]+"
+                    required
+                  />
+                </Label>
+                <Label className="flex flex-col gap-1">
+                  {m('auth.email')}
+                  <Input name="email" type="email" autoComplete="email" maxLength={254} required />
+                </Label>
+              </>
+            ) : (
               <Label className="flex flex-col gap-1">
-                {m('auth.username')}
-                <Input name="username" autoComplete="username" minLength={3} maxLength={32} pattern="[A-Za-z0-9_-]+" required />
-              </Label>
-              <Label className="flex flex-col gap-1">
-                {m('auth.email')}
-                <Input name="email" type="email" autoComplete="email" maxLength={254} required />
-              </Label>
-            </>
-          ) : (
-            <Label className="flex flex-col gap-1">
-              {m('auth.identifierLabel')}
-              <Input name="email_or_username" autoComplete="username" required />
-            </Label>
-          )}
-
-          <Label className="flex flex-col gap-1">
-            {m('auth.passwordLabel')}
-            <Input
-              name="password"
-              type="password"
-              autoComplete={isRegister ? 'new-password' : 'current-password'}
-              minLength={isRegister ? 8 : undefined}
-              maxLength={128}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-            />
-          </Label>
-
-          {isRegister && (
-            <>
-              <PasswordStrength value={password} />
-              <Label className="flex flex-col gap-1">
-                {m('auth.confirmPasswordLabel')}
+                {m('auth.identifierLabel')}
                 <Input
-                  name="password_confirmation"
-                  type="password"
-                  autoComplete="new-password"
-                  minLength={8}
-                  maxLength={128}
+                  name="email_or_username"
+                  autoComplete="username"
                   required
+                  aria-invalid={error ? true : undefined}
+                  aria-describedby={error ? ERROR_ID : undefined}
                 />
               </Label>
-            </>
-          )}
+            )}
 
-          {error && (
-            <Alert variant="danger">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+            <Label className="flex flex-col gap-1">
+              {m('auth.passwordLabel')}
+              <Input
+                name="password"
+                type="password"
+                autoComplete={isRegister ? 'new-password' : 'current-password'}
+                minLength={isRegister ? 8 : undefined}
+                maxLength={128}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? ERROR_ID : undefined}
+              />
+            </Label>
 
-          <Button type="submit" disabled={submitting} aria-busy={submitting}>
-            {submitting ? m('common.loading') : isRegister ? m('auth.submitRegister') : m('auth.submitLogin')}
-          </Button>
-        </form>
+            {isRegister && (
+              <>
+                <PasswordStrength value={password} />
+                <Label className="flex flex-col gap-1">
+                  {m('auth.confirmPasswordLabel')}
+                  <Input
+                    name="password_confirmation"
+                    type="password"
+                    autoComplete="new-password"
+                    minLength={8}
+                    maxLength={128}
+                    required
+                    aria-invalid={error ? true : undefined}
+                    aria-describedby={error ? ERROR_ID : undefined}
+                  />
+                </Label>
+              </>
+            )}
 
-        {/* 社会ログイン/passkey/2FA は registry から自動生成。0 件なら描画されない（D-30-21）。
-            描画内容はサーバーコンポーネントから渡された Node のため、server と client で一致する。*/}
-        {!isRegister && socialSlot && <div className="mt-4">{socialSlot}</div>}
+            {error && (
+              <Alert variant="danger" id={ERROR_ID}>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
-        <div className="mt-6 flex flex-col gap-2 text-sm text-muted-fg">
-          {!isRegister && (
-            <Link className="underline" href="/forgot-password">{m('auth.forgotLink')}</Link>
-          )}
-          <p>
-            {isRegister ? m('auth.hasAccountPrompt') : m('auth.noAccountPrompt')}{' '}
-            <Link className="font-medium text-primary underline" href={isRegister ? '/login' : '/register'}>
-              {isRegister ? m('auth.submitLogin') : m('auth.submitRegister')}
-            </Link>
-          </p>
-        </div>
+            <Button type="submit" loading={submitting}>
+              {isRegister ? m('auth.submitRegister') : m('auth.submitLogin')}
+            </Button>
+          </form>
+
+          {/* 社会ログイン/passkey/2FA は registry から自動生成。0 件なら描画されない（D-30-21）。
+              描画内容はサーバーコンポーネントから渡された Node のため、server と client で一致する。*/}
+          {!isRegister && socialSlot && <div className="mt-4">{socialSlot}</div>}
+
+          <div className="mt-6 flex flex-col gap-2 text-sm text-muted-fg">
+            {!isRegister && (
+              <Link className="underline" href="/forgot-password">
+                {m('auth.forgotLink')}
+              </Link>
+            )}
+            <p>
+              {isRegister ? m('auth.hasAccountPrompt') : m('auth.noAccountPrompt')}{' '}
+              <Link
+                className="font-medium text-primary underline"
+                href={isRegister ? '/login' : '/register'}
+              >
+                {isRegister ? m('auth.submitLogin') : m('auth.submitRegister')}
+              </Link>
+            </p>
+          </div>
         </>
-        )}
-      </section>
-    </main>
+      )}
+    </AuthShell>
   );
 }

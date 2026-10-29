@@ -12,7 +12,10 @@ import { OAUTH_PROVIDER_REGISTRY } from '@/lib/auth/oauth/registry';
 import { resolveTimeZone } from '@/lib/util/datetime';
 import { deriveOsLabel } from '@/lib/util/device';
 import { SecurityOverview } from '@/components/settings/security-overview';
+import type { Metadata } from 'next';
 import { m } from '@/messages/ja';
+
+export const metadata: Metadata = { title: m('settings.security') };
 
 export const dynamic = 'force-dynamic';
 
@@ -26,15 +29,16 @@ const EVENT_LIMIT = 10;
  */
 export default async function SettingsSecurityPage() {
   const settingsUser = await requireSettingsUser();
-  const [user, sessions, events, preferences, linkedRows, totpRow, credentialRows] = await Promise.all([
-    findUserById(settingsUser.id),
-    listActiveSessionsByUser(settingsUser.id),
-    listRecentSecurityEventsByUser(settingsUser.id, EVENT_LIMIT),
-    getUserPreferences(settingsUser.id),
-    listAccountsByUser(settingsUser.id),
-    findTotpByUserId(settingsUser.id),
-    listCredentialsByUser(settingsUser.id),
-  ]);
+  const [user, sessions, events, preferences, linkedRows, totpRow, credentialRows] =
+    await Promise.all([
+      findUserById(settingsUser.id),
+      listActiveSessionsByUser(settingsUser.id),
+      listRecentSecurityEventsByUser(settingsUser.id, EVENT_LIMIT),
+      getUserPreferences(settingsUser.id),
+      listAccountsByUser(settingsUser.id),
+      findTotpByUserId(settingsUser.id),
+      listCredentialsByUser(settingsUser.id),
+    ]);
   if (!user) return null;
 
   const twoFactorEnabled = Boolean(totpRow?.enabled);
@@ -48,7 +52,9 @@ export default async function SettingsSecurityPage() {
   const providerLabels = new Map<string, string>(
     OAUTH_PROVIDER_REGISTRY.map((p) => [p.id as string, p.label]),
   );
-  const linkedAccountLabels = linkedRows.map((row) => providerLabels.get(row.provider) ?? row.provider);
+  const linkedAccountLabels = linkedRows.map(
+    (row) => providerLabels.get(row.provider) ?? row.provider,
+  );
   const passwordChangedAt = (user.passwordChangedAt ?? user.createdAt).toISOString();
   const deviceRows = sessions.slice(0, 3).map((row) => ({
     id: row.id,
@@ -61,7 +67,7 @@ export default async function SettingsSecurityPage() {
   }));
 
   return (
-    <main className="flex flex-col gap-6">
+    <main id="main-content" className="flex flex-col gap-6">
       <header>
         <h1 className="text-2xl font-bold">{m('security.title')}</h1>
       </header>

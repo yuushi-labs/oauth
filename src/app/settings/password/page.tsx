@@ -1,5 +1,9 @@
 import { requireSettingsUser } from '@/app/settings/layout';
+import type { Metadata } from 'next';
 import { PasswordChangeForm } from '@/components/settings/password-change-form';
+import { m } from '@/messages/ja';
+
+export const metadata: Metadata = { title: m('settings.password') };
 
 export const dynamic = 'force-dynamic';
 
@@ -7,7 +11,7 @@ export const dynamic = 'force-dynamic';
 export default async function SettingsPasswordPage() {
   await requireSettingsUser();
   return (
-    <main className="flex flex-col gap-6">
+    <main id="main-content" className="flex flex-col gap-6">
       <header>
         <h1 className="text-2xl font-bold">パスワード</h1>
       </header>

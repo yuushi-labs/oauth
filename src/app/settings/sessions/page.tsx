@@ -7,7 +7,10 @@ import { resolveTimeZone } from '@/lib/util/datetime';
 import { deriveOsLabel } from '@/lib/util/device';
 import { requireSettingsUser } from '@/app/settings/layout';
 import { SessionsPanel } from '@/components/settings/sessions-panel';
+import type { Metadata } from 'next';
 import { m } from '@/messages/ja';
+
+export const metadata: Metadata = { title: m('sessions.title') };
 
 export const dynamic = 'force-dynamic';
 
@@ -40,11 +43,12 @@ export default async function SettingsSessionsPage() {
       current: row.id === currentSessionId,
     }))
     .sort(
-      (a, b) => Number(b.current) - Number(a.current) || b.last_seen_at.localeCompare(a.last_seen_at),
+      (a, b) =>
+        Number(b.current) - Number(a.current) || b.last_seen_at.localeCompare(a.last_seen_at),
     );
 
   return (
-    <main className="flex flex-col gap-6">
+    <main id="main-content" className="flex flex-col gap-6">
       <header>
         <h1 className="text-2xl font-bold">{m('sessions.title')}</h1>
         <p className="mt-2 text-sm text-muted-fg">{m('security.devices')}</p>

@@ -93,8 +93,8 @@ export function EmailChangePanel({ currentEmail }: { currentEmail: string }) {
           </Alert>
         )}
         <div>
-          <Button type="submit" disabled={busy || !email.trim()}>
-            {busy ? m('common.loading') : m('emailChange.submit')}
+          <Button type="submit" disabled={!email.trim()} loading={busy}>
+            {m('emailChange.submit')}
           </Button>
         </div>
       </form>

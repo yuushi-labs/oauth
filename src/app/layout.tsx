@@ -1,18 +1,75 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { cookies, headers } from 'next/headers';
-import { APP_DESCRIPTION, APP_NAME } from '@/config/app';
+import {
+  APP_DESCRIPTION,
+  APP_NAME,
+  APP_THEME_COLOR_DARK,
+  APP_THEME_COLOR_LIGHT,
+  APP_URL,
+} from '@/config/app';
 import { buildThemeInitScript } from '@/components/theme/theme-script';
 import { ThemeProvider } from '@/components/theme/theme-provider';
 import { ToastProvider } from '@/components/ui/toast';
+import { SkipLink } from '@/components/layout/skip-link';
 import { getSessionCookieName } from '@/lib/auth/cookie';
 import { getSession } from '@/lib/auth/session';
 import { getUserPreferences } from '@/lib/db/queries/user-preferences';
 import { normalizeTheme } from '@/lib/theme/resolver';
 import './globals.css';
 
+/**
+ * メタデータ（§SEO）。認証・管理画面しか持たないアプリなので検索エンジンには
+ * インデックスさせない（robots は `src/app/robots.ts` と middleware の
+ * `X-Robots-Tag` でも二重に防ぐ）。一方で、リンクをチャット/SNS へ貼ったときの
+ * 見え方（OG/Twitter カード）と、ブラウザ UI（theme-color / アイコン / manifest）は
+ * 整えておく。`title.template` で各ページのタイトルを `ページ名 | APP_NAME` に統一する。
+ */
 export const metadata: Metadata = {
-  title: APP_NAME,
+  metadataBase: new URL(APP_URL),
+  applicationName: APP_NAME,
+  title: {
+    default: APP_NAME,
+    template: `%s | ${APP_NAME}`,
+  },
   description: APP_DESCRIPTION,
+  alternates: { canonical: '/' },
+  // 認証・管理画面は検索結果に出さない（robots.ts / middleware と三重の防御）。
+  robots: { index: false, follow: false, nocache: true },
+  openGraph: {
+    type: 'website',
+    siteName: APP_NAME,
+    title: APP_NAME,
+    description: APP_DESCRIPTION,
+    url: APP_URL,
+    locale: 'ja_JP',
+  },
+  twitter: {
+    card: 'summary',
+    title: APP_NAME,
+    description: APP_DESCRIPTION,
+  },
+  appleWebApp: { capable: true, title: APP_NAME, statusBarStyle: 'default' },
+  formatDetection: { telephone: false, email: false, address: false },
+  icons: {
+    icon: [{ url: '/favicon.ico', type: 'image/x-icon' }],
+    shortcut: '/favicon.ico',
+    apple: '/favicon.ico',
+  },
+  manifest: '/manifest.webmanifest',
+};
+
+/**
+ * ビューポート。Next 15 は metadata ではなく専用の export を要求する。
+ * `themeColor` は light/dark でブラウザのツールバー色をテーマに合わせる。
+ */
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  colorScheme: 'light dark',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: APP_THEME_COLOR_LIGHT },
+    { media: '(prefers-color-scheme: dark)', color: APP_THEME_COLOR_DARK },
+  ],
 };
 
 /**
@@ -48,7 +105,10 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       </head>
       <body className="bg-bg text-fg min-h-screen antialiased">
         <ThemeProvider initialPreference={theme} authenticated={Boolean(session)}>
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            <SkipLink />
+            {children}
+          </ToastProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -1,68 +1,110 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { Plug } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { apiClient, ApiClientError } from '@/lib/api/client';
+import { formatLocalDateTime } from '@/lib/util/datetime';
+import { m } from '@/messages/ja';
 
-type Grant = { id: string; name: string; operator: string; scopes: string[]; clientActive: boolean; lastUsedAt: string | null };
-type ApiResponse = { success: boolean; error?: { message?: string } };
-
-const scopeNames: Record<string, string> = {
-  openid: 'アカウントID', profile: 'プロフィール', email: '確認済みメールアドレス',
+type Grant = {
+  id: string;
+  name: string;
+  operator: string;
+  scopes: string[];
+  clientActive: boolean;
+  lastUsedAt: string | null;
 };
 
+const scopeNames: Record<string, string> = {
+  openid: 'アカウントID',
+  profile: 'プロフィール',
+  email: '確認済みメールアドレス',
+};
+
+/**
+ * 接続済みサービス（OIDC グラント）の一覧と取り消し。
+ *
+ * 送信は共有の `apiClient` を使う（CSRF の付与・403 の再試行を一元化。D-30-22）。
+ * 日時は `formatLocalDateTime` で整形する。`toLocaleString` は server/client で
+ * タイムゾーンが異なり hydration mismatch になるため使わない。
+ */
 export function ConnectedApps({ grants }: { grants: Grant[] }) {
-  const [csrfToken, setCsrfToken] = useState('');
   const [busyId, setBusyId] = useState('');
   const [error, setError] = useState('');
   const [items, setItems] = useState(grants);
-
-  useEffect(() => {
-    fetch('/api/auth/csrf', { cache: 'no-store' })
-      .then(async (response) => (await response.json()) as { success: boolean; data?: { csrfToken?: string } })
-      .then((body) => { if (body.success && body.data?.csrfToken) setCsrfToken(body.data.csrfToken); })
-      .catch(() => setError('フォームを準備できませんでした。ページを再読み込みしてください。'));
-  }, []);
 
   async function revoke(id: string) {
     setError('');
     setBusyId(id);
     try {
-      const response = await fetch('/api/auth/oidc/grants', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-        body: JSON.stringify({ grant_id: id }),
-      });
-      const result = (await response.json()) as ApiResponse;
-      if (!response.ok || !result.success) {
-        setError(result.error?.message ?? '連携を取り消せませんでした。');
-        return;
-      }
+      await apiClient.delete('/api/auth/oidc/grants', { grant_id: id });
       setItems((current) => current.filter((item) => item.id !== id));
-    } catch {
-      setError('通信に失敗しました。時間をおいて再度お試しください。');
+    } catch (caught) {
+      setError(caught instanceof ApiClientError ? caught.message : '連携を取り消せませんでした。');
     } finally {
       setBusyId('');
     }
   }
 
   return (
-    <section className="rounded-lg border border-border bg-card p-6">
-      <h1 className="text-xl font-semibold">接続済みサービス</h1>
-      <p className="mt-2 text-sm text-muted-fg">許可したサービスと共有範囲を確認し、いつでも連携を取り消せます。</p>
-      {error && <p className="mt-4 text-sm text-danger" role="alert">{error}</p>}
-      {items.length === 0 ? <p className="mt-6 text-sm">接続済みサービスはありません。</p> : (
-        <ul className="mt-6 divide-y divide-border">
+    <section className="flex flex-col gap-4">
+      <header>
+        <h1 className="text-2xl font-bold">{m('settings.connectedApps')}</h1>
+        <p className="mt-2 text-sm text-muted-fg">
+          許可したサービスと共有範囲を確認し、いつでも連携を取り消せます。
+        </p>
+      </header>
+
+      {error && (
+        <Alert variant="danger">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {items.length === 0 ? (
+        <Card>
+          <CardContent className="flex items-center gap-3 pt-6 text-sm text-muted-fg">
+            <Plug aria-hidden className="size-5 shrink-0" />
+            接続済みサービスはありません。
+          </CardContent>
+        </Card>
+      ) : (
+        <ul className="flex flex-col gap-3">
           {items.map((grant) => (
-            <li className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between" key={grant.id}>
-              <div>
-                <h2 className="font-medium">{grant.name}</h2>
-                <p className="mt-1 text-xs text-muted-fg">運営者: {grant.operator || grant.name}</p>
-                <p className="mt-1 text-sm text-muted-fg">共有範囲: {grant.scopes.map((scope) => scopeNames[scope] ?? scope).join('、')}</p>
-                <p className="mt-1 text-xs text-muted-fg">最終利用: {grant.lastUsedAt ? new Date(grant.lastUsedAt).toLocaleString('ja-JP') : '記録なし'}</p>
-                {!grant.clientActive && <p className="mt-1 text-xs text-danger">このサービスは提供元によって利用できなくなりました。</p>}
-              </div>
-              <button className="rounded-md border border-border-strong px-3 py-2 text-sm disabled:opacity-60" type="button" disabled={!csrfToken || busyId === grant.id} onClick={() => void revoke(grant.id)}>
-                {busyId === grant.id ? '処理中…' : '連携を取り消す'}
-              </button>
+            <li key={grant.id}>
+              <Card>
+                <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <h2 className="font-medium text-fg">{grant.name}</h2>
+                    <p className="mt-1 text-xs text-muted-fg">
+                      運営者: {grant.operator || grant.name}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-fg">
+                      共有範囲: {grant.scopes.map((scope) => scopeNames[scope] ?? scope).join('、')}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-fg">
+                      最終利用:{' '}
+                      {grant.lastUsedAt ? formatLocalDateTime(grant.lastUsedAt) : '記録なし'}
+                    </p>
+                    {!grant.clientActive && (
+                      <p className="mt-1 text-xs text-danger">
+                        このサービスは提供元によって利用できなくなりました。
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    loading={busyId === grant.id}
+                    onClick={() => void revoke(grant.id)}
+                  >
+                    連携を取り消す
+                  </Button>
+                </CardContent>
+              </Card>
             </li>
           ))}
         </ul>

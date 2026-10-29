@@ -3,7 +3,10 @@ import { listAccountsByUser } from '@/lib/auth/oauth/accounts';
 import { configuredOAuthProviders } from '@/lib/auth/oauth/registry';
 import { getUserPreferences } from '@/lib/db/queries/user-preferences';
 import { ConnectedAccountsPanel } from '@/components/settings/connected-accounts-panel';
+import type { Metadata } from 'next';
 import { m } from '@/messages/ja';
+
+export const metadata: Metadata = { title: m('settings.connectedAccounts') };
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +32,7 @@ export default async function SettingsConnectedAccountsPage() {
   }));
 
   return (
-    <main className="flex flex-col gap-6">
+    <main id="main-content" className="flex flex-col gap-6">
       <header>
         <h1 className="text-2xl font-bold">{m('oauth.title')}</h1>
         <p className="mt-2 text-sm text-muted-fg">{m('oauth.description')}</p>

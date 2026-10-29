@@ -96,8 +96,8 @@ export function ResetPasswordForm({ token }: { token: string }) {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <Button type="submit" disabled={!token || submitting} aria-busy={submitting}>
-        {submitting ? m('common.loading') : m('auth.resetAction')}
+      <Button type="submit" disabled={!token} loading={submitting}>
+        {m('auth.resetAction')}
       </Button>
     </form>
   );

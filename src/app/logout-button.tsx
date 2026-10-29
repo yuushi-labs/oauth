@@ -30,8 +30,8 @@ export function LogoutButton() {
 
   return (
     <div className="flex flex-col items-start gap-2">
-      <Button variant="outline" onClick={() => void logout()} disabled={busy} aria-busy={busy}>
-        {busy ? m('common.loading') : m('auth.logout')}
+      <Button variant="outline" onClick={() => void logout()} loading={busy}>
+        {m('auth.logout')}
       </Button>
       {error && (
         <Alert variant="danger" size="sm">

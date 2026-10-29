@@ -6,7 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { m } from '@/messages/ja';
 
@@ -135,8 +142,8 @@ export function StrongReauthDialog({
           <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={busy}>
             {m('common.cancel')}
           </Button>
-          <Button type="submit" disabled={busy || code.length < 6 || !password}>
-            {busy ? m('common.loading') : m('twoFactor.strongReauthSubmit')}
+          <Button type="submit" disabled={code.length < 6 || !password} loading={busy}>
+            {m('twoFactor.strongReauthSubmit')}
           </Button>
         </DialogFooter>
       </form>
@@ -155,8 +162,8 @@ export function StrongReauthDialog({
           <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={busy}>
             {m('common.cancel')}
           </Button>
-          <Button type="button" onClick={submitPasskey} disabled={busy}>
-            {busy ? m('common.loading') : m('passkey.reauthTabPasskey')}
+          <Button type="button" onClick={submitPasskey} loading={busy}>
+            {m('passkey.reauthTabPasskey')}
           </Button>
         </DialogFooter>
       </div>
@@ -164,7 +171,9 @@ export function StrongReauthDialog({
   }
 
   const tabs = [
-    ...(supportsPassword ? [{ value: 'password', label: m('twoFactor.strongReauthPassword') }] : []),
+    ...(supportsPassword
+      ? [{ value: 'password', label: m('twoFactor.strongReauthPassword') }]
+      : []),
     ...(supportsPasskey ? [{ value: 'passkey', label: m('passkey.reauthTabPasskey') }] : []),
   ];
 

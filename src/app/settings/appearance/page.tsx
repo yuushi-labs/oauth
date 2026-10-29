@@ -1,7 +1,10 @@
 import { requireSettingsUser } from '@/app/settings/layout';
 import { getUserPreferences } from '@/lib/db/queries/user-preferences';
 import { ThemeForm } from '@/components/settings/theme-form';
+import type { Metadata } from 'next';
 import { m } from '@/messages/ja';
+
+export const metadata: Metadata = { title: m('theme.title') };
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +14,7 @@ export default async function SettingsAppearancePage() {
   const preferences = await getUserPreferences(user.id);
 
   return (
-    <main className="flex flex-col gap-6">
+    <main id="main-content" className="flex flex-col gap-6">
       <header>
         <h1 className="text-2xl font-bold">{m('theme.title')}</h1>
       </header>

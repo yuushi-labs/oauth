@@ -71,7 +71,11 @@ export function ConnectedAccountsPanel({
     try {
       return await run();
     } catch (caught) {
-      if (caught instanceof ApiClientError && caught.code === 'REAUTH_REQUIRED' && retryRef.current === null) {
+      if (
+        caught instanceof ApiClientError &&
+        caught.code === 'REAUTH_REQUIRED' &&
+        retryRef.current === null
+      ) {
         retryRef.current = () => {
           void run().catch((next: unknown) => {
             setError(next instanceof ApiClientError ? next.message : m('common.retry'));
@@ -147,10 +151,16 @@ export function ConnectedAccountsPanel({
                       {m('oauth.linkedAt', { date: formatLocalDateTime(row.created_at, timezone) })}
                     </time>
                     <time className="text-xs text-muted-fg" dateTime={row.last_used_at}>
-                      {m('oauth.lastUsedAt', { date: formatLocalDateTime(row.last_used_at, timezone) })}
+                      {m('oauth.lastUsedAt', {
+                        date: formatLocalDateTime(row.last_used_at, timezone),
+                      })}
                     </time>
                   </div>
-                  <Button variant="outline" onClick={() => setConfirmId(row.id)} disabled={pendingId === row.id}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setConfirmId(row.id)}
+                    disabled={pendingId === row.id}
+                  >
                     {m('oauth.unlinkAction')}
                   </Button>
                 </CardContent>
@@ -173,13 +183,11 @@ export function ConnectedAccountsPanel({
                 variant="outline"
                 className="w-full"
                 onClick={() => void link(provider)}
+                loading={linkBusy === provider.id}
                 disabled={linkBusy !== ''}
-                aria-busy={linkBusy === provider.id}
               >
-                <GitBranch aria-hidden className="size-4" />
-                {linkBusy === provider.id
-                  ? m('common.loading')
-                  : m('oauth.providerLabel', { provider: provider.label })}
+                {linkBusy !== provider.id && <GitBranch aria-hidden className="size-4" />}
+                {m('oauth.providerLabel', { provider: provider.label })}
               </Button>
             </li>
           ))}

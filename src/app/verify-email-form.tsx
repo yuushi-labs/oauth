@@ -70,19 +70,23 @@ export function VerifyEmailForm({ token }: { token: string }) {
           <Alert variant="success">
             <AlertDescription>{message}</AlertDescription>
           </Alert>
-          <Link className="text-sm text-primary underline" href="/login">{m('auth.submitLogin')}</Link>
+          <Link className="text-sm text-primary underline" href="/login">
+            {m('auth.submitLogin')}
+          </Link>
         </div>
       ) : (
         <div className="flex flex-col gap-4">
-          <Button onClick={() => void confirm()} disabled={!token || submitting} aria-busy={submitting}>
-            {submitting ? m('common.loading') : m('auth.verifyAction')}
+          <Button onClick={() => void confirm()} disabled={!token} loading={submitting}>
+            {m('auth.verifyAction')}
           </Button>
           <div className="flex flex-col gap-2">
             <Button variant="secondary" size="sm" onClick={() => void resend()}>
               {m('auth.resendAction')}
             </Button>
             {resendMessage && (
-              <p className="text-sm text-muted-fg" role="status">{resendMessage}</p>
+              <p className="text-sm text-muted-fg" role="status">
+                {resendMessage}
+              </p>
             )}
           </div>
         </div>
