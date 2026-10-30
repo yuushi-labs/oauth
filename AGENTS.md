@@ -32,7 +32,8 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
   変更時は `src/test/security/*` の SessionData フィクスチャ（7 ファイル）を確認する。
 - `src/lib/auth/rate-limit.ts` — PostgreSQL が唯一の正本（D-05）。`src/config/rate-limits.ts` に値、
   `src/lib/auth/rate-limit-keys.ts` にキー生成を集約（コード散在禁止）。
-- `src/lib/db/schema.ts` — 全テーブル。migration は `drizzle/`（up のみ）。最新は `0021`。
+- `src/lib/db/schema.ts` — 全テーブル。migration は `drizzle/`（up のみ）。最新は `0023`。
+  データ修復 migration も許容する（例: `0020` タイムゾーン既定、`0023` 旧 role id 統合）。
 - `scripts/purge-expired.ts` — 保持期間パージ（`pnpm purge`）。期限切れ token/session/OIDC artifact に加え、
   `security_events` は 180 日（D-13）、論理削除済みユーザーは 30 日経過後に**物理削除**（§24 / D-36-09）。
   ユーザー物理削除は本人データを `ON DELETE CASCADE`、`security_events` / `oauth_clients` /
@@ -86,6 +87,10 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
 - `pnpm dev` の `relation "xxx" does not exist`（42P01）は**コードのバグではなく DB が古い**。
   `pnpm db:migrate`（必要なら `pnpm seed`）で解消する。起動時に `scripts/server.ts` が
   `assertSchemaReady()`（`src/lib/db/schema-readiness.ts`）で不足テーブルを検出し fail fast する（Phase 7 後）。
+- **`pnpm seed` が `roles_name_unique` 違反で失敗する**のは、旧デプロイの DB に「name は同じ・
+  id が別」の `roles` 行（例: `id='user'`）が残っているため。`scripts/seed.ts` は `ON CONFLICT (id)` で
+  upsert するので name 制約を回避できない。migration `0023_role_id_reconcile` が旧 id を正規 id へ
+  統合するので、`pnpm db:migrate` → `pnpm seed` で復旧する（BUG-20）。新規 DB では再現しない。
 - **drizzle-kit は `drizzle.__drizzle_migrations` の sha256 ハッシュで適用済みを判定し、
   「最後に記録された migration より新しいもの」だけを適用する**。途中の migration が作ったテーブルを
   手で DROP しても `pnpm db:migrate` は「success」と言うだけで再作成しない（その SQL を直接流すか、
