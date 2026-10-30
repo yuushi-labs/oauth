@@ -629,6 +629,7 @@ sudo systemctl restart oauth
 | -------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
 | 起動直後に落ちる（`環境変数の検証に失敗しました`） | 必須 env の欠落・長さ不足                        | `.env` を確認（§6）。pepper は 32 文字以上、`TOTP_ENCRYPTION_KEY` は Base64 32 バイト                 |
 | `データベースのスキーマがコードより古いです`       | migration 未適用                                 | `pnpm db:migrate` → `pnpm seed`                                                                       |
+| `pnpm seed` が `duplicate key value violates unique constraint "roles_name_unique"` で失敗 | 旧デプロイの DB に「name は同じ・id が別」の `roles` 行（例: `id='user'`）が残っている | `pnpm db:migrate`（migration `0023_role_id_reconcile` が旧 id を正規 id へ統合）→ `pnpm seed`         |
 | `/api/health` が 503                               | DB 接続不可                                      | `DATABASE_URL`・PostgreSQL の起動・ufw/接続権限を確認                                                 |
 | `OIDC_ISSUER must use HTTPS in production`         | `OIDC_ISSUER` が http                            | `https://auth.example.com` にする                                                                     |
 | `DEBUG must not enable oidc-provider namespaces`   | `DEBUG` に `oidc-provider` を含めた              | 本番の `DEBUG` から外す                                                                               |
