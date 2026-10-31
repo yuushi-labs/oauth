@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { formatLocalDateTime } from '@/lib/util/datetime';
 
 export type ApplicationSummary = {
   clientId: string;
@@ -309,7 +310,7 @@ export function ApplicationsConsole({
                   <p className="mt-1 text-xs text-muted-fg">
                     接続中のユーザー: {client.grantCount} 名
                     {client.lastUsedAt
-                      ? ` ・ 最終利用: ${new Date(client.lastUsedAt).toLocaleString('ja-JP')}`
+                      ? ` ・ 最終利用: ${formatLocalDateTime(client.lastUsedAt)}`
                       : ''}
                   </p>
                   {!client.active && (

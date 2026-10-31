@@ -75,8 +75,8 @@ describe('BUG-1 - password reset link points at a real screen', () => {
 
     expect(mail.outbox).toHaveLength(1);
     const email = mail.outbox[0]!;
-    expect(email.html).toContain('/reset-password?token=');
-    expect(email.html).not.toContain('/password/reset');
+    expect(email.text).toContain('/reset-password?token=');
+    expect(email.text).not.toContain('/password/reset');
     expect(email.tokenFromUrl).toBeTruthy();
   });
 

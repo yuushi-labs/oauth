@@ -48,22 +48,24 @@ export const messages = {
     accountDeleting: 'アカウントは削除されます（30日間保持）',
   },
   emails: {
+    // 現在はバウンス対策でプレーンテキストのみ送信している（templates.ts の SEND_HTML）。
+    // `text` は「一文 ＋ リンク」で簡潔に保つ。`html` は復旧用に残置している。
     verification: {
       subject: `${APP_NAME}: メールアドレスを確認してください`,
       html: (url: string) => emailLayout('メールアドレスの確認', `<p>${escapeHtml(APP_NAME)}へのご登録ありがとうございます。下のボタンからメールアドレスを確認してください。</p>${emailButton(url, 'メールアドレスを確認する')}<p style="color:#64748b;font-size:13px">このリンクは30分間有効です。</p>`),
-      text: (url: string) => `${APP_NAME}へのご登録ありがとうございます。以下のURLからメールアドレスを確認してください（30分間有効）。\n${url}`,
+      text: (url: string) => `メールアドレスの確認はこちらから（30分間有効）:\n${url}`,
     },
     resend: {
       subject: `${APP_NAME}: 確認メール`,
       html: (url: string) => emailLayout('メールアドレスの確認', `<p>メールアドレスの確認を完了するには、下のボタンを押してください。</p>${emailButton(url, 'メールアドレスを確認する')}<p style="color:#64748b;font-size:13px">このリンクは30分間有効です。</p>`),
-      text: (url: string) => `${APP_NAME}のメールアドレス確認リンクです（30分間有効）。\n${url}`,
+      text: (url: string) => `メールアドレスの確認はこちらから（30分間有効）:\n${url}`,
     },
     passwordReset: {
       subject: `${APP_NAME}: パスワードを再設定してください`,
       html: (url: string, meta: { ip: string; time: string }) =>
         emailLayout('パスワードの再設定', `<p>パスワードを再設定するには、下のボタンを押してください。</p>${emailButton(url, 'パスワードを再設定する')}<p style="padding:12px 16px;background:#f8fafc;border-radius:8px;color:#64748b;font-size:13px">リクエスト元 IP: ${escapeHtml(meta.ip)}<br>リクエスト日時: ${escapeHtml(meta.time)}</p>`),
       text: (url: string, meta: { ip: string; time: string }) =>
-        `パスワードを再設定するには以下のURLを開いてください。\n${url}\nリクエスト元 IP: ${meta.ip}\nリクエスト日時: ${meta.time}`,
+        `パスワードの再設定はこちらから（30分間有効）:\n${url}\n\nリクエスト元 IP: ${meta.ip}\nリクエスト日時: ${meta.time}`,
     },
     securityNotification: {
       subject: `${APP_NAME}: 新しいログインを検知しました`,
@@ -101,7 +103,7 @@ export const messages = {
     accountDeletionConfirm: {
       subject: `${APP_NAME}: アカウント削除の確認`,
       html: (url: string) => emailLayout('アカウント削除の確認', `<p>アカウント削除のリクエストを受け付けました。下のボタンを押すと削除が確定します。</p>${emailButton(url, 'アカウント削除を確定する')}<p style="color:#64748b;font-size:13px">このリンクは30分間有効です。心当たりがない場合は、このメールを無視してください。削除は行われません。</p>`),
-      text: (url: string) => `アカウント削除のリクエストを受け付けました。以下のURLを開くと削除が確定します（30分間有効）。\n${url}\n\n心当たりがない場合は、このメールを無視してください。削除は行われません。`,
+      text: (url: string) => `アカウント削除を確定するにはこちらから（30分間有効）:\n${url}\n\n心当たりがない場合は、このメールを無視してください。削除は行われません。`,
     },
   },
   ui: {

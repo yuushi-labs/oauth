@@ -126,13 +126,13 @@ describe('Security - new device notification (spec 18)', () => {
     expect(response.status).toBe(200);
     expect(mail.outbox).toHaveLength(1);
     expect(mail.outbox[0]!.subject).toContain('新しいログイン');
-    expect(mail.outbox[0]!.html).toContain('Chrome on Windows');
+    expect(mail.outbox[0]!.text).toContain('Chrome on Windows');
     expect(recordSecurityEvent).toHaveBeenCalledWith('new_device_login', 'usr_1', expect.any(String), expect.any(String), expect.anything());
   });
 
   it('★ 通知本文にPW/token/TOTP/session を含まない（spec 18 / 45）', async () => {
     await login(loginRequest());
-    const body = mail.outbox[0]!.html + mail.outbox[0]!.text;
+    const body = [mail.outbox[0]!.html, mail.outbox[0]!.text].join('\n');
     expect(body).not.toMatch(/password/i);
     expect(body).not.toMatch(/totp|recovery/i);
     expect(body).not.toContain('csrf');
