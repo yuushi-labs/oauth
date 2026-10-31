@@ -68,6 +68,8 @@ export function AuthForm({
   // ソフトリミット超過をサーバが知らせてきたらウィジェットを出す（CAPTCHA_REQUIRED）。
   const [captchaNeeded, setCaptchaNeeded] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  // Turnstile の token は 1 回限り。送信のたびに増やしてウィジェットを取り直す。
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
   const isRegister = mode === 'register';
 
   async function submit(payload: Record<string, unknown>) {
@@ -132,6 +134,12 @@ export function AuthForm({
       ? { email: form.get('email'), username: form.get('username'), password: nextPassword }
       : { email_or_username: form.get('email_or_username'), password: nextPassword };
     if (captchaToken) payload.captchaToken = captchaToken;
+
+    // token は 1 回限り。送信したら（成功・失敗を問わず）消費されるので取り直す。
+    if (captchaToken) {
+      setCaptchaToken(null);
+      setCaptchaResetKey((key) => key + 1);
+    }
 
     await submit(payload);
   }
@@ -242,6 +250,7 @@ export function AuthForm({
                   siteKey={captchaSiteKey}
                   nonce={captchaNonce}
                   action={isRegister ? 'register' : 'login'}
+                  resetKey={captchaResetKey}
                   onToken={handleCaptchaToken}
                 />
               </div>

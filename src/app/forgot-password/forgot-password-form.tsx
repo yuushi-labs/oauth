@@ -26,11 +26,18 @@ export function ForgotPasswordForm({
   const [submitting, setSubmitting] = useState(false);
   const [captchaNeeded, setCaptchaNeeded] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  // Turnstile の token は 1 回限り。送信のたびに増やしてウィジェットを取り直す。
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
     const email = String(new FormData(event.currentTarget).get('email') ?? '');
+    // token は 1 回限り。送信したら消費されるので取り直す。
+    if (captchaToken) {
+      setCaptchaToken(null);
+      setCaptchaResetKey((key) => key + 1);
+    }
     setSubmitting(true);
     try {
       await apiClient.post('/api/auth/password/forgot', {
@@ -73,6 +80,7 @@ export function ForgotPasswordForm({
             siteKey={captchaSiteKey}
             nonce={captchaNonce}
             action="forgot_password"
+            resetKey={captchaResetKey}
             onToken={(token) => {
               setCaptchaToken(token);
               if (token) setError('');

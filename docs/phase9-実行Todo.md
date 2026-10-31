@@ -42,6 +42,7 @@
   - [x] site key / nonce は**サーバ側で解決して props で渡す**（クライアントで `process.env` を読むと hydration mismatch・BUG-11）
   - [x] 本番で site key と secret の片方だけなら起動時に fail fast（`assertCaptchaConfigConsistent`）
   - [x] トークン欠落時は `CAPTCHA_INVALID` ではなく `CAPTCHA_REQUIRED` を返す（旧実装は突破不能だった）
+  - [x] token は**1 回限り**なので、送信のたびに `resetKey` を進めてウィジェットを取り直す（さもないと 2 回目以降が常に `CAPTCHA_INVALID`）
   - [x] `src/test/security/captcha-client.test.ts`（CSP と config の回帰）
 - [x] 完了条件: `captcha.test.ts` green
 

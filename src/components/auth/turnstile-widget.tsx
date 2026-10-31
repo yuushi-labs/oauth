@@ -72,6 +72,7 @@ export function TurnstileWidget({
   onToken,
   nonce,
   action,
+  resetKey = 0,
 }: {
   siteKey: string;
   /** token を得たら呼ぶ。失効・エラー時は null。 */
@@ -79,11 +80,18 @@ export function TurnstileWidget({
   /** インライン script と同じ CSP nonce（middleware が発行）。 */
   nonce?: string;
   action?: string;
+  /**
+   * この値が変わるとウィジェットを `reset` して新しい token を取り直す。
+   * Turnstile の token は**1 回限り**なので、送信が失敗して token が消費された後に
+   * 再送信するにはリセットが必要（さもないと常に `CAPTCHA_INVALID` になる）。
+   */
+  resetKey?: number;
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const widgetIdRef = React.useRef<string | null>(null);
   const onTokenRef = React.useRef(onToken);
   onTokenRef.current = onToken;
+  const prevResetKeyRef = React.useRef(resetKey);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -116,6 +124,19 @@ export function TurnstileWidget({
       }
     };
   }, [siteKey, nonce, action]);
+
+  React.useEffect(() => {
+    if (prevResetKeyRef.current === resetKey) return;
+    prevResetKeyRef.current = resetKey;
+    const id = widgetIdRef.current;
+    if (id !== null && window.turnstile) {
+      try {
+        window.turnstile.reset(id);
+      } catch {
+        /* the widget may already be gone */
+      }
+    }
+  }, [resetKey]);
 
   return <div ref={containerRef} data-testid="turnstile-widget" />;
 }

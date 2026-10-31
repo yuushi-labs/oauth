@@ -32,10 +32,17 @@ export function EmailUnverifiedNotice({
   const [busy, setBusy] = React.useState(false);
   const [captchaNeeded, setCaptchaNeeded] = React.useState(false);
   const [captchaToken, setCaptchaToken] = React.useState<string | null>(null);
+  // Turnstile の token は 1 回限り。送信のたびに増やしてウィジェットを取り直す。
+  const [captchaResetKey, setCaptchaResetKey] = React.useState(0);
 
   async function resend() {
     setMessage('');
     setError('');
+    // token は 1 回限り。送信したら消費されるので取り直す。
+    if (captchaToken) {
+      setCaptchaToken(null);
+      setCaptchaResetKey((key) => key + 1);
+    }
     setBusy(true);
     try {
       await apiClient.post('/api/auth/resend-verification', {
@@ -79,6 +86,7 @@ export function EmailUnverifiedNotice({
             siteKey={captchaSiteKey}
             nonce={captchaNonce}
             action="resend_verification"
+            resetKey={captchaResetKey}
             onToken={(token) => {
               setCaptchaToken(token);
               if (token) setError('');
