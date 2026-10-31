@@ -2,6 +2,8 @@
 
 import * as React from 'react';
 
+import { m } from '@/messages/ja';
+
 /**
  * Cloudflare Turnstile のウィジェット（Phase 9 / BUG-22）。
  *
@@ -99,6 +101,10 @@ export function TurnstileWidget({
   const onTokenRef = React.useRef(onToken);
   onTokenRef.current = onToken;
   const prevResetKeyRef = React.useRef(resetKey);
+  // 読み込みに失敗したら再試行ボタンを出し、押下で `retryKey` を進めて effect を再実行する。
+  // 自動再試行はしない（失敗のたびに繰り返すのを避けるため）。
+  const [failed, setFailed] = React.useState(false);
+  const [retryKey, setRetryKey] = React.useState(0);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -116,7 +122,11 @@ export function TurnstileWidget({
           ...(action ? { action } : {}),
         });
       })
-      .catch(() => onTokenRef.current(null));
+      .catch(() => {
+        if (cancelled) return;
+        onTokenRef.current(null);
+        setFailed(true);
+      });
 
     return () => {
       cancelled = true;
@@ -130,7 +140,7 @@ export function TurnstileWidget({
         }
       }
     };
-  }, [siteKey, nonce, action]);
+  }, [siteKey, nonce, action, retryKey]);
 
   React.useEffect(() => {
     if (prevResetKeyRef.current === resetKey) return;
@@ -145,5 +155,21 @@ export function TurnstileWidget({
     }
   }, [resetKey]);
 
-  return <div ref={containerRef} data-testid="turnstile-widget" />;
+  return (
+    <div className="flex flex-col gap-1">
+      <div ref={containerRef} data-testid="turnstile-widget" />
+      {failed && (
+        <button
+          type="button"
+          className="self-start text-sm text-primary underline underline-offset-4"
+          onClick={() => {
+            setFailed(false);
+            setRetryKey((key) => key + 1);
+          }}
+        >
+          {m('auth.captchaRetry')}
+        </button>
+      )}
+    </div>
+  );
 }

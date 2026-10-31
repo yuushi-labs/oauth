@@ -372,6 +372,7 @@ export const messages = {
       forgotAction: '再設定メールを送信',
       forgotSent: '登録メールアドレスなら再設定メールを送信しました。',
       captchaHint: 'ロボットでないことを確認してください。',
+      captchaRetry: '読み込みに失敗しました。再試行',
       logout: 'ログアウト',
       emailChangeTitle: 'メールアドレスの変更確認',
       emailChangeDescription: '新しいメールアドレスの確認を完了するには、下のボタンを押してください。',
