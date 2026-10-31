@@ -57,6 +57,22 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
   **Phase 5 = D-33-xx**）。`実装計画.md` §9 の D-01〜D-27 は全フェーズ共通のロック済み決定。
 - 仕様と実装が食い違ったら「実装を仕様に寄せる」か「仕様に制約を明記して緩和する」かを必ず文書化する。
 
+## PR の運用（レビューとマージ）
+
+PR を作ったら**マージまでが 1 単位**。次の順で進める。
+
+1. **draft にしない**。`create_pr` は `draft: false`（既定）で開き、開いた直後から CI とレビューが走る状態にする。
+   draft で作った場合は、レビュー依頼の前に `gh pr ready <n>` で解除する。
+2. **CI の完了を待つ**（`gh pr checks <n>` / Actions API。`mergeStateStatus` が `UNSTABLE` の間は待つ）。
+   失敗したら原因を直して push し、再度待つ（`iterate` 相当）。
+3. **Kilo Code のレビュー完了を待つ**（`kilo-code-bot[bot]` の `<!-- kilo-review -->` コメント）。
+   「No Issues Found / Merge」ならそのまま進む。指摘があれば**対応するか、対応しない理由を PR に残す**。
+4. **CI 成功 ＋ Kilo レビュー完了の両方が揃ってから** `gh pr merge <n> --merge --delete-branch` でマージする。
+   どちらかが未完了・失敗のままマージしない。
+5. `main` を `--ff-only` で取り込み、必要なら migration / seed を流して本番反映を確認する。
+
+補足: `qodo-code-review[bot]` はトライアル終了で一時停止中（`<!-- qodo:billing-blocked -->`）。復帰したら同じく待つ。
+
 ## 注意（過去に踏んだ地雷）
 
 - `cookies()`（Next の request scope）は **Route Handler を直接呼ぶテストで 500 になる**。
