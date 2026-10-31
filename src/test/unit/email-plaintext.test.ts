@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EmailParams } from '@/lib/auth/email/send';
 
 /**
@@ -9,9 +9,18 @@ import type { EmailParams } from '@/lib/auth/email/send';
  * `vi.resetModules()` 後に動的 import する。`send.ts` も同じ registry から取り出して
  * transport 差し替えを共有させる（別インスタンスだと差し替えが効かない）。
  */
-afterEach(() => {
+const originalSendHtmlEmail = process.env.SEND_HTML_EMAIL;
+
+beforeEach(() => {
+  // 外部環境の SEND_HTML_EMAIL を引き継がない（1 件目の前に必ず解除する）。
   vi.resetModules();
   delete process.env.SEND_HTML_EMAIL;
+});
+
+afterEach(() => {
+  vi.resetModules();
+  if (originalSendHtmlEmail === undefined) delete process.env.SEND_HTML_EMAIL;
+  else process.env.SEND_HTML_EMAIL = originalSendHtmlEmail;
 });
 
 async function captureVerification(): Promise<EmailParams[]> {

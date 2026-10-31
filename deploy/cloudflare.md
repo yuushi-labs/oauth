@@ -48,8 +48,8 @@ nonce を持たないため、本アプリの CSP（`script-src 'self' 'nonce-�
 
 対策:
 
-- **Email Address Obfuscation を OFF**（Scrape Shield）。
-- **Rocket Loader を OFF**（Speed → Optimization）。
+- **Email Address Obfuscation を OFF**（Security Settings → Client-side abuse。旧 Scrape Shield）。
+- **Rocket Loader を OFF**（Speed → Settings → Content Optimization）。
 - どうしても残す場合は、表示するメールアドレスを `<!--email_off-->` で囲み、
   obfuscate 対象から外す（ページ単位ではなくアドレス単位の回避策）。
 
