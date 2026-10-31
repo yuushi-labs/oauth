@@ -47,10 +47,17 @@ function loadTurnstileScript(nonce?: string): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve();
   if (window.turnstile) return Promise.resolve();
   scriptPromise ??= new Promise<void>((resolve, reject) => {
+    const fail = () => {
+      // 失敗した script を残すと、次回以降 `existing` にヒットして load イベントが
+      // 二度と来ず永久に再試行できない。要素を除去し、共有 Promise を捨てて作り直す。
+      scriptPromise = null;
+      document.getElementById(SCRIPT_ID)?.remove();
+      reject(new Error('Turnstile script failed'));
+    };
     const existing = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
     if (existing) {
       existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () => reject(new Error('Turnstile script failed')));
+      existing.addEventListener('error', fail);
       return;
     }
     const script = document.createElement('script');
@@ -61,7 +68,7 @@ function loadTurnstileScript(nonce?: string): Promise<void> {
     // strict-dynamic + nonce: the injected script inherits the document's trust.
     if (nonce) script.nonce = nonce;
     script.addEventListener('load', () => resolve());
-    script.addEventListener('error', () => reject(new Error('Turnstile script failed')));
+    script.addEventListener('error', fail);
     document.head.appendChild(script);
   });
   return scriptPromise;
