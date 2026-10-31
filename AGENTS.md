@@ -34,6 +34,9 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
   `src/lib/auth/rate-limit-keys.ts` にキー生成を集約（コード散在禁止）。
 - `src/lib/db/schema.ts` — 全テーブル。migration は `drizzle/`（up のみ）。最新は `0023`。
   データ修復 migration も許容する（例: `0020` タイムゾーン既定、`0023` 旧 role id 統合）。
+- `src/lib/db/client.ts` + `src/lib/db/ssl.ts` — DB 接続。TLS は `DATABASE_SSL_MODE`
+  （`disable` 既定 / `require` / `verify-full`）で決める。**`NODE_ENV` では切り替えない**
+  （本番で localhost の自己署名 DB に繋げなくなる・BUG-21）。`DATABASE_URL` の `sslmode` が優先。
 - `scripts/purge-expired.ts` — 保持期間パージ（`pnpm purge`）。期限切れ token/session/OIDC artifact に加え、
   `security_events` は 180 日（D-13）、論理削除済みユーザーは 30 日経過後に**物理削除**（§24 / D-36-09）。
   ユーザー物理削除は本人データを `ON DELETE CASCADE`、`security_events` / `oauth_clients` /
@@ -91,6 +94,11 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
   id が別」の `roles` 行（例: `id='user'`）が残っているため。`scripts/seed.ts` は `ON CONFLICT (id)` で
   upsert するので name 制約を回避できない。migration `0023_role_id_reconcile` が旧 id を正規 id へ
   統合するので、`pnpm db:migrate` → `pnpm seed` で復旧する（BUG-20）。新規 DB では再現しない。
+- **本番で `pnpm seed` / 起動が `Failed query: insert into "roles" …` で失敗する**のは、旧 `client.ts` が
+  `NODE_ENV=production` のとき `ssl: { rejectUnauthorized: true }` を強制し、localhost の自己署名証明書を
+  拒否していたため（`DEPTH_ZERO_SELF_SIGNED_CERT`。drizzle は真の原因を `cause` に隠すので
+  `Failed query` しか見えない）。TLS は `DATABASE_SSL_MODE`（既定 `disable`）で決める（BUG-21）。
+  `drizzle-kit migrate` と生の `pg` は SSL を張らないので成功し、seed だけが落ちて見える。
 - **drizzle-kit は `drizzle.__drizzle_migrations` の sha256 ハッシュで適用済みを判定し、
   「最後に記録された migration より新しいもの」だけを適用する**。途中の migration が作ったテーブルを
   手で DROP しても `pnpm db:migrate` は「success」と言うだけで再作成しない（その SQL を直接流すか、

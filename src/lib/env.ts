@@ -14,6 +14,10 @@ const isBase64OfLength = (value: string, bytes: number): boolean => {
 const requiredEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL が未設定です'),
+  // DB 接続の TLS モード。既定は無効（DB は localhost のみで待ち受ける前提・デプロイ手順 §4）。
+  // 自己署名証明書の DB へ TLS で繋ぐ場合は `require`、正規 CA で検証する場合は `verify-full`。
+  // `DATABASE_URL` に `sslmode` が含まれる場合はそちらが優先される（`pg` の仕様）。
+  DATABASE_SSL_MODE: z.enum(['disable', 'require', 'verify-full']).default('disable'),
   SESSION_PEPPER: z
     .string()
     .min(MIN_PEPPER_LENGTH, `SESSION_PEPPER は ${MIN_PEPPER_LENGTH} 文字以上必要です`),
