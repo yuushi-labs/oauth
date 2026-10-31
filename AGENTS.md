@@ -128,6 +128,18 @@ PR を作ったら**マージまでが 1 単位**。次の順で進める。
   「最後に記録された migration より新しいもの」だけを適用する**。途中の migration が作ったテーブルを
   手で DROP しても `pnpm db:migrate` は「success」と言うだけで再作成しない（その SQL を直接流すか、
   該当行を消して以降を再適用する）。schema を疑ったら `pnpm db:verify-migrations` で往復検証する。
+- **Cloudflare の Email Address Obfuscation / Rocket Loader は CSP と衝突する**。どちらも
+  オリジンの HTML に nonce 無しの `<script>`（`/cdn-cgi/.../email-decode.min.js` 等）を自動注入し、
+  `script-src 'self' 'nonce-…' 'strict-dynamic'` ではブロックされる（`'strict-dynamic'` は host 許可を
+  無効化する）。復元 script が止まると描画済みメールアドレスが `[email protected]` のままになり、
+  **React error #418（`Hydration failed … text didn't match`）** も同時に出る。ゾーン側で両方 OFF にする
+  （`deploy/cloudflare.md` §4.5 / BUG-23）。
+- **日時は `formatLocalDateTime`（§60 / D-30-17）で整形する**。`Date#toLocaleString` は server（UTC）と
+  client（JST）で文字列が変わり、SSR テキストと hydration テキストが食い違って **React #418** になる。
+  `src/test/unit/hydration-safe-dates.test.ts` が `src/app` / `src/components` への再混入を検知する（BUG-23）。
+- **メールは現在プレーンテキストのみ送る**（Resend 全バウンス対策）。`templates.ts` の `SEND_HTML_EMAIL` が
+  唯一の切替で、既定 false。`EmailParams.html` は任意。復旧は環境変数を `true` にするだけ（テンプレートは
+  `messages.emails` に残置）。新しいメール種別は `text` を「一文 ＋ リンク」で書く（BUG-23）。
 
 ## 現在の到達点（2026-10-29 時点）
 

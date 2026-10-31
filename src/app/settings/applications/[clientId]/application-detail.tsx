@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { formatLocalDateTime } from '@/lib/util/datetime';
 
 export type ApplicationDetailData = {
   clientId: string;
@@ -203,7 +204,7 @@ export function ApplicationDetail({ client }: { client: ApplicationDetailData })
         <h1 className="text-xl font-semibold">{client.name}</h1>
         <p className="mt-1 text-xs text-muted-fg">
           種別: {client.clientType}（作成後は変更できません） ・ 作成日:{' '}
-          {new Date(client.createdAt).toLocaleString('ja-JP')}
+          {formatLocalDateTime(client.createdAt)}
           {client.ownerUsername
             ? ` ・ 登録者: ${client.ownerUsername}`
             : ' ・ 登録者: 運営者（CLI 登録）'}

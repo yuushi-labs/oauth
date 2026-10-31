@@ -5,7 +5,11 @@ import { logger } from '@/lib/util/logger';
 export type EmailParams = {
   to: string;
   subject: string;
-  html: string;
+  /**
+   * HTML 本文。プレーンテキストのみ送る場合は省略する（`SEND_HTML=false` 時の既定）。
+   * Resend 側のバウンス対策で、一旦プレーンテキストのみ送っている（templates.ts 参照）。
+   */
+  html?: string;
   text: string;
 };
 
@@ -38,7 +42,8 @@ async function sendViaResend(params: EmailParams): Promise<void> {
       from,
       to: params.to,
       subject: params.subject,
-      html: params.html,
+      // html が無いときは text のみ送る（Resend は html 省略可）。
+      ...(params.html ? { html: params.html } : {}),
       text: params.text,
     });
   } catch (error) {

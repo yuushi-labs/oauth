@@ -1,11 +1,23 @@
 import { sendEmail } from './send';
 import { messages } from '@/messages/ja';
 
+/**
+ * HTML メールを送るか。Resend で全メールがバウンスしたため、まずプレーンテキストのみ送る。
+ * 復旧したら `true` に戻すだけで HTML 送信を再開できる（テンプレートは `messages.emails` に残置）。
+ * `SEND_HTML=true` でも環境変数で上書き可能。
+ */
+const SEND_HTML = process.env.SEND_HTML_EMAIL === 'true';
+
+/** html を送るかどうかで `html` フィールドを出し分ける（text は常に送る）。 */
+function htmlField(html: string): { html?: string } {
+  return SEND_HTML ? { html } : {};
+}
+
 export async function sendVerificationEmail(to: string, url: string): Promise<void> {
   await sendEmail({
     to,
     subject: messages.emails.verification.subject,
-    html: messages.emails.verification.html(url),
+    ...htmlField(messages.emails.verification.html(url)),
     text: messages.emails.verification.text(url),
   });
 }
@@ -14,7 +26,7 @@ export async function sendResendVerificationEmail(to: string, url: string): Prom
   await sendEmail({
     to,
     subject: messages.emails.resend.subject,
-    html: messages.emails.resend.html(url),
+    ...htmlField(messages.emails.resend.html(url)),
     text: messages.emails.resend.text(url),
   });
 }
@@ -27,7 +39,7 @@ export async function sendPasswordResetEmail(
   await sendEmail({
     to,
     subject: messages.emails.passwordReset.subject,
-    html: messages.emails.passwordReset.html(url, meta),
+    ...htmlField(messages.emails.passwordReset.html(url, meta)),
     text: messages.emails.passwordReset.text(url, meta),
   });
 }
@@ -39,7 +51,7 @@ export async function sendSecurityNotificationEmail(
   await sendEmail({
     to,
     subject: messages.emails.securityNotification.subject,
-    html: messages.emails.securityNotification.html(data),
+    ...htmlField(messages.emails.securityNotification.html(data)),
     text: messages.emails.securityNotification.text(data),
   });
 }
@@ -51,7 +63,7 @@ export async function sendChangeNotificationEmail(
   await sendEmail({
     to,
     subject: messages.emails.changeNotification.subject,
-    html: messages.emails.changeNotification.html(data),
+    ...htmlField(messages.emails.changeNotification.html(data)),
     text: messages.emails.changeNotification.text(data),
   });
 }
@@ -60,7 +72,7 @@ export async function sendAccountDeletionEmail(to: string): Promise<void> {
   await sendEmail({
     to,
     subject: messages.emails.accountDeletion.subject,
-    html: messages.emails.accountDeletion.html(),
+    ...htmlField(messages.emails.accountDeletion.html()),
     text: messages.emails.accountDeletion.text(),
   });
 }
@@ -75,7 +87,7 @@ export async function sendAccountDeletionConfirmEmail(to: string, url: string): 
   await sendEmail({
     to,
     subject: messages.emails.accountDeletionConfirm.subject,
-    html: messages.emails.accountDeletionConfirm.html(url),
+    ...htmlField(messages.emails.accountDeletionConfirm.html(url)),
     text: messages.emails.accountDeletionConfirm.text(url),
   });
 }

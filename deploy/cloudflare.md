@@ -33,6 +33,29 @@ Cloudflare を前段に置く場合、**query string をログ・分析へ残さ
 - Turnstile はアプリ側（`src/lib/auth/captcha.ts`）で siteverify する。Cloudflare の
   Bot Fight Mode と併用してよい。
 
+## 4.5 ⚠️ Email Address Obfuscation / Rocket Loader は無効にする（BUG-23）
+
+**Scrape Shield → Email Address Obfuscation** と **Speed → Rocket Loader** は、
+Cloudflare がオリジンの HTML に `<script>` を**自動注入**する。注入される script は
+nonce を持たないため、本アプリの CSP（`script-src 'self' 'nonce-…' 'strict-dynamic'`。
+`'strict-dynamic'` があると host 許可リストは無効化される）ではブロックされる。実際に
+`/cdn-cgi/scripts/<id>/cloudflare-static/email-decode.min.js` がブロックされ、次の 2 つが同時に起きる:
+
+1. **CSP 違反**（コンソールに `violates the following Content Security Policy directive`）
+2. **React error #418**（`Hydration failed … text didn't match`）。Cloudflare が描画済みの
+   メールアドレスを `[email protected]` へ書き換え、復元用 script がブロックされるため、
+   server の HTML とクライアントの VDOM（本来のメールアドレス）が食い違う。
+
+対策:
+
+- **Email Address Obfuscation を OFF**（Scrape Shield）。
+- **Rocket Loader を OFF**（Speed → Optimization）。
+- どうしても残す場合は、表示するメールアドレスを `<!--email_off-->` で囲み、
+  obfuscate 対象から外す（ページ単位ではなくアドレス単位の回避策）。
+
+> 認証アプリでメールアドレスは `mailto:` リンクではなくテキストで表示するため、
+> Email Obfuscation の利点は無く、CSP と二重に衝突する。無効化を推奨する。
+
 ## 5. 確認手順（実地）
 
 1. `curl 'https://auth.example.com/verify-email?token=KNOWN-VALUE'` を実行。
