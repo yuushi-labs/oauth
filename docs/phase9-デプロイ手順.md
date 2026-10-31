@@ -257,6 +257,7 @@ NEXT_PUBLIC_APP_URL=https://auth.example.com      # ← 本番ドメイン（htt
 
 # --- DB（必須） ---
 DATABASE_URL=postgresql://app:<DB_PASSWORD>@127.0.0.1:5432/app
+DATABASE_SSL_MODE=disable                         # DB は localhost のみ。外部 DB は require / verify-full
 
 # --- リバースプロキシ（Nginx の背後で必須級） ---
 TRUSTED_PROXY_HOPS=1                              # Nginx 1 段
@@ -297,6 +298,7 @@ REDIS_URL=
 | `NODE_ENV`                                                           | **必須**               | `production` にする。Cookie の `__Host-` 化・HSTS・CAPTCHA fail-closed・OIDC の https 強制はこれが前提 |
 | `NEXT_PUBLIC_APP_URL`                                                | **必須**               | 絶対 URL。ソーシャルログインの redirect URI の origin と**完全一致**させる                             |
 | `DATABASE_URL`                                                       | **必須**               | PostgreSQL 接続文字列                                                                                  |
+| `DATABASE_SSL_MODE`                                                  | 任意（既定 `disable`） | DB 接続の TLS。`disable` / `require`（自己署名を許容）/ `verify-full`（証明書を検証）。`DATABASE_URL` の `sslmode` が優先 |
 | `SESSION_PEPPER` / `TOKEN_PEPPER` / `IP_HASH_PEPPER` / `CSRF_SECRET` | **必須**               | 32 文字以上。起動時に検証され、不足なら fail fast                                                      |
 | `TOTP_ENCRYPTION_KEY`                                                | **必須**               | Base64 32 バイト。起動時に検証                                                                         |
 | `TRUSTED_PROXY_HOPS`                                                 | 推奨                   | Nginx 1 段なら `1`。`0` だと転送ヘッダを信頼せず、HTTPS 判定が誤る                                     |
@@ -630,6 +632,7 @@ sudo systemctl restart oauth
 | 起動直後に落ちる（`環境変数の検証に失敗しました`） | 必須 env の欠落・長さ不足                        | `.env` を確認（§6）。pepper は 32 文字以上、`TOTP_ENCRYPTION_KEY` は Base64 32 バイト                 |
 | `データベースのスキーマがコードより古いです`       | migration 未適用                                 | `pnpm db:migrate` → `pnpm seed`                                                                       |
 | `pnpm seed` が `duplicate key value violates unique constraint "roles_name_unique"` で失敗 | 旧デプロイの DB に「name は同じ・id が別」の `roles` 行（例: `id='user'`）が残っている | `pnpm db:migrate`（migration `0023_role_id_reconcile` が旧 id を正規 id へ統合）→ `pnpm seed`         |
+| `pnpm seed` / 起動が `Failed query: insert into "roles" …` で失敗（`self-signed certificate` が原因） | `NODE_ENV=production` なのにローカル DB が自己署名証明書（旧実装は本番で TLS を強制し証明書を検証していた） | `.env` に `DATABASE_SSL_MODE=disable`（既定）を入れる。外部 DB へ TLS 接続するなら `require` / `verify-full`。`DATABASE_URL` に `sslmode=disable` を付けてもよい |
 | `/api/health` が 503                               | DB 接続不可                                      | `DATABASE_URL`・PostgreSQL の起動・ufw/接続権限を確認                                                 |
 | `OIDC_ISSUER must use HTTPS in production`         | `OIDC_ISSUER` が http                            | `https://auth.example.com` にする                                                                     |
 | `DEBUG must not enable oidc-provider namespaces`   | `DEBUG` に `oidc-provider` を含めた              | 本番の `DEBUG` から外す                                                                               |

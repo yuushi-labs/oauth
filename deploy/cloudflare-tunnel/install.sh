@@ -383,6 +383,9 @@ set_env NODE_ENV production
 set_env NEXT_PUBLIC_APP_NAME oauth
 set_env NEXT_PUBLIC_APP_URL "https://${DOMAIN}"
 set_env DATABASE_URL "postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+# DB は localhost のみで待ち受けるため TLS を使わない（既定）。外部 DB へ繋ぐ場合は
+# require / verify-full へ変更する。DATABASE_URL に sslmode を書いた場合はそちらが優先される。
+set_env DATABASE_SSL_MODE disable
 # Cloudflare Tunnel の背後であることをアプリへ伝える（HTTPS 判定とクライアント IP）
 set_env TRUSTED_PROXY_HOPS 1
 set_env TRUSTED_PROXY_HEADER cf-connecting-ip

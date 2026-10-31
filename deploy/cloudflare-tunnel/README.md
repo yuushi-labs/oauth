@@ -200,6 +200,9 @@ Node.js / pnpm / PostgreSQL 16 の導入は `docs/phase9-デプロイ手順.md` 
 
 `.env` は `docs/phase9-デプロイ手順.md` §6 とほぼ同じだが、**Tunnel 方式では以下が異なる**。
 
+> DB は同ホストの localhost で待ち受けるため、`DATABASE_SSL_MODE=disable`（既定）のままでよい
+> （`install.sh` が設定する）。外部 DB へ TLS 接続する場合だけ `require` / `verify-full` にする（BUG-21）。
+
 ```dotenv
 NODE_ENV=production
 NEXT_PUBLIC_APP_URL=https://auth.example.com      # 公開ホスト名
