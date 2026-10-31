@@ -8,6 +8,7 @@ import {
 } from '@/lib/db/queries/security-events';
 import { getPool } from '@/lib/db/client';
 import { logger } from '@/lib/util/logger';
+import { describeErrorChain } from '@/lib/util/error-chain';
 
 /**
  * 監視アラートの判定 CLI（Phase 9 / P9-A-05・D-39-05）。
@@ -49,7 +50,7 @@ async function main(): Promise<void> {
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 if (isMain) {
   void import('dotenv/config').then(main).catch((error: unknown) => {
-    process.stderr.write(`alert check failed: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(`alert check failed: ${describeErrorChain(error)}\n`);
     process.exitCode = 1;
   }).finally(() => getPool().end().catch(() => undefined));
 }

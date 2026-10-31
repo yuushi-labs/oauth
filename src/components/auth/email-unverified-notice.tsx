@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { apiClient, ApiClientError } from '@/lib/api/client';
 import { errorMessage, m } from '@/messages/ja';
+import { TurnstileWidget } from '@/components/auth/turnstile-widget';
 
 /**
  * 未確認 email の案内と確認メール再送（§12.4 / D-33-21 / D-33-22）。
@@ -17,23 +18,37 @@ export function EmailUnverifiedNotice({
   email,
   resendAvailable,
   onBack,
+  captchaSiteKey,
+  captchaNonce,
 }: {
   email: string;
   resendAvailable: boolean;
   onBack: () => void;
+  captchaSiteKey?: string;
+  captchaNonce?: string;
 }) {
   const [message, setMessage] = React.useState('');
   const [error, setError] = React.useState('');
   const [busy, setBusy] = React.useState(false);
+  const [captchaNeeded, setCaptchaNeeded] = React.useState(false);
+  const [captchaToken, setCaptchaToken] = React.useState<string | null>(null);
 
   async function resend() {
     setMessage('');
     setError('');
     setBusy(true);
     try {
-      await apiClient.post('/api/auth/resend-verification', { email });
+      await apiClient.post('/api/auth/resend-verification', {
+        email,
+        ...(captchaToken ? { captchaToken } : {}),
+      });
       setMessage(m('auth.resendSent'));
     } catch (caught) {
+      if (caught instanceof ApiClientError && caught.code === 'CAPTCHA_REQUIRED') {
+        setCaptchaNeeded(true);
+        setCaptchaToken(null);
+        return;
+      }
       setError(caught instanceof ApiClientError ? caught.message : errorMessage('INTERNAL_ERROR'));
     } finally {
       setBusy(false);
@@ -56,6 +71,20 @@ export function EmailUnverifiedNotice({
         <Alert variant="danger" size="sm">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
+      )}
+      {captchaNeeded && captchaSiteKey && (
+        <div className="flex flex-col gap-1">
+          <p className="text-sm text-muted-fg">{m('auth.captchaHint')}</p>
+          <TurnstileWidget
+            siteKey={captchaSiteKey}
+            nonce={captchaNonce}
+            action="resend_verification"
+            onToken={(token) => {
+              setCaptchaToken(token);
+              if (token) setError('');
+            }}
+          />
+        </div>
       )}
       <div className="flex flex-col gap-2">
         {resendAvailable && (

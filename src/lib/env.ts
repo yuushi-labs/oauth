@@ -64,6 +64,9 @@ const requiredEnvSchema = z.object({
   RISK_ENFORCEMENT: z.enum(['notify', 'challenge', 'hold']).default('notify'),
   // CAPTCHA（Turnstile）のタイムアウト（Phase 9 / D-39-01）。
   CAPTCHA_TIMEOUT_MS: z.coerce.number().int().positive().default(3000),
+  // Turnstile の site key（公開・任意）。secret と両方そろって初めて機能する（BUG-22）。
+  // ブラウザへ渡す値なので NEXT_PUBLIC_ を付け、サーバ側で解決して props で渡す（BUG-11）。
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().optional(),
   // バックアップ暗号鍵（Phase 9 / D-39-03）。Base64 32 バイト。未設定なら `pnpm backup` は失敗する。
   BACKUP_ENCRYPTION_KEY: z.preprocess(
     (value) => (value === '' ? undefined : value),

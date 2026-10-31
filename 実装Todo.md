@@ -577,6 +577,7 @@ Phase 4 の本体内で未だった 2 点（BUG-12 後の実ブラウザ検証�
   - [x] `deploy/nginx/oauth.conf`（HTTPS 強制・HSTS・`X-Forwarded-Proto` 転送・query を含まない log_format）
   - [x] `deploy/cloudflare.md`（Logpush / Analytics で query を保存しない設定・確認手順）
   - [x] `.env.example` / `pnpm secrets:gen` に `BACKUP_ENCRYPTION_KEY` / `CAPTCHA_TIMEOUT_MS` を追加
+  - [x] `NEXT_PUBLIC_TURNSTILE_SITE_KEY` を追加（site key と secret の両方で初めて機能。片方だけなら起動時に fail fast・BUG-22）
 - [x] **P9-02** CI（GitHub Actions）: lint / typecheck / test / db-check / **`gitleaks`（secret混入検出）** / `npm audit` ★
   - [x] `verify` に `pnpm build`（smoke）を追加、Node 22/24 の matrix 化（D-39-08）
   - [x] `secret-scan`（gitleaks）・`audit`（`pnpm audit --audit-level=high`）は既存を維持
@@ -714,7 +715,7 @@ Phase 4 の本体内で未だった 2 点（BUG-12 後の実ブラウザ検証�
 - [ ] `trusted_devices` テーブル（将来拡張。MVPでは作成しない）
 - [ ] moderator / superadmin の権限付与・判定・テスト（MVPは user/admin のみ）
 - [ ] avatar 画像アップロード（MVPは URL のみ／D-08）
-- [ ] Turnstile の実接続（Phase 2 は interface のみ、接続は Phase 9）
+- [x] Turnstile の実接続（Phase 2 は interface のみ、接続は Phase 9）→ **P9-A-01 / BUG-22 で完了**（server の `siteverify` に加え、site key・クライアントウィジェット・CSP 許可・フォーム連携まで実装）
 - [ ] Google の `offline_access` / refresh token 運用（D-06 で不採用）
 - [ ] 高度な risk-based authentication の追加段階
 
@@ -744,3 +745,4 @@ Phase 4 の本体内で未だった 2 点（BUG-12 後の実ブラウザ検証�
 | 2026-10-29 | **OAuth 2.0 / OIDC の概念解説ドキュメントを追加** | `docs/oauth2-oidc-解説.md` を新規作成（ロール・認可コードフロー（mermaid シーケンス図）・ID Token の構造・scope と claim・署名鍵・RP 側（ソーシャルログイン）との対比・セキュリティの勘所・実装マップ・データモデル）。`docs/oidc-oauth2-連携ガイド.md`（RP 実装者向けの接続ガイド）とは役割を分け、概念側を担当。README の参照表と連携ガイド §10 から相互リンク。副次修正: README の混入文字（执行用户→実行ユーザー）。**コード変更なし**、docs のみ |
 | 2026-10-25 | **デプロイ時の `pnpm seed` 失敗の真因（BUG-21: DB 接続 SSL）を修正** | BUG-20 の migration `0023` 適用後もユーザーのサーバで `pnpm seed` が失敗（`Failed query: insert into "roles" …`）。真因は role ではなく **DB 接続の TLS**。旧 `src/lib/db/client.ts` が `NODE_ENV === 'production'` のとき `ssl: { rejectUnauthorized: true }` を強制し、localhost の PostgreSQL の**自己署名証明書**を拒否していた（`DEPTH_ZERO_SELF_SIGNED_CERT`。drizzle は真因を `cause` に隠すので `Failed query` しか見えない）。`drizzle-kit migrate` と生の `pg` は SSL を張らないため成功し、seed だけが落ちて見えた。TLS を `DATABASE_SSL_MODE`（`disable` 既定 / `require` / `verify-full`）で明示制御する `src/lib/db/ssl.ts` を追加し、`client.ts` は `NODE_ENV` で切り替えないように変更。`scripts/seed.ts` は失敗時に `cause` を連鎖表示して真因を出す。`install.sh` / 手順書 / `.env.example` に `DATABASE_SSL_MODE` を追記。回帰テスト `src/test/unit/db-ssl.test.ts`。全 135 ファイル / 920 テスト green |
 | 2026-10-25 | **デプロイ時の `pnpm seed` 失敗（BUG-20）を修正** | ユーザーのサーバ（Ubuntu / PostgreSQL 16 / Node 24）で `pnpm seed` が `duplicate key value violates unique constraint "roles_name_unique"` で失敗。原因は旧デプロイの DB に「name は同じ・id が別」の `roles` 行（例: `id='user'`）が残っており、`scripts/seed.ts` の `ON CONFLICT (id)` では name の UNIQUE 制約を回避できないこと。migration `0023_role_id_reconcile.sql` を追加し、旧 id の `roles` 行を正規 id（`role_user` 等）へ統合（`users.role_id` / `role_permissions.role_id` も付け替え、name 制約を張り直し）→ `pnpm db:migrate` だけで既存 DB も自動修復。回帰テスト `src/test/integration/role-id-reconcile.test.ts` を追加。`pnpm db:verify-migrations`（up/down/往復/restore）green |
+| 2026-10-25 | **CAPTCHA のクライアント側が未実装だった件を修正（BUG-22）** | `.env.example` に `TURNSTILE_SECRET_KEY` だけがあり site key が無い、とのユーザー指摘を起点に Phase 9 を再点検。**P9-A-01 はサーバ側（`siteverify` を叩く `TurnstileCaptchaProvider`）しか実装しておらず、site key・ブラウザのウィジェット・CSP 許可・フォーム連携がすべて欠落**していた（本番ではソフトリミット超過後に CAPTCHA を解けず突破不能。さらにトークン欠落を `CAPTCHA_INVALID` として返していた）。修正: ①`NEXT_PUBLIC_TURNSTILE_SITE_KEY` を `env.ts` / `.env.example` / `secrets:gen` に追加②`src/lib/security/csp.ts` に CSP ビルダを抽出し、有効時のみ `challenges.cloudflare.com` を `script-src` / `frame-src` へ許可（従来は script 自体が CSP でブロックされる状態）③`src/components/auth/turnstile-widget.tsx`（`api.js?render=explicit` を nonce 付きで 1 回注入 → `render` → token。失効/エラーは null）④`auth-form.tsx` / `forgot-password-form.tsx` / `email-unverified-notice.tsx` に配線（`CAPTCHA_REQUIRED` で表示、`captchaToken` 送信。site key・nonce はサーバ側で解決して props 渡し＝BUG-11 回避）⑤サーバはトークン欠落時に `CAPTCHA_REQUIRED`（400）を返す⑥本番で site key と secret の片方だけなら起動時に fail fast（`assertCaptchaConfigConsistent`）⑦副次: CLI（`alert:check` / `backup` / `restore` / `logs:scan` / `seed`）の失敗表示を `describeErrorChain` に統一（drizzle が真因を `cause` に隠す・BUG-21 と同根）。`src/test/security/captcha-client.test.ts` を追加。**Phase 9 の他項目（P9-A-02〜07 / P9-B / P9-C）は実地確認済みで完了**（backup→restore 往復・alert:check・logs:scan を実行して確認）。全 136 ファイル / 931 テスト green、typecheck 0 error、lint 0 error |

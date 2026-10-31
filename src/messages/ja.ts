@@ -371,6 +371,7 @@ export const messages = {
       forgotDescription: '登録したメールアドレスを入力してください。再設定用のリンクをお送りします。',
       forgotAction: '再設定メールを送信',
       forgotSent: '登録メールアドレスなら再設定メールを送信しました。',
+      captchaHint: 'ロボットでないことを確認してください。',
       logout: 'ログアウト',
       emailChangeTitle: 'メールアドレスの変更確認',
       emailChangeDescription: '新しいメールアドレスの確認を完了するには、下のボタンを押してください。',

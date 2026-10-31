@@ -284,6 +284,9 @@ GITHUB_CLIENT_ID=...      / GITHUB_CLIENT_SECRET=...
 DISCORD_CLIENT_ID=...     / DISCORD_CLIENT_SECRET=...
 
 # --- Bot 対策（任意。有効化すると CAPTCHA 要求時に fail-closed） ---
+# site key（公開・ブラウザがウィジェットを描画）と secret（秘匿・サーバが siteverify）の
+# **両方**を設定する。片方だけだと本番起動時に fail fast する（BUG-22）。
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=...
 TURNSTILE_SECRET_KEY=...
 CAPTCHA_TIMEOUT_MS=3000
 
@@ -307,7 +310,8 @@ REDIS_URL=
 | `OIDC_ISSUER`                                                        | OIDC 使用時必須        | 本番は `https`。`NEXT_PUBLIC_APP_URL` と同一 origin にする                                             |
 | `WEBAUTHN_RP_ID` / `WEBAUTHN_ALLOWED_ORIGINS`                        | Passkey 使用時必須     | 本番で未設定だと Passkey 無効。`rpID` は origin の登録可能ドメインであること                           |
 | `RESEND_API_KEY` / `EMAIL_FROM`                                      | メール使用時必須       | 参照時に未設定なら throw（遅延評価）                                                                   |
-| `TURNSTILE_SECRET_KEY`                                               | 任意                   | 設定すると本番で CAPTCHA を検証。未設定でも起動はする（要求時に 500 で fail-closed）                   |
+| `TURNSTILE_SECRET_KEY`                                               | 任意                   | 設定すると本番で CAPTCHA を検証。**`NEXT_PUBLIC_TURNSTILE_SITE_KEY` と両方**必要（片方だけだと起動時に fail fast）。未設定でも起動はする（要求時に 500 で fail-closed） |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY`                                     | 任意                   | Turnstile の site key（公開）。ブラウザがウィジェットを描画し、得た token をフォームが送る。secret と両方そろえて初めて機能する（BUG-22） |
 | `BACKUP_ENCRYPTION_KEY`                                              | バックアップ使用時必須 | 未設定だと `pnpm backup` が失敗（平文で保存しない）                                                    |
 
 > **`DEBUG` を本番で設定しない。** `oidc-provider` の名前空間を含む `DEBUG` を有効にすると

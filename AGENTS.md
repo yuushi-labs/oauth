@@ -115,6 +115,12 @@ PR を作ったら**マージまでが 1 単位**。次の順で進める。
   拒否していたため（`DEPTH_ZERO_SELF_SIGNED_CERT`。drizzle は真の原因を `cause` に隠すので
   `Failed query` しか見えない）。TLS は `DATABASE_SSL_MODE`（既定 `disable`）で決める（BUG-21）。
   `drizzle-kit migrate` と生の `pg` は SSL を張らないので成功し、seed だけが落ちて見える。
+- **CLI の失敗表示は `src/lib/util/error-chain.ts` の `describeErrorChain` を使う**。drizzle は失敗クエリを
+  `Failed query: …` で包み、真因（接続失敗・認証失敗など）を `cause` に隠す。`error.message` だけ出すと
+  BUG-21 と同じく「クエリが失敗した」としか見えない（`alert:check` が `password authentication failed` を隠していた）。
+- **CAPTCHA はサーバ（`siteverify`）だけでは動かない**。ブラウザが site key でウィジェットを描画し token を送る
+  必要があり、CSP で `challenges.cloudflare.com` を `script-src`/`frame-src` に許可しないと script 自体が
+  ブロックされる。site key と secret は両方そろえて初めて機能し、片方だけなら本番起動時に fail fast する（BUG-22）。
 - **drizzle-kit は `drizzle.__drizzle_migrations` の sha256 ハッシュで適用済みを判定し、
   「最後に記録された migration より新しいもの」だけを適用する**。途中の migration が作ったテーブルを
   手で DROP しても `pnpm db:migrate` は「success」と言うだけで再作成しない（その SQL を直接流すか、
@@ -126,9 +132,16 @@ M0〜M9 完了（Phase 0 / 1 / 2 / 2.5 / 2.6 / 3 / 4 / 4-B / 5 / 6 / 7 / 7.5 / 7
 Phase 9 の計画は `docs/phase9-運用デプロイ-実装計画.md`（D-39-01〜D-39-08）、実行タスクは `docs/phase9-実行Todo.md`。
 
 Phase 9 の要点（運用デプロイ）:
-- **CAPTCHA（Turnstile）実接続**: `src/lib/auth/captcha.ts` の `TurnstileCaptchaProvider` が `siteverify` を
-  **POST body** で叩く（secret を URL に載せない・D-39-01）。本番で secret 未設定は 500（fail closed）、
-  通信失敗は 503。テストは `setCaptchaProvider` で差し替え、ネットワークを叩かない。
+- **CAPTCHA（Turnstile）実接続**: サーバ側 `src/lib/auth/captcha.ts` の `TurnstileCaptchaProvider` が
+  `siteverify` を **POST body** で叩く（secret を URL に載せない・D-39-01）。本番で secret 未設定は 500
+  （fail closed）、通信失敗は 503。テストは `setCaptchaProvider` で差し替え、ネットワークを叩かない。
+  **クライアント側も必須**（BUG-22）: site key `NEXT_PUBLIC_TURNSTILE_SITE_KEY`（`src/lib/auth/captcha-config.ts`）で
+  `src/components/auth/turnstile-widget.tsx` がウィジェットを描画し、得た token をフォームが `captchaToken` で送る。
+  CSP は `src/lib/security/csp.ts` が有効時のみ `challenges.cloudflare.com` を `script-src`/`frame-src` に許可する
+  （未許可だと script がブロックされ突破不能）。**site key と secret は両方そろえて初めて機能**し、本番で片方だけなら
+  起動時に fail fast（`assertCaptchaConfigConsistent`）。site key・CSP nonce はサーバ側で解決して props で渡す
+  （クライアントで `process.env` を読むと hydration mismatch・BUG-11）。トークン欠落は `CAPTCHA_INVALID` ではなく
+  `CAPTCHA_REQUIRED`（400）を返し、クライアントはこれを合図にウィジェットを表示する。
 - **バックアップ／復元**: `src/lib/ops/backup.ts` / `restore.ts`。`pg_dump --format=custom` → **AES-256-GCM** →
   保持 30 日 pruning。**平文 dump を一時ファイルにも残さない**（パイプで受けて暗号化・D-39-02）。
   `BACKUP_ENCRYPTION_KEY` 未設定なら失敗する（D-39-03）。復元は `src/test/integration/ops-backup-restore.test.ts` が

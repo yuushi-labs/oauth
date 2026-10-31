@@ -14,6 +14,7 @@ import { TotpLoginStep } from '@/components/auth/totp-login-step';
 import { EmailUnverifiedNotice } from '@/components/auth/email-unverified-notice';
 import { apiClient, ApiClientError, resetCsrfCache } from '@/lib/api/client';
 import { errorMessage, m } from '@/messages/ja';
+import { TurnstileWidget } from '@/components/auth/turnstile-widget';
 
 const ERROR_ID = 'auth-form-error';
 
@@ -32,6 +33,8 @@ export function AuthForm({
   returnTo,
   oauthError,
   socialSlot,
+  captchaSiteKey,
+  captchaNonce,
 }: {
   mode: AuthMode;
   returnTo?: string;
@@ -46,6 +49,13 @@ export function AuthForm({
    * そのため `LoginButtons` はここでは import せず、page 側で渡す。
    */
   socialSlot?: React.ReactNode;
+  /**
+   * Turnstile の site key。**サーバーコンポーネントが解決して渡す**（BUG-11 / BUG-22）。
+   * 未設定なら CAPTCHA は無効（ウィジェットを描画しない）。
+   */
+  captchaSiteKey?: string;
+  /** ウィジェットが読む script に付ける CSP nonce（middleware が発行）。 */
+  captchaNonce?: string;
 }) {
   const router = useRouter();
   const [password, setPassword] = useState('');
@@ -55,24 +65,14 @@ export function AuthForm({
   const [unverified, setUnverified] = useState<{ email: string; resendAvailable: boolean } | null>(
     null,
   );
+  // ソフトリミット超過をサーバが知らせてきたらウィジェットを出す（CAPTCHA_REQUIRED）。
+  const [captchaNeeded, setCaptchaNeeded] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const isRegister = mode === 'register';
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError('');
-    const form = new FormData(event.currentTarget);
-    const nextPassword = String(form.get('password') ?? '');
-
-    if (isRegister && nextPassword !== String(form.get('password_confirmation') ?? '')) {
-      setError(m('pwStrength.mismatch'));
-      return;
-    }
-
+  async function submit(payload: Record<string, unknown>) {
     setSubmitting(true);
     try {
-      const payload = isRegister
-        ? { email: form.get('email'), username: form.get('username'), password: nextPassword }
-        : { email_or_username: form.get('email_or_username'), password: nextPassword };
       const result = await apiClient.post<{ message: string; twoFactorRequired?: boolean }>(
         `/api/auth/${mode}`,
         payload,
@@ -94,6 +94,13 @@ export function AuthForm({
       router.replace(returnTo?.startsWith('/oauth2/interaction/') ? returnTo : '/');
       router.refresh();
     } catch (caught) {
+      // サーバが CAPTCHA を要求。ウィジェットを出して解かせる（BUG-22）。
+      if (caught instanceof ApiClientError && caught.code === 'CAPTCHA_REQUIRED') {
+        setCaptchaNeeded(true);
+        setCaptchaToken(null);
+        setError('');
+        return;
+      }
       // 未確認 email は専用の案内（再送導線つき）を出す（D-33-21）。`data.email` が無ければ通常のエラー。
       if (
         caught instanceof ApiClientError &&
@@ -110,6 +117,30 @@ export function AuthForm({
     }
   }
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    const form = new FormData(event.currentTarget);
+    const nextPassword = String(form.get('password') ?? '');
+
+    if (isRegister && nextPassword !== String(form.get('password_confirmation') ?? '')) {
+      setError(m('pwStrength.mismatch'));
+      return;
+    }
+
+    const payload: Record<string, unknown> = isRegister
+      ? { email: form.get('email'), username: form.get('username'), password: nextPassword }
+      : { email_or_username: form.get('email_or_username'), password: nextPassword };
+    if (captchaToken) payload.captchaToken = captchaToken;
+
+    await submit(payload);
+  }
+
+  function handleCaptchaToken(token: string | null) {
+    setCaptchaToken(token);
+    if (token) setError('');
+  }
+
   const title = isRegister ? m('auth.registerTitle') : m('auth.loginTitle');
   // 2FA ステップ / 未確認メール案内は自前の見出しを持つため、シェルの h1 は出さない。
   const showTitle = !twoFactorRequired && !unverified;
@@ -122,6 +153,8 @@ export function AuthForm({
         <EmailUnverifiedNotice
           email={unverified.email}
           resendAvailable={unverified.resendAvailable}
+          captchaSiteKey={captchaSiteKey}
+          captchaNonce={captchaNonce}
           onBack={() => {
             setUnverified(null);
             setError('');
@@ -200,6 +233,18 @@ export function AuthForm({
               <Alert variant="danger" id={ERROR_ID}>
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
+            )}
+
+            {captchaNeeded && captchaSiteKey && (
+              <div className="flex flex-col gap-1">
+                <p className="text-sm text-muted-fg">{m('auth.captchaHint')}</p>
+                <TurnstileWidget
+                  siteKey={captchaSiteKey}
+                  nonce={captchaNonce}
+                  action={isRegister ? 'register' : 'login'}
+                  onToken={handleCaptchaToken}
+                />
+              </div>
             )}
 
             <Button type="submit" loading={submitting}>

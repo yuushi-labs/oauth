@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { scanForSecrets } from '@/lib/ops/log-scan';
+import { describeErrorChain } from '@/lib/util/error-chain';
 
 /**
  * ログの secret 検知 CLI（Phase 9 / P9-A-06・D-39-06）。
@@ -45,7 +46,7 @@ async function main(): Promise<void> {
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 if (isMain) {
   void import('dotenv/config').then(main).catch((error: unknown) => {
-    process.stderr.write(`log scan failed: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.stderr.write(`log scan failed: ${describeErrorChain(error)}\n`);
     process.exitCode = 1;
   });
 }

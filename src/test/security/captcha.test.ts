@@ -37,6 +37,16 @@ describe('CAPTCHA hook', () => {
       .rejects.toMatchObject({ code: 'CAPTCHA_UNCONFIGURED', status: 500 });
   });
 
+  it('asks the client to challenge (CAPTCHA_REQUIRED) when a token is missing in production', async () => {
+    // The widget was never rendered or solved. The old code returned CAPTCHA_INVALID,
+    // which made the soft-limit gate impossible to pass even with Turnstile set up (BUG-22).
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('TURNSTILE_SECRET_KEY', 'configured');
+
+    await expect(verifyCaptchaIfRequired(true, null))
+      .rejects.toMatchObject({ code: 'CAPTCHA_REQUIRED', status: 400 });
+  });
+
   it('passes in production when the injected provider accepts the token', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('TURNSTILE_SECRET_KEY', 'configured');
