@@ -67,8 +67,11 @@ PR を作ったら**マージまでが 1 単位**。次の順で進める。
    失敗したら原因を直して push し、再度待つ（`iterate` 相当）。
 3. **Kilo Code のレビュー完了を待つ**（`kilo-code-bot[bot]` の `<!-- kilo-review -->` コメント）。
    「No Issues Found / Merge」ならそのまま進む。指摘があれば**対応するか、対応しない理由を PR に残す**。
-4. **CI 成功 ＋ Kilo レビュー完了の両方が揃ってから** `gh pr merge <n> --merge --delete-branch` でマージする。
-   どちらかが未完了・失敗のままマージしない。
+   **`coderabbitai[bot]` のレビュー完了も待つ**（`<!-- coderabbit-ai-generated:v1 -->` のコメントが
+   「processing」から確定した内容に更新されるまで）。指摘があれば**必ず現行コードと突き合わせて検証**し、
+   有効なものは直す。古いコミットへの指摘（既に対応済み）は理由を残してスキップする。
+4. **CI 成功 ＋ Kilo レビュー完了 ＋ CodeRabbit レビュー完了のすべてが揃ってから**
+   `gh pr merge <n> --merge --delete-branch` でマージする。どれかが未完了・失敗のままマージしない。
 5. `main` を `--ff-only` で取り込み、必要なら migration / seed を流して本番反映を確認する。
 
 補足: `qodo-code-review[bot]` はトライアル終了で一時停止中（`<!-- qodo:billing-blocked -->`）。復帰したら同じく待つ。

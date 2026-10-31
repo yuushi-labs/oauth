@@ -2,6 +2,8 @@
 
 import * as React from 'react';
 
+import { m } from '@/messages/ja';
+
 /**
  * Cloudflare Turnstile のウィジェット（Phase 9 / BUG-22）。
  *
@@ -47,10 +49,17 @@ function loadTurnstileScript(nonce?: string): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve();
   if (window.turnstile) return Promise.resolve();
   scriptPromise ??= new Promise<void>((resolve, reject) => {
+    const fail = () => {
+      // 失敗した script を残すと、次回以降 `existing` にヒットして load イベントが
+      // 二度と来ず永久に再試行できない。要素を除去し、共有 Promise を捨てて作り直す。
+      scriptPromise = null;
+      document.getElementById(SCRIPT_ID)?.remove();
+      reject(new Error('Turnstile script failed'));
+    };
     const existing = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
     if (existing) {
       existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () => reject(new Error('Turnstile script failed')));
+      existing.addEventListener('error', fail);
       return;
     }
     const script = document.createElement('script');
@@ -61,7 +70,7 @@ function loadTurnstileScript(nonce?: string): Promise<void> {
     // strict-dynamic + nonce: the injected script inherits the document's trust.
     if (nonce) script.nonce = nonce;
     script.addEventListener('load', () => resolve());
-    script.addEventListener('error', () => reject(new Error('Turnstile script failed')));
+    script.addEventListener('error', fail);
     document.head.appendChild(script);
   });
   return scriptPromise;
@@ -92,6 +101,10 @@ export function TurnstileWidget({
   const onTokenRef = React.useRef(onToken);
   onTokenRef.current = onToken;
   const prevResetKeyRef = React.useRef(resetKey);
+  // 読み込みに失敗したら再試行ボタンを出し、押下で `retryKey` を進めて effect を再実行する。
+  // 自動再試行はしない（失敗のたびに繰り返すのを避けるため）。
+  const [failed, setFailed] = React.useState(false);
+  const [retryKey, setRetryKey] = React.useState(0);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -109,7 +122,11 @@ export function TurnstileWidget({
           ...(action ? { action } : {}),
         });
       })
-      .catch(() => onTokenRef.current(null));
+      .catch(() => {
+        if (cancelled) return;
+        onTokenRef.current(null);
+        setFailed(true);
+      });
 
     return () => {
       cancelled = true;
@@ -123,7 +140,7 @@ export function TurnstileWidget({
         }
       }
     };
-  }, [siteKey, nonce, action]);
+  }, [siteKey, nonce, action, retryKey]);
 
   React.useEffect(() => {
     if (prevResetKeyRef.current === resetKey) return;
@@ -138,5 +155,21 @@ export function TurnstileWidget({
     }
   }, [resetKey]);
 
-  return <div ref={containerRef} data-testid="turnstile-widget" />;
+  return (
+    <div className="flex flex-col gap-1">
+      <div ref={containerRef} data-testid="turnstile-widget" />
+      {failed && (
+        <button
+          type="button"
+          className="self-start text-sm text-primary underline underline-offset-4"
+          onClick={() => {
+            setFailed(false);
+            setRetryKey((key) => key + 1);
+          }}
+        >
+          {m('auth.captchaRetry')}
+        </button>
+      )}
+    </div>
+  );
 }
