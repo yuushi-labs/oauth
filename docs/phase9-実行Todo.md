@@ -34,6 +34,16 @@
   - [x] `setCaptchaProvider` 差し替え口
   - [x] `error-codes` をログ・例外メッセージへ出さない（§45）
 - [x] `src/lib/env.ts` に `CAPTCHA_TIMEOUT_MS`（既定 3000）を追加
+- [x] **クライアント側（BUG-22 で追加。site key と secret の両方が揃って初めて機能する）**
+  - [x] `NEXT_PUBLIC_TURNSTILE_SITE_KEY` を `src/lib/env.ts` / `.env.example` / `secrets:gen` に追加
+  - [x] `src/components/auth/turnstile-widget.tsx`（`api.js?render=explicit` を nonce 付きで 1 回注入 → `render` → token）
+  - [x] `src/lib/security/csp.ts` に CSP ビルダを抽出し、有効時のみ `challenges.cloudflare.com` を `script-src` / `frame-src` へ許可
+  - [x] フォーム連携（`auth-form.tsx` / `forgot-password-form.tsx` / `email-unverified-notice.tsx`）。`CAPTCHA_REQUIRED` でウィジェットを表示し `captchaToken` を送る
+  - [x] site key / nonce は**サーバ側で解決して props で渡す**（クライアントで `process.env` を読むと hydration mismatch・BUG-11）
+  - [x] 本番で site key と secret の片方だけなら起動時に fail fast（`assertCaptchaConfigConsistent`）
+  - [x] トークン欠落時は `CAPTCHA_INVALID` ではなく `CAPTCHA_REQUIRED` を返す（旧実装は突破不能だった）
+  - [x] token は**1 回限り**なので、送信のたびに `resetKey` を進めてウィジェットを取り直す（さもないと 2 回目以降が常に `CAPTCHA_INVALID`）
+  - [x] `src/test/security/captcha-client.test.ts`（CSP と config の回帰）
 - [x] 完了条件: `captcha.test.ts` green
 
 ### P9-A-02★ — バックアップ暗号化（1.6h）

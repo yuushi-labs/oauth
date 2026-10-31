@@ -19,6 +19,8 @@ const DEFAULTS: Record<string, string> = {
   HIBP_TIMEOUT_MS: '1500',
   BREACH_CHECK_FAIL_OPEN: 'true',
   CAPTCHA_TIMEOUT_MS: '3000',
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: '',
+  TURNSTILE_SECRET_KEY: '',
   POSTGRES_USER: 'app',
   POSTGRES_DB: 'app',
   POSTGRES_PASSWORD: 'dev_password',

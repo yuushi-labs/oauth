@@ -1,27 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { configuredOriginList, isTrustedOrigin } from '@/lib/auth/origin';
 import { normalizeRequestId } from '@/lib/util/request-context';
-
-function contentSecurityPolicy(nonce: string): string {
-  const scriptDirective = [
-    "script-src 'self'",
-    `'nonce-${nonce}'`,
-    "'strict-dynamic'",
-    // Next.js Fast Refresh uses eval-based source maps in development only.
-    ...(process.env.NODE_ENV === 'development' ? ["'unsafe-eval'"] : []),
-  ].join(' ');
-  return [
-  "default-src 'self'",
-  scriptDirective,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: https:",
-  "font-src 'self'",
-  "connect-src 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  ].join('; ');
-}
+import { contentSecurityPolicy } from '@/lib/security/csp';
+import { turnstileSiteKey } from '@/lib/auth/captcha-config';
 
 function isHttps(request: NextRequest): boolean {
   if (process.env.NODE_ENV !== 'production') return true;
@@ -93,7 +74,13 @@ export function middleware(request: NextRequest) {
 
   const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
   const nonce = btoa(String.fromCharCode(...nonceBytes));
-  const csp = contentSecurityPolicy(nonce);
+  const csp = contentSecurityPolicy({
+    nonce,
+    // Next.js Fast Refresh uses eval-based source maps in development only.
+    allowEval: process.env.NODE_ENV === 'development',
+    // Only widen script-src/frame-src when a site key is actually configured (BUG-22).
+    turnstile: Boolean(turnstileSiteKey()),
+  });
   // リクエスト相関 ID（P9-04）。クライアント/プロキシの値を信頼せず形式を検証し、
   // 不正なら採番する。ログと応答ヘッダーで同じ ID を使う。
   const requestId = normalizeRequestId(request.headers.get('x-request-id')) ?? crypto.randomUUID();

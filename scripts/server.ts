@@ -619,6 +619,10 @@ export async function startServer(options: {
   if (process.env.NODE_ENV !== 'test') {
     const { assertSchemaReady } = await import('@/lib/db/schema-readiness');
     await assertSchemaReady();
+    // CAPTCHA は site key と secret の両方がそろって初めて機能する。片方だけだと
+    // 「設定済みに見えて実は突破不能」になるため、本番は起動時に検出して fail fast する（BUG-22）。
+    const { assertCaptchaConfigConsistent } = await import('@/lib/auth/captcha-config');
+    assertCaptchaConfigConsistent();
   }
   const handleNext = app.getRequestHandler();
   const handleUpgrade = app.getUpgradeHandler();

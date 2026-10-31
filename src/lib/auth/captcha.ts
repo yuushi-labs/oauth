@@ -82,6 +82,10 @@ export async function verifyCaptchaIfRequired(
   if (!required) return;
   if (process.env.NODE_ENV === 'production') {
     if (!process.env.TURNSTILE_SECRET_KEY) throw new ApiError('CAPTCHA_UNCONFIGURED');
+    // No token means the client has not solved (or rendered) the widget yet. Tell it to
+    // challenge, rather than reporting a bogus "invalid" — the old behaviour made the
+    // soft-limit gate impossible to pass even with Turnstile configured (BUG-22).
+    if (!token) throw new ApiError('CAPTCHA_REQUIRED');
     const provider: CaptchaProvider = providerOverride
       ?? new TurnstileCaptchaProvider(process.env.TURNSTILE_SECRET_KEY, captchaTimeoutMs());
     if (!await provider.verify(token, remoteIp)) throw new ApiError('CAPTCHA_INVALID');

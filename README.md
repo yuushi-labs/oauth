@@ -269,7 +269,8 @@ oauth/
 | `BREACH_CHECK_FAIL_OPEN` | 任意（既定 true） | HIBP 障害時に登録を許可するか | Phase 1-A |
 | `RESEND_API_KEY` / `EMAIL_FROM` | 遅延評価 | メール送信 | Phase 1-B |
 | `GOOGLE_*` / `GITHUB_*` / `DISCORD_*` | 遅延評価 | OAuth 資格情報（Apple は除外: C-01） | Phase 4 |
-| `TURNSTILE_SECRET_KEY` | 遅延評価 | CAPTCHA。Phase 2では未設定時500、secret設定済みでprovider未接続なら503 | Phase 2 / Phase 9（実接続） |
+| `TURNSTILE_SECRET_KEY` | 遅延評価 | CAPTCHA の検証 secret（秘匿）。`NEXT_PUBLIC_TURNSTILE_SITE_KEY` と両方必要 | Phase 9（実接続） |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | 任意 | CAPTCHA の site key（公開）。ウィジェット描画に使う。secret と両方そろえて初めて機能する（BUG-22） | Phase 9（実接続） |
 | `WEBAUTHN_RP_ID` / `WEBAUTHN_RP_NAME` / `WEBAUTHN_ALLOWED_ORIGINS` | 遅延評価 | Passkey の rpID / rpName / 許可 origin（カンマ区切り）。**環境ごとに別値を明示設定**（host からの自動導出はしない）。dev 既定は `localhost` / `http://localhost:3000` | Phase 6 |
 | `RISK_ENFORCEMENT` | 任意（既定 `notify`） | 不審ログイン検知（§57）の強制レベル。`notify`（通知のみ）/ `challenge`（追加認証）/ `hold`（セッション保留）。既定は通知のみで挙動不変 | Phase 8 |
 | `NODE_ENV` | 任意（既定 `development`） | 実行モード | Phase 0 |
