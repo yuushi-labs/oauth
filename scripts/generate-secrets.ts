@@ -21,6 +21,7 @@ const DEFAULTS: Record<string, string> = {
   CAPTCHA_TIMEOUT_MS: '3000',
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: '',
   TURNSTILE_SECRET_KEY: '',
+  NEXT_PUBLIC_SUPPORT_DISCORD: '@yuushi_2024',
   POSTGRES_USER: 'app',
   POSTGRES_DB: 'app',
   POSTGRES_PASSWORD: 'dev_password',

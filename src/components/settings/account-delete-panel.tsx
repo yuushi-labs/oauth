@@ -20,23 +20,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { apiClient, ApiClientError, resetCsrfCache } from '@/lib/api/client';
 import { m } from '@/messages/ja';
 
-type Method = 'twofactor' | 'passkey' | 'email';
+type Method = 'twofactor' | 'passkey';
 
 /**
  * アカウント削除カード（§24）。
  *
- * 確認手段は 2FA（パスワード＋現在のコード）・Passkey・メール確認のいずれか 1 つ（§8）。
- * - 2FA / Passkey は `DELETE /api/auth/account` を強い再認証付きで叩き、その場で削除する。
- * - メール確認は `POST /api/auth/account/delete/request` で確認リンクを送り、
- *   メール内リンク（`/account/delete/confirm`）で確定する。ここでは削除しない。
- * 2FA 無効・Passkey 未登録なら該当タブを出さず、残る手段だけを示す。
+ * 確認手段は 2FA（パスワード＋現在のコード）・Passkey のいずれか 1 つ（§8）。
+ * どちらも `DELETE /api/auth/account` を強い再認証付きで叩き、その場で削除する。
+ * メール確認による退会は廃止した（D-40-04）。2FA 無効かつ Passkey 未登録なら、
+ * 本人確認に使える手段が無いことを案内する。
  */
 export function AccountDeletePanel({
-  email,
   twoFactorEnabled,
   methods,
 }: {
-  email: string;
   twoFactorEnabled: boolean;
   /** `GET /api/auth/2fa` の `strong_reauth_methods`（'password' / 'passkey'）。 */
   methods: string[];
@@ -48,16 +45,14 @@ export function AccountDeletePanel({
   const availableMethods: Method[] = [
     ...(supportsTwoFactor ? (['twofactor'] as const) : []),
     ...(supportsPasskey ? (['passkey'] as const) : []),
-    'email',
   ];
 
   const [open, setOpen] = React.useState(false);
-  const [method, setMethod] = React.useState<Method>(availableMethods[0]!);
+  const [method, setMethod] = React.useState<Method>(availableMethods[0] ?? 'twofactor');
   const [password, setPassword] = React.useState('');
   const [code, setCode] = React.useState('');
   const [error, setError] = React.useState('');
   const [busy, setBusy] = React.useState(false);
-  const [emailSent, setEmailSent] = React.useState(false);
   const [deleted, setDeleted] = React.useState(false);
 
   function resetDialog() {
@@ -65,7 +60,6 @@ export function AccountDeletePanel({
     setCode('');
     setError('');
     setBusy(false);
-    setEmailSent(false);
   }
 
   /** 削除成功後はセッションが失効するため、CSRF キャッシュを捨ててログイン画面へ送る。 */
@@ -126,25 +120,11 @@ export function AccountDeletePanel({
     }
   }
 
-  async function requestEmail() {
-    setError('');
-    setBusy(true);
-    try {
-      await apiClient.post('/api/auth/account/delete/request');
-      setEmailSent(true);
-    } catch (caught) {
-      setError(caught instanceof ApiClientError ? caught.message : m('accountDelete.emailFailed'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const tabs = [
     ...(supportsTwoFactor
       ? [{ value: 'twofactor', label: m('accountDelete.methodTwoFactor') }]
       : []),
     ...(supportsPasskey ? [{ value: 'passkey', label: m('accountDelete.methodPasskey') }] : []),
-    { value: 'email', label: m('accountDelete.methodEmail') },
   ];
 
   function renderTwoFactor() {
@@ -211,38 +191,6 @@ export function AccountDeletePanel({
     );
   }
 
-  function renderEmail() {
-    return (
-      <div className="flex flex-col gap-4">
-        <p className="text-sm text-muted-fg">{m('accountDelete.emailIntro')}</p>
-        {emailSent && (
-          <Alert variant="success" size="sm">
-            <AlertDescription>{m('accountDelete.emailSent')}</AlertDescription>
-          </Alert>
-        )}
-        {error && (
-          <Alert variant="danger" size="sm">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-        <DialogFooter>
-          <Button variant="secondary" onClick={() => setOpen(false)} disabled={busy}>
-            {m('common.cancel')}
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={requestEmail}
-            disabled={emailSent}
-            loading={busy}
-          >
-            {m('accountDelete.emailSend')}
-          </Button>
-        </DialogFooter>
-      </div>
-    );
-  }
-
   if (deleted) {
     return (
       <Card className="border-danger">
@@ -290,13 +238,14 @@ export function AccountDeletePanel({
               <DialogDescription>{m('accountDelete.methodIntro')}</DialogDescription>
             </DialogHeader>
 
-            {tabs.length > 1 ? (
+            {availableMethods.length === 0 ? (
+              <p className="text-sm text-muted-fg">{m('accountDelete.noMethod')}</p>
+            ) : tabs.length > 1 ? (
               <Tabs
                 value={method}
                 onValueChange={(value) => {
                   setMethod(value as Method);
                   setError('');
-                  setEmailSent(false);
                 }}
               >
                 <TabsList>
@@ -310,10 +259,11 @@ export function AccountDeletePanel({
                   {supportsTwoFactor && renderTwoFactor()}
                 </TabsContent>
                 <TabsContent value="passkey">{supportsPasskey && renderPasskey()}</TabsContent>
-                <TabsContent value="email">{renderEmail()}</TabsContent>
               </Tabs>
+            ) : supportsTwoFactor ? (
+              renderTwoFactor()
             ) : (
-              renderEmail()
+              renderPasskey()
             )}
           </DialogContent>
         </Dialog>

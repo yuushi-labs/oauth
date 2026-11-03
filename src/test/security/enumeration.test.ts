@@ -122,11 +122,11 @@ describe('Security - User Enumeration Prevention', () => {
     } catch (e: unknown) {
       const err = e as { code?: string };
       if (err?.code === '23505') {
-        message = '確認メールを送信しました';
+        message = 'アカウントを登録しました';
       }
     }
 
-    expect(message).toBe('確認メールを送信しました');
+    expect(message).toBe('アカウントを登録しました');
 
     // Second call: new email
     createUser.mockResolvedValueOnce({ id: 'usr_new', email: 'new@example.com' });
@@ -141,15 +141,15 @@ describe('Security - User Enumeration Prevention', () => {
         emailVerified: false,
         roleId: 'role_user',
       });
-      message = '確認メールを送信しました';
+      message = 'アカウントを登録しました';
     } catch (e: unknown) {
       const err = e as { code?: string };
       if (err?.code === '23505') {
-        message = '確認メールを送信しました';
+        message = 'アカウントを登録しました';
       }
     }
 
-    expect(message).toContain('確認');
+    expect(message).toContain('登録');
   });
 
   it('forgot password returns same message for existing and non-existing email', async () => {
@@ -254,11 +254,11 @@ describe('Security - User Enumeration Prevention', () => {
     } catch (e: unknown) {
       const err = e as { code?: string };
       if (err?.code === '23505') {
-        message = '確認メールを送信しました';
+        message = 'アカウントを登録しました';
       }
     }
 
-    expect(message).toBe('確認メールを送信しました');
+    expect(message).toBe('アカウントを登録しました');
   });
 
   it('resend verification returns same message for unverified, verified and unknown email', async () => {
@@ -336,14 +336,14 @@ describe('Security - User Enumeration Prevention', () => {
         emailVerified: false,
         roleId: 'role_user',
       });
-      message = '確認メールを送信しました';
+      message = 'アカウントを登録しました';
     } catch (e: unknown) {
       const err = e as { code?: string };
       if (err?.code === '23505') {
-        message = '確認メールを送信しました';
+        message = 'アカウントを登録しました';
       }
     }
 
-    expect(message).toContain('確認');
+    expect(message).toContain('登録');
   });
 });

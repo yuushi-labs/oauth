@@ -169,6 +169,13 @@
       "when": 1793361554285,
       "tag": "0023_role_id_reconcile",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793707560029,
+      "tag": "0024_email_auth_removal",
+      "breakpoints": true
     }
   ]
 }

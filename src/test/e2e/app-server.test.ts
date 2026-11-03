@@ -24,27 +24,18 @@ describe('E2E - real HTTP against the Next server (BUG-7)', () => {
     const response = await httpRequest(`${app.origin}/login`);
     expect(response.status).toBe(200);
     expect(response.body).toContain('<!DOCTYPE html>');
-  }, 60_000);
-
-  it('token 付きのリセット URL は 200（BUG-1 の画面が存在する）', async () => {
-    const response = await httpRequest(`${app.origin}/reset-password?token=dummy-token`);
-    expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toContain('no-store');
   }, 60_000);
 
-  it('email 変更確認画面が 200（BUG-2 の画面が存在する）', async () => {
-    const response = await httpRequest(`${app.origin}/email-change/confirm?token=dummy-token`);
-    expect(response.status).toBe(200);
-  }, 60_000);
-
-  it('forgot 画面が 200', async () => {
-    const response = await httpRequest(`${app.origin}/forgot-password`);
-    expect(response.status).toBe(200);
-  }, 60_000);
-
-  it('GET /api/auth/email/change/confirm は画面へ 303 転送する（BUG-2）', async () => {
-    const response = await httpRequest(`${app.origin}/api/auth/email/change/confirm?token=dummy-token`);
-    expect(response.status).toBe(303);
-    expect(response.headers.get('location')).toContain('/email-change/confirm');
+  it('メール確認・再設定の画面は廃止され 404（D-40-04）', async () => {
+    for (const path of [
+      '/forgot-password',
+      '/reset-password?token=dummy-token',
+      '/verify-email',
+      '/email-change/confirm?token=dummy-token',
+    ]) {
+      const response = await httpRequest(`${app.origin}${path}`);
+      expect(response.status, `${path} は存在しない`).toBe(404);
+    }
   }, 60_000);
 });

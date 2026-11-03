@@ -4,6 +4,7 @@ import { AuthForm } from '@/app/auth-form';
 import { LoginButtons } from '@/components/auth/login-buttons';
 import { m, type UiMessagePath } from '@/messages/ja';
 import { turnstileSiteKey } from '@/lib/auth/captcha-config';
+import { SUPPORT_DISCORD } from '@/config/app';
 
 export const metadata: Metadata = { title: m('auth.loginTitle') };
 
@@ -38,6 +39,7 @@ export default async function LoginPage({
       socialSlot={<LoginButtons returnTo={returnTo} />}
       captchaSiteKey={captchaSiteKey}
       captchaNonce={captchaNonce}
+      supportDiscord={SUPPORT_DISCORD}
     />
   );
 }

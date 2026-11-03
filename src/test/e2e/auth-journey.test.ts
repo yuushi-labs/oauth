@@ -74,19 +74,15 @@ afterAll(async () => {
 }, 120_000);
 
 describe('E2E - auth journey (§48)', () => {
-  it('登録 → メール確認 → ログイン（誤 PW は 401）→ 2FA → Passkey → 設定 → 削除', async () => {
-    // --- 1. 登録（列挙耐性のため応答は常に同一メッセージ）---
+  it('登録 → ログイン（誤 PW は 401）→ 2FA → Passkey → 設定 → 削除', async () => {
+    // --- 1. 登録（列挙耐性のため応答は常に同一メッセージ。即時有効化・D-40-01）---
     const signupJar = jar();
     const register = await postJson('/api/auth/register', signupJar, { email, username, password });
     expect(register.status, `register body: ${register.body}`).toBe(200);
     const [pending] = await getDb().select().from(users).where(eq(users.email, email));
     expect(pending).toBeDefined();
-    expect(pending.status).toBe('pending_email');
-
-    // --- 2. メール確認（メール内リンクのクリック相当）---
-    await getDb().update(users)
-      .set({ emailVerified: true, status: 'active' })
-      .where(eq(users.id, pending.id));
+    expect(pending.status).toBe('active');
+    expect(pending.emailVerified).toBe(true);
 
     // --- 3. ログイン（誤 PW は 401、正 PW は 200）---
     const loginJar = jar();

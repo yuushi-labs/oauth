@@ -29,18 +29,10 @@ vi.mock('@/lib/auth/tokens/verify', () => ({
 
 import { middleware } from '@/middleware';
 
-/** 仕様書 §25 / §45: token-bearing screens were cacheable, so a shared/proxy cache could retain the
- *  verification, password-reset or email-change token. */
-describe('Security - token-bearing screens are not cacheable', () => {
-  const paths = [
-    '/verify-email',
-    '/forgot-password',
-    '/reset-password?token=secret-token-value',
-    '/email-change/confirm?token=secret-token-value',
-    '/login',
-    '/register',
-    '/settings',
-  ];
+/** 仕様書 §25 / §45: 認証系・設定画面は共有キャッシュに残さない。
+ *  メール確認・再設定・メール変更の画面は廃止したため、token を載せる URL はもう存在しない（D-40-04）。 */
+describe('Security - auth and settings screens are not cacheable', () => {
+  const paths = ['/login', '/register', '/settings'];
 
   it.each(paths)('%s は Cache-Control: no-store', (path) => {
     const request = new NextRequest(new Request(`${appUrl}${path}`, { headers: { host: 'localhost:3000' } }));
@@ -50,20 +42,7 @@ describe('Security - token-bearing screens are not cacheable', () => {
 
   it('静的アセット以外は対象外のまま', () => {
     const request = new NextRequest(new Request(`${appUrl}/`, { headers: { host: 'localhost:3000' } }));
-    // The root page is the logged-in hub; it is not part of the token-bearing set.
+    // The root page is the logged-in hub; it is not part of the no-store set.
     expect(middleware(request).headers.get('Cache-Control')).toBeNull();
   });
-});
-
-describe('Security - confirm-email GET does not mutate (spec 25)', () => {
-  it('GET /api/auth/email/change/confirm は 303 で画面へ促すだけ', async () => {
-    const { GET } = await import('@/app/api/auth/email/change/confirm/route');
-    const request = new NextRequest(new Request(`${appUrl}/api/auth/email/change/confirm?token=abc`, {
-      headers: { origin: appUrl },
-    }));
-    const response = await GET(request);
-    expect(response.status).toBe(303);
-    expect(new URL(response.headers.get('location')!).pathname).toBe('/email-change/confirm');
-  });
-
 });

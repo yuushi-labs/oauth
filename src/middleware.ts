@@ -108,12 +108,9 @@ export function middleware(request: NextRequest) {
       response.headers.set('Access-Control-Allow-Credentials', 'true');
     }
   }
-  // Token-bearing screens must never be cached: the query string holds the verification /
-  // password-reset / email-change token.
-  const noStorePaths = [
-    '/login', '/register', '/verify-email', '/forgot-password', '/reset-password',
-    '/email-change/confirm', '/settings',
-  ];
+  // 認証系・設定画面は共有キャッシュに残さない。メール確認・パスワード再設定・
+  // メール変更の画面は廃止したため、token を載せる URL はもう存在しない（D-40-04）。
+  const noStorePaths = ['/login', '/register', '/settings'];
   if (isApi || noStorePaths.some((path) => request.nextUrl.pathname.startsWith(path))) {
     response.headers.set('Cache-Control', 'no-store');
   }

@@ -73,7 +73,6 @@ export default async function SettingsSecurityPage() {
       </header>
       <SecurityOverview
         email={user.email}
-        emailVerified={user.emailVerified}
         passwordChangedAt={passwordChangedAt}
         sessions={deviceRows}
         events={events.map((event) => ({

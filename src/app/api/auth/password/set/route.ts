@@ -38,9 +38,6 @@ export async function PUT(request: NextRequest) {
       if (fullUser.passwordHash) {
         return failResponse('VALIDATION_ERROR', 'パスワードは既に設定されています', 400);
       }
-      if (!fullUser.emailVerified) {
-        return failResponse('VALIDATION_ERROR', 'email を認証してください', 400);
-      }
 
       const ip = getRequestClientIp(request);
       const breachResult = await checkBreached(password);

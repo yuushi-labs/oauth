@@ -84,11 +84,11 @@ describe('Static - client components do not import server-only TOTP modules (BUG
   });
 });
 
-describe('Static - login blocks unverified email (D-33-21 / T18)', () => {
-  it('login/route.ts に emailVerified の判定がある', () => {
+describe('Static - login does not require email verification (D-40-02)', () => {
+  it('login/route.ts に emailVerified の判定が無い', () => {
     const source = read('app/api/auth/login/route.ts');
-    expect(source).toMatch(/emailVerified/);
-    expect(source).toContain('EMAIL_NOT_VERIFIED');
+    expect(source).not.toMatch(/emailVerified/);
+    expect(source).not.toContain('EMAIL_NOT_VERIFIED');
   });
 });
 

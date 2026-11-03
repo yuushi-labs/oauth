@@ -66,7 +66,6 @@ export default async function AccountSettingsPage() {
       </Card>
 
       <AccountDeletePanel
-        email={user?.email ?? ''}
         twoFactorEnabled={twoFactorEnabled}
         methods={strongReauthMethods}
       />

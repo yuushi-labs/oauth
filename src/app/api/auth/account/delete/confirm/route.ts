@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { withAuthPipeline, failResponse, handleSuccess } from '@/lib/api/utils';
 import { hashToken } from '@/lib/auth/tokens/generate';
 import { verifyAndConsumeToken } from '@/lib/auth/tokens/verify';
@@ -11,19 +11,12 @@ const confirmSchema = z.object({
 });
 
 /**
- * メール確認による退会の確定（§24 / §25）。
+ * メール確認による退会の確定（内部実装・残置・D-40-05）。
  *
- * メールクライアントはリンクを GET で開く。GET は**状態を変えず**、確定用の画面へ
- * 303 で転送するだけにする（`/api/auth/verify-email` と同じ方針）。削除は画面内の POST
- * がトークンを 1 回限り消費したときだけ走る（D-16）。
+ * メール送受信の廃止に伴い画面と GET 転送は撤去した。削除は POST がトークンを 1 回限り
+ * 消費したときだけ走る（D-16）。現在は UI からの導線が無い（設定画面の削除は
+ * パスワード / 2FA / Passkey の強い再認証のみ・D-40-04）。
  */
-export async function GET(request: NextRequest) {
-  const token = request.nextUrl.searchParams.get('token');
-  const destination = new URL('/account/delete/confirm', request.url);
-  if (token) destination.searchParams.set('token', token);
-  return NextResponse.redirect(destination, 303);
-}
-
 export async function POST(request: NextRequest) {
   return withAuthPipeline(
     request,

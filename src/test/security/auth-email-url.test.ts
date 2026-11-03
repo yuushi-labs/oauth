@@ -36,7 +36,6 @@ vi.mock('@/lib/db/queries/tokens', () => ({
 
 import { useMemoryEmail, restoreResendEmail } from '@/test/helpers/email';
 import { POST as forgot } from '@/app/api/auth/password/forgot/route';
-import { GET as confirmEmailGet } from '@/app/api/auth/email/change/confirm/route';
 
 // Unauthenticated POSTs still go through the shared pipeline, so the anon cookie and its
 // matching CSRF token are required. Sign the secret exactly like lib/auth/cookie.ts does.
@@ -105,22 +104,10 @@ describe('BUG-1 - password reset link points at a real screen', () => {
   });
 });
 
-describe('BUG-2 - email change confirmation link is reachable', () => {
-  it('GET は 303 で /email-change/confirm へ転送する', async () => {
-    const request = new NextRequest(new Request(`${appUrl}/api/auth/email/change/confirm?token=abc123`, {
-      headers: { origin: appUrl },
-    }));
-    const response = await confirmEmailGet(request);
-    expect(response.status).toBe(303);
-    const location = new URL(response.headers.get('location') ?? '');
-    expect(location.pathname).toBe('/email-change/confirm');
-    expect(location.searchParams.get('token')).toBe('abc123');
-  });
-
-  it('トークンなしでも 303（画面側で案内を出す）', async () => {
-    const request = new NextRequest(new Request(`${appUrl}/api/auth/email/change/confirm`, { headers: { origin: appUrl } }));
-    const response = await confirmEmailGet(request);
-    expect(response.status).toBe(303);
-    expect(new URL(response.headers.get('location') ?? '').searchParams.has('token')).toBe(false);
+describe('D-40-04 - email change screen is removed', () => {
+  it('POST は残置（内部実装）。GET は存在しない（画面廃止）', async () => {
+    const route = await import('@/app/api/auth/email/change/confirm/route');
+    expect(typeof route.POST).toBe('function');
+    expect((route as { GET?: unknown }).GET).toBeUndefined();
   });
 });

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { withAuthPipeline, failResponse, handleSuccess, rateLimitResponse } from '@/lib/api/utils';
 import { verifyPassword } from '@/lib/auth/password';
 import { createSession } from '@/lib/auth/session';
@@ -97,21 +97,9 @@ export async function POST(request: NextRequest) {
         return failResponse('ACCOUNT_SUSPENDED', 'このアカウントは利用できません', 403);
       }
 
-      // 未確認 email はログインさせない（D-33-21）。セッションを発行せず、再送導線を応答に含める。
-      // `register` はセッションを発行しないため、ここで止めても `resend-verification`（未認証対応）で復帰できる。
-      if (!user.emailVerified) {
-        await recordSecurityEvent('login_failed', user.id, ip, request.headers.get('user-agent') ?? '', {
-          reason: 'email_unverified',
-        });
-        return NextResponse.json(
-          {
-            success: false,
-            error: { code: 'EMAIL_NOT_VERIFIED', message: 'メールアドレスの確認が必要です。' },
-            data: { email: user.email, resend_available: true },
-          },
-          { status: 403, headers: { 'Cache-Control': 'no-store' } },
-        );
-      }
+      // メール確認を必須にしない（D-40-02）。登録時に即時有効化されるため、ここで
+      // `email_verified` を判定しない。確認メール再送の内部実装（`resend-verification`）は
+      // 残置しているが、UI からの導線は廃止した。
 
       const userAgent = request.headers.get('user-agent') ?? '';
 

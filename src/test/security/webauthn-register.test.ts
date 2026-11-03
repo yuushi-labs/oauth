@@ -79,16 +79,15 @@ describe('POST /api/auth/passkey/register/options (§8.2)', () => {
     expect(body.error.code).toBe('REAUTH_REQUIRED');
   });
 
-  it('email 未確認なら 403 EMAIL_NOT_VERIFIED（D-34-02）', async () => {
+  it('email 未確認でも options を返す（D-40-02）', async () => {
     const user = await makeUser({ emailVerified: false });
     const session = sessionFor(user.id, { reauthed: true });
     userIds.push(user.id);
     sessionIds.push(session.id);
     await persistSession(session);
 
-    const { status, body } = await issueOptions(session);
-    expect(status).toBe(403);
-    expect(body.error.code).toBe('EMAIL_NOT_VERIFIED');
+    const { status } = await issueOptions(session);
+    expect(status).toBe(200);
   });
 });
 

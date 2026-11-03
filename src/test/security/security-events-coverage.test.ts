@@ -79,9 +79,10 @@ describe('Phase 5 security event coverage (2fa/**)', () => {
     }
   });
 
-  it('login は email 未確認の遮断で login_failed（reason=email_unverified）を記録する', () => {
+  it('login は email 確認を必須にしない（D-40-02）', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/app/api/auth/login/route.ts'), 'utf8');
-    expect(source).toContain("reason: 'email_unverified'");
+    expect(source).not.toContain('EMAIL_NOT_VERIFIED');
+    expect(source).not.toContain('emailVerified');
   });
 
   it('Passkey ルートが期待どおりのイベントを記録する（Phase 6）', () => {

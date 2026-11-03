@@ -27,14 +27,15 @@ vi.mock('next/headers', () => {
 
 import { DELETE as deleteAccount } from '@/app/api/auth/account/route';
 import { POST as requestDeletion } from '@/app/api/auth/account/delete/request/route';
-import { GET as confirmGet, POST as confirmPost } from '@/app/api/auth/account/delete/confirm/route';
+import { POST as confirmPost } from '@/app/api/auth/account/delete/confirm/route';
 
 /**
  * §8 / §24: アカウント削除は「強い再認証」を必須とし、削除時は
  * 全セッション・全トークン・Passkey・OIDC grant を失効させる。
  *
- * 実 PostgreSQL で Route Handler を直接叩く。3 経路（パスワード＋コード / Passkey /
- * メール確認）が同じ副作用に収束することを固定する。
+ * 実 PostgreSQL で Route Handler を直接叩く。ユーザー向けの 2 経路（パスワード＋コード /
+ * Passkey）が同じ副作用に収束することを固定する。メール確認による退会は UI から廃止した
+ * （D-40-04）が、トークン消費の内部実装は残置しているため、その回帰もここで確認する。
  */
 
 const appUrl = 'http://localhost:3000';
@@ -251,7 +252,7 @@ describe('Security - アカウント削除の強い再認証（§8 / §24）', (
   });
 });
 
-describe('Security - メール確認による退会（§24）', () => {
+describe('Security - メール確認による退会（内部実装・残置・D-40-05）', () => {
   it('確認リクエストでメールを送り、リンクの POST で削除が確定する', async () => {
     const { id, email } = await makeUser();
     const session = sessionFor(id, true);
@@ -263,13 +264,6 @@ describe('Security - メール確認による退会（§24）', () => {
       expect(requested.status).toBe(200);
       const sent = mail.outbox.find((entry) => entry.to === email);
       expect(sent?.tokenFromUrl).toBeTruthy();
-      expect(await isDeleted(id)).toBe(false);
-
-      // GET は状態を変えない（303 転送のみ・§25）
-      const getResponse = await confirmGet(
-        new NextRequest(`${appUrl}/api/auth/account/delete/confirm?token=${sent!.tokenFromUrl}`),
-      );
-      expect(getResponse.status).toBe(303);
       expect(await isDeleted(id)).toBe(false);
 
       const confirmed = await confirmPost(

@@ -8,17 +8,13 @@ import { APP_NAME } from '@/config/app';
 /**
  * POST /api/auth/2fa/setup — secret を発行し、QR と otpauth URI を返す。
  *
- * - `email_verified = true` のユーザーだけ許可する（D-33-06）。未確認は 403 EMAIL_NOT_VERIFIED。
  * - 有効化済みなら 409 TOTP_ALREADY_ENABLED（D-33-16）。未確認 secret は上書きを許す（再 setup）。
  * - secret を返すのはこの 1 回だけ（応答を保存し損ねたらやり直す）。
+ * - メール確認は要求しない（D-40-02。登録時に即時有効化されるため）。
  */
 export async function POST(request: NextRequest) {
   return withAuthPipeline(request, { requireAuth: true }, async ({ user }) => {
     if (!user) return failResponse('SESSION_EXPIRED', 'セッションの有効期限が切れました', 401);
-
-    if (!user.emailVerified) {
-      return failResponse('EMAIL_NOT_VERIFIED', 'メールアドレスの確認が必要です', 403);
-    }
 
     const existing = await findTotpByUserId(user.id);
     if (existing?.enabled) {

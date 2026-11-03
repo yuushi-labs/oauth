@@ -114,11 +114,11 @@ describe('Security - Unique Constraint (Enforcement)', () => {
     } catch (e: unknown) {
       const err = e as { code?: string };
       if (err?.code === '23505') {
-        message = '確認メールを送信しました';
+        message = 'アカウントを登録しました';
       }
     }
 
-    expect(message).toBe('確認メールを送信しました');
+    expect(message).toBe('アカウントを登録しました');
   });
 
   it('rejects duplicate username with unified message', async () => {
@@ -176,11 +176,11 @@ describe('Security - Unique Constraint (Enforcement)', () => {
     } catch (e: unknown) {
       const err = e as { code?: string };
       if (err?.code === '23505') {
-        message = '確認メールを送信しました';
+        message = 'アカウントを登録しました';
       }
     }
 
-    expect(message).toBe('確認メールを送信しました');
+    expect(message).toBe('アカウントを登録しました');
   });
 
   it('allows valid registration', async () => {
@@ -232,14 +232,14 @@ describe('Security - Unique Constraint (Enforcement)', () => {
         emailVerified: false,
         roleId: 'role_user',
       });
-      message = '確認メールを送信しました';
+      message = 'アカウントを登録しました';
     } catch (e: unknown) {
       const err = e as { code?: string };
       if (err?.code === '23505') {
-        message = '確認メールを送信しました';
+        message = 'アカウントを登録しました';
       }
     }
 
-    expect(message).toContain('確認');
+    expect(message).toContain('登録');
   });
 });

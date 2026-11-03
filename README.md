@@ -199,8 +199,8 @@ oauth/
 │  ├─ middleware.ts          # セキュリティヘッダー / CSP nonce
 │  ├─ app/
 │  │  ├─ layout.tsx / page.tsx / globals.css
-│  │  ├─ login/（+ social-confirm）/ register/ verify-email/
-│  │  ├─ forgot-password/ reset-password/ email-change/confirm/
+│  │  ├─ login/（+ social-confirm）/ register/
+│  │  │     # メール確認・再設定・変更の画面は Phase 10 で廃止（D-40-04。API は残置）
 │  │  ├─ settings/{account,security,password,sessions,appearance,connected-accounts,connected-apps,applications}
 │  │  ├─ admin/{users,audit-logs}/           # Phase 7.5 管理 UI
 │  │  └─ api/
@@ -523,9 +523,9 @@ TOTP 2 段階認証（RFC 6238）とリカバリーコードを実装しまし�
 | 総当たり | 2FA 入力は `twoFactor` レート制限（10/5 分・D-33-14） |
 | セッション窃取だけでの 2FA 解除 | 無効化・再生成は「パスワード再認証 ＋ 現在のコード」を要求（D-33-23）。判定順は「再認証 → コード」で、**失敗時にコードを消費しない**（T23） |
 | 保留セッションの横断利用 | `totp_pending = true` のセッションは既定で全 API を 403 `TOTP_REQUIRED`。例外は `challenge/verify` / `logout` / `logout-all` / `csrf` / `me` の 5 経路のみ（D-33-08 / D-33-26）。OIDC 認可も `totp_pending = false` を要求（D-33-09） |
-| 未確認 email のログイン | 403 `EMAIL_NOT_VERIFIED` でセッションを発行しない（D-33-21）。再送導線は未認証の `resend-verification` で確保（D-33-22） |
+| 未確認 email のログイン | メール認証を廃止したため `email_verified` では止めない（D-40-02。登録は即時有効化・D-40-01）。`EMAIL_NOT_VERIFIED` の分岐は削除済み |
 
-UI: `/settings/security` の 2FA カード（`two-factor-panel` / `recovery-codes-display` / `strong-reauth-dialog`）、`/login` の 2 段階（`totp-login-step`）、未確認 email の案内（`email-unverified-notice`）。QR は `qrcode` によるサーバ側 SVG 生成で、クライアントから `otpauth` / `qrcode` / `totp-crypto` を import しないことを静的テストで固定。
+UI: `/settings/security` の 2FA カード（`two-factor-panel` / `recovery-codes-display` / `strong-reauth-dialog`）、`/login` の 2 段階（`totp-login-step`）。未確認 email の案内（`email-unverified-notice`）は Phase 10 で削除。QR は `qrcode` によるサーバ側 SVG 生成で、クライアントから `otpauth` / `qrcode` / `totp-crypto` を import しないことを静的テストで固定。
 
 **実装で見つけた欠陥の修正**: (1) `INVALID_CODE` が 401 だったのを §8.8 どおり 400 に修正、(2) 有効化フローが `enabled=false` の保留行に対してコード検証できず `verify` が常に失敗していたため `allowPending` を追加、(3) 重複登録（email / username の一意制約違反）が 500 になっていた（Drizzle が driver エラーを `DrizzleQueryError` で包み SQLSTATE が `err.cause.code` に入るため `err.code` の判定が効かず）のを `src/lib/db/sql-state.ts#isUniqueViolation` で修正、(4) 応答文言に `-email` が混入し `register` の成功経路と重複経路で応答が異なる列挙オラクルになっていたのを正典（`src/messages/ja.ts`）に合わせて修正。
 

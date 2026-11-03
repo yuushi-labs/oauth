@@ -13,8 +13,8 @@ import { recordSecurityEvent } from '@/lib/auth/security-events';
 /**
  * POST /api/auth/passkey/register/options — 登録 options を発行する（§8.2）。
  *
- * **再認証必須**（D-34-08）＋ **email 確認済み・active のみ**（D-34-02）。
- * 既存 credential を `excludeCredentials` に入れて二重登録を防ぐ。
+ * **再認証必須**（D-34-08）。既存 credential を `excludeCredentials` に入れて二重登録を防ぐ。
+ * メール確認は要求しない（D-40-02。登録時に即時有効化されるため）。
  */
 export async function POST(request: NextRequest) {
   return withAuthPipeline(
@@ -35,11 +35,6 @@ export async function POST(request: NextRequest) {
       if (!rl.allowed) {
         if (rl.logRateLimited) await recordSecurityEvent('rate_limited', user.id, ip, userAgent, { scope: 'passkey' });
         return rateLimitResponse(rl.resetAt);
-      }
-
-      // 未確認 email は Passkey を登録できない（D-34-02）。
-      if (!user.emailVerified || user.status !== 'active') {
-        return failResponse('EMAIL_NOT_VERIFIED', 'メールアドレスの確認が必要です', 403);
       }
 
       const config = getWebauthnConfig();

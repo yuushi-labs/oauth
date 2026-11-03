@@ -8,10 +8,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { AuthShell } from '@/components/layout/auth-shell';
 import { PasswordStrength } from '@/components/auth/password-strength';
 import { TotpLoginStep } from '@/components/auth/totp-login-step';
-import { EmailUnverifiedNotice } from '@/components/auth/email-unverified-notice';
 import { apiClient, ApiClientError, resetCsrfCache } from '@/lib/api/client';
 import { errorMessage, m } from '@/messages/ja';
 import { TurnstileWidget } from '@/components/auth/turnstile-widget';
@@ -35,6 +42,7 @@ export function AuthForm({
   socialSlot,
   captchaSiteKey,
   captchaNonce,
+  supportDiscord,
 }: {
   mode: AuthMode;
   returnTo?: string;
@@ -56,15 +64,16 @@ export function AuthForm({
   captchaSiteKey?: string;
   /** ウィジェットが読む script に付ける CSP nonce（middleware が発行）。 */
   captchaNonce?: string;
+  /** パスワードを忘れたときの連絡先（Discord ハンドル）。サーバ側で解決して渡す（BUG-11）。 */
+  supportDiscord: string;
 }) {
   const router = useRouter();
   const [password, setPassword] = useState('');
   const [error, setError] = useState(oauthError ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
-  const [unverified, setUnverified] = useState<{ email: string; resendAvailable: boolean } | null>(
-    null,
-  );
+  // メールによる再設定を廃止したため、忘れた場合は Discord 連絡のモーダルを出す（D-40-03）。
+  const [forgotOpen, setForgotOpen] = useState(false);
   // ソフトリミット超過をサーバが知らせてきたらウィジェットを出す（CAPTCHA_REQUIRED）。
   const [captchaNeeded, setCaptchaNeeded] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
@@ -81,8 +90,9 @@ export function AuthForm({
       );
 
       if (isRegister) {
+        // 登録は即時有効化される。確認メール待ちの画面は廃止した（D-40-01）。
         setError('');
-        router.push('/verify-email');
+        router.replace('/');
         router.refresh();
         return;
       }
@@ -101,15 +111,6 @@ export function AuthForm({
         setCaptchaNeeded(true);
         setCaptchaToken(null);
         setError('');
-        return;
-      }
-      // 未確認 email は専用の案内（再送導線つき）を出す（D-33-21）。`data.email` が無ければ通常のエラー。
-      if (
-        caught instanceof ApiClientError &&
-        caught.code === 'EMAIL_NOT_VERIFIED' &&
-        caught.email
-      ) {
-        setUnverified({ email: caught.email, resendAvailable: caught.resendAvailable });
         return;
       }
       // 失敗はすべて既定メッセージで提示し、列挙攻撃に材料を渡さない（§46）
@@ -150,24 +151,13 @@ export function AuthForm({
   }
 
   const title = isRegister ? m('auth.registerTitle') : m('auth.loginTitle');
-  // 2FA ステップ / 未確認メール案内は自前の見出しを持つため、シェルの h1 は出さない。
-  const showTitle = !twoFactorRequired && !unverified;
+  // 2FA ステップは自前の見出しを持つため、シェルの h1 は出さない。
+  const showTitle = !twoFactorRequired;
 
   return (
     <AuthShell title={showTitle ? title : undefined}>
       {twoFactorRequired ? (
         <TotpLoginStep returnTo={returnTo} onBack={() => setTwoFactorRequired(false)} />
-      ) : unverified ? (
-        <EmailUnverifiedNotice
-          email={unverified.email}
-          resendAvailable={unverified.resendAvailable}
-          captchaSiteKey={captchaSiteKey}
-          captchaNonce={captchaNonce}
-          onBack={() => {
-            setUnverified(null);
-            setError('');
-          }}
-        />
       ) : (
         <>
           <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
@@ -267,9 +257,13 @@ export function AuthForm({
 
           <div className="mt-6 flex flex-col gap-2 text-sm text-muted-fg">
             {!isRegister && (
-              <Link className="underline" href="/forgot-password">
+              <button
+                type="button"
+                className="w-fit underline"
+                onClick={() => setForgotOpen(true)}
+              >
                 {m('auth.forgotLink')}
-              </Link>
+              </button>
             )}
             <p>
               {isRegister ? m('auth.hasAccountPrompt') : m('auth.noAccountPrompt')}{' '}
@@ -283,6 +277,24 @@ export function AuthForm({
           </div>
         </>
       )}
+
+      {/* メールによる再設定を廃止したため、忘れた場合は Discord へ連絡するモーダルを出す（D-40-03）。 */}
+      <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{m('auth.forgotDialogTitle')}</DialogTitle>
+            <DialogDescription>
+              {m('auth.forgotDialogBody', { discord: supportDiscord })}
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-muted-fg">{m('auth.forgotDialogHint')}</p>
+          <DialogFooter>
+            <Button type="button" onClick={() => setForgotOpen(false)}>
+              {m('common.close')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AuthShell>
   );
 }
