@@ -20,6 +20,13 @@ Phase 10（`docs/phase10-メール認証廃止-実装計画.md` / D-40-01〜06�
 
 ## 1. いちばん簡単な戻し方（推奨）
 
+> **⚠️ どの戻し方でも共通の前提**: revert は `src/lib/oidc/provider.ts` を
+> `email_verified = true`（＝保存値をそのまま返す形）に戻す。しかし migration `0024` で有効化された
+> 既存ユーザーと Phase 10 中に作成されたアカウントは、**メール所有確認を経ずに** `email_verified=true` を
+> 持っている。この集団を修復（所有確認を完了させるか OIDC 対象から除外）するまで、revert した
+> provider を本番へ出してはいけない。§4 と §2 の手順 1 を先に済ませること。間に合わせたい場合は、
+> revert 後も `claims.email_verified` を `false` に固定したままデプロイする（所有確認が済むまで）。
+
 PR #48 のマージコミットを revert する。ブランチを切ってから作業する。
 
 ```bash
@@ -118,6 +125,7 @@ git checkout 3972268^ -- src/app/forgot-password src/app/reset-password \
 - [ ] 未確認 email でログインすると 403 `EMAIL_NOT_VERIFIED` に戻っている
 - [ ] `/forgot-password` → メール受信 → `/reset-password` でパスワード再設定できる
 - [ ] メール送信の環境変数（`RESEND_API_KEY` / `EMAIL_FROM`）が設定済み（未設定だと送信で失敗する）
+- [ ] **（前提）** migration `0024` 対象＋Phase 10 中のアカウントの所有確認（または OIDC 対象からの除外）が完了している。未完了なら `email_verified` は `false` 固定のままにする
 - [ ] OIDC の `email_verified` を戻した場合、`oidc-flow` / `oidc-interop-go` / `client-console` が green
 
 ---
