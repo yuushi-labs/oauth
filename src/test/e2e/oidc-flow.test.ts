@@ -245,7 +245,8 @@ describe('OIDC E2E — Authorization Code + PKCE against a real RP library', () 
     const claims = userinfo.json<Record<string, unknown>>();
     expect(claims.sub).toBe(payload.sub);
     expect(claims.email).toBe(email);
-    expect(claims.email_verified).toBe(true);
+    // メール所有確認を廃止したため email_verified は常に false（D-40-06）。
+    expect(claims.email_verified).toBe(false);
     expect(claims.preferred_username).toBe(username);
 
     const replay = await httpRequest(new URL('/oauth2/token', issuer).toString(), {

@@ -198,8 +198,12 @@ async function createProvider(issuer: string, jwksJson?: string, adapterKey?: st
             }
           }
           if (granted.has('email')) {
+            // メール送受信の廃止（Phase 10 / D-40-06）により、登録時のメール所有確認手段が無い。
+            // `email_verified=true` は「所有確認済み」の標準的な意味（OIDC Core）を持ち、未確認の
+            // アドレスに付けるとメール一致で照合する RP のアカウント乗っ取りに繋がる。よって
+            // `email` は本人が設定した識別子として返しつつ、`email_verified` は常に false にする。
             claims.email = user.email;
-            claims.email_verified = true;
+            claims.email_verified = false;
           }
           return claims;
         },

@@ -183,7 +183,8 @@ describe('E2E - console connection test (real HTTP against the provider)', () =>
     expect(result.scopes).toEqual(expect.arrayContaining(['openid', 'profile', 'email']));
     expect(result.claims.sub).toMatch(/^sub_/u);
     expect(result.claims.email).toBe(email);
-    expect(result.claims.email_verified).toBe(true);
+    // メール所有確認を廃止したため email_verified は常に false（D-40-06）。
+    expect(result.claims.email_verified).toBe(false);
     expect(result.claims.preferred_username).toBe(username);
     expect(JSON.stringify(result)).not.toContain(clientSecret);
   }, 60_000);
