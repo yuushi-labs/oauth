@@ -43,6 +43,7 @@ export function AuthForm({
   captchaSiteKey,
   captchaNonce,
   supportDiscord,
+  registered,
 }: {
   mode: AuthMode;
   returnTo?: string;
@@ -66,6 +67,11 @@ export function AuthForm({
   captchaNonce?: string;
   /** パスワードを忘れたときの連絡先（Discord ハンドル）。サーバ側で解決して渡す（BUG-11）。 */
   supportDiscord: string;
+  /**
+   * 登録直後の案内（`/login?registered=1`）。**サーバ側で searchParams から解決して渡す**
+   * （クライアントで `useSearchParams` を使うとストリーミングで hydration がずれやすい・BUG-11）。
+   */
+  registered?: boolean;
 }) {
   const router = useRouter();
   const [password, setPassword] = useState('');
@@ -90,9 +96,10 @@ export function AuthForm({
       );
 
       if (isRegister) {
-        // 登録は即時有効化される。確認メール待ちの画面は廃止した（D-40-01）。
+        // 登録は即時有効化されるが `register` はセッションを発行しないため、`/` ではなく
+        // ログイン画面へ送り、登録完了を案内する（確認メール待ちの画面は廃止・D-40-01）。
         setError('');
-        router.replace('/');
+        router.replace('/login?registered=1');
         router.refresh();
         return;
       }
@@ -160,6 +167,12 @@ export function AuthForm({
         <TotpLoginStep returnTo={returnTo} onBack={() => setTwoFactorRequired(false)} />
       ) : (
         <>
+          {/* 登録直後の案内（`/login?registered=1`）。エラーが出たら優先して隠す。 */}
+          {registered && !error && (
+            <Alert variant="success" className="mb-4">
+              <AlertDescription>{m('auth.registerDone')}</AlertDescription>
+            </Alert>
+          )}
           <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
             {isRegister ? (
               <>

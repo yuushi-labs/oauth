@@ -24,6 +24,7 @@
 | D-40-03 | パスワード忘れ | ログイン画面の導線を**Discord 連絡モーダル**に差し替える。連絡先は `NEXT_PUBLIC_SUPPORT_DISCORD`（既定 `@yuushi_2024`）。本人確認のうえ運営が対応する | メール経由のセルフサービス復旧を提供できないため（§54 / §55 の手動復旧フローに相当） |
 | D-40-04 | メール系 UI の廃止 | `/forgot-password`・`/reset-password`・`/verify-email`・`/email-change/confirm`・`/account/delete/confirm` の**画面を削除**し 404 にする。`/settings/security` のメール変更カード、`/settings/account` の「メール確認による退会」も削除。本人確認はパスワード / 2FA / Passkey のみ | メールを本人確認・復旧手段にしない方針を UI でも徹底する |
 | D-40-05 | 内部実装の残置 | API / lib（`verify-email`、`email/change/confirm`、`account/delete/confirm`、`password/forgot`・`reset`、`resend-verification`、メール送信テンプレート）は**残置**する。画面へ転送する GET ハンドラのみ撤去し、POST のトークン消費ロジックは保持する | メール復旧時に再有効化できるようにする。ただし UI からの導線が無いため到達不能 |
+| D-40-06 | OIDC の `email_verified` | **既知の制約として許容**する。`email` scope と `email_verified: true` claim は据え置く。メール所有確認の手段が無くなったため、`email_verified` は「メール所有の証明」ではなく「**`users.email` を本人がアカウント識別子として設定した値**」を意味する。`email` scope を要求する RP は同意画面で明示的に共有に同意する必要がある（§69.5） | `email` scope を落とすと自作サービスの連携が壊れる（ユーザー要望「サイトからはなくすだけ」を超える）。外部 RP がメール一致で自動連携する設計かどうかは本リポジトリの外の関心事で、本システムが保証できるのは上記の意味まで。**メールを復旧したら `email_verified` の所有確認を戻すこと**（本計画の差分を戻す） |
 
 ## 実装内容
 
@@ -32,7 +33,7 @@
 - `src/app/api/auth/register/route.ts` — `email_verified: true` / `status: 'active'` で作成。応答文言は `m('auth.registerDone')`
 - `src/app/api/auth/login/route.ts` — 403 `EMAIL_NOT_VERIFIED` 分岐を削除
 - `src/app/api/auth/2fa/setup`・`passkey/register/options`・`passkey/login/verify`・`password/set` — `email_verified` のゲートを削除
-- `src/app/auth-form.tsx` — 登録後の確認メール案内を削除。忘れダイアログを追加（`supportDiscord` を props で受ける・BUG-11）
+- `src/app/auth-form.tsx` — 登録後は `/login?registered=1` へ遷移し `auth.registerDone` を表示（`register` はセッションを発行しないため `/` では認証ガードで弾かれる）。忘れダイアログを追加（`supportDiscord` / `registered` をサーバ側で解決して props で受ける・BUG-11）
 - `src/app/{login,register}/page.tsx` — `supportDiscord={SUPPORT_DISCORD}` を渡す
 - `src/components/settings/{account-delete-panel,security-overview}.tsx` / `src/app/settings/{account,security}/page.tsx` — メール系の本人確認・変更 UI を削除
 - `src/middleware.ts` — `no-store` 対象から廃止画面を外す（`/login`・`/register`・`/settings` のみ）

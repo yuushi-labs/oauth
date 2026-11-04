@@ -32,8 +32,8 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
   変更時は `src/test/security/*` の SessionData フィクスチャ（7 ファイル）を確認する。
 - `src/lib/auth/rate-limit.ts` — PostgreSQL が唯一の正本（D-05）。`src/config/rate-limits.ts` に値、
   `src/lib/auth/rate-limit-keys.ts` にキー生成を集約（コード散在禁止）。
-- `src/lib/db/schema.ts` — 全テーブル。migration は `drizzle/`（up のみ）。最新は `0023`。
-  データ修復 migration も許容する（例: `0020` タイムゾーン既定、`0023` 旧 role id 統合）。
+- `src/lib/db/schema.ts` — 全テーブル。migration は `drizzle/`（up のみ）。最新は `0024`。
+  データ修復 migration も許容する（例: `0020` タイムゾーン既定、`0023` 旧 role id 統合、`0024` メール認証廃止に伴う `pending_email` の有効化）。
 - `src/lib/db/client.ts` + `src/lib/db/ssl.ts` — DB 接続。TLS は `DATABASE_SSL_MODE`
   （`disable` 既定 / `require` / `verify-full`）で決める。**`NODE_ENV` では切り替えない**
   （本番で localhost の自己署名 DB に繋げなくなる・BUG-21）。`DATABASE_URL` の `sslmode` が優先。
@@ -261,8 +261,9 @@ Phase 5 で得た知見（次フェーズでも効くもの）:
   `challenge/verify` / `logout` / `logout-all` / `csrf` / `me` の 5 経路だけで、`2fa-static-checks.test.ts` が固定する。
 - 無効化・再生成は「強い再認証（パスワード＋コード）」。判定順は**再認証 → コード**で、失敗時にコードを消費しない。
   検証器は `src/lib/auth/strong-reauth.ts` の配列に足す（Phase 6 の Passkey は 1 件足すだけ）。
-- 未確認 email は 403 `EMAIL_NOT_VERIFIED` でログインさせない（D-33-21）。再送は未認証の
-  `POST /api/auth/resend-verification`（`requireAuth: false`・応答は常に同一・D-33-22）。
+- ~~未確認 email は 403 `EMAIL_NOT_VERIFIED` でログインさせない（D-33-21）~~ → **Phase 10 で廃止**（D-40-02）。
+  登録は即時有効化されるため `email_verified` ではログインを止めない。再送用の
+  `POST /api/auth/resend-verification`（`requireAuth: false`・応答は常に同一・D-33-22）は内部実装として残置（D-40-05）。
 - 2FA 系のレート制限キーは `rateLimitKeys.twoFactorUser`、値は `RATE_LIMITS.twoFactor`（10/5 分）。
 - **Drizzle は driver エラーを `DrizzleQueryError` で包む**ので SQLSTATE は `err.cause.code` にある。
   `err.code` だけを見ると `23505`（一意制約違反）を取り逃し、重複登録が 500 になる。

@@ -421,7 +421,7 @@ export const messages = {
         '2 段階認証が有効になっていないため、コードでの確認はできません。Passkey を使ってください。',
       passkeyRequired: 'Passkey が登録されていないため、Passkey での確認はできません。',
       noMethod:
-        '本人確認に使える手段がありません。先にパスワードの設定、2 段階認証の有効化、または Passkey の登録を行ってください。',
+        '本人確認に使える手段がありません。先に 2 段階認証を有効にするか、Passkey を登録してください。',
       confirm: '削除する',
       confirmTitle: 'アカウントを削除しますか？',
       cancelled: '削除を中止しました。',
