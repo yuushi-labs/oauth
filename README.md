@@ -37,6 +37,8 @@
 | `deploy/cloudflare-tunnel/README.md` + `install.sh` | Cloudflare Tunnel 方式のデプロイ手順と自動化スクリプト（Nginx / 証明書 / ポート開放が不要） |
 | `docs/phase9-バックアップ復元手順.md` | バックアップ暗号化・復元・復元テストの手順（§53） |
 | `deploy/log-security-checklist.md` | 認証トークン付き URL のログ漏洩対策チェックリスト（§17.2.1） |
+| `docs/phase10-メール認証廃止-実装計画.md` | メール送受信による認証の廃止（M10。D-40-01〜06） |
+| `docs/phase10-メール認証復旧手順.md` | 廃止したメール認証の戻し方（PR #48 の revert・不可逆点・確認項目） |
 | `docs/phase-verification-report-2026-10-26.md` | Phase 7 完了時点の検証レポート |
 | `.env.example` | 環境変数の定義 |
 

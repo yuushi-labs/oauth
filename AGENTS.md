@@ -165,7 +165,9 @@ Phase 10 の要点（メール送受信による認証の廃止）:
 - **データ修復 migration `0024_email_auth_removal.sql`**: 既存の `pending_email` ユーザーを一度だけ有効化する
   （新規 DB では対象 0 件）。`scripts/verify-migrations.ts` の down 判定は **SQL コメント行を無視**するよう修正した
   （コメント付きのデータ migration を up のときだけ成功させ、down で誤検知しないため）。
-- メールが復旧したら、廃止した画面の再作成と `email_verified` ゲートの再有効化で戻せる（Phase 10 差分を戻す）。
+- メールが復旧したら、**PR #48 を revert する**ことで概ね戻せる（削除した画面・API・ゲートはすべて git に残っている）。
+  手順と不可逆点（migration `0024` のデータ変更・OIDC `email_verified`）は `docs/phase10-メール認証復旧手順.md` を参照。
+  設定スイッチ（フラグ）は無く、戻す手段は git の巻き戻しのみ。
 
 Phase 9 の要点（運用デプロイ）:
 - **CAPTCHA（Turnstile）実接続**: サーバ側 `src/lib/auth/captcha.ts` の `TurnstileCaptchaProvider` が
