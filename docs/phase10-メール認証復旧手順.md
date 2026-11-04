@@ -61,12 +61,20 @@ git switch -c revert/phase10-restore-email-auth main
 git revert 3972268        # Phase 10 本体（D-40-01〜05）だけを巻き戻す
 ```
 
-`f539312`（OIDC `email_verified` を常に false にする変更）は**メール復旧時に一緒に戻す**。
-所有確認ができるようになるため、`src/lib/oidc/provider.ts` の `claims.email_verified = false;` を
-`= true;` に戻し、同意画面（`scripts/server.ts` の `claimLabels.email`）の文言も戻す。テストは
-`oidc-flow` / `oidc-interop-go` / `client-console` の期待値（`false` → `true`）を戻す。
+`f539312`（OIDC `email_verified` を常に false にする変更）は、**次の順で**戻す。順序が逆だと
+「所有確認が済んでいないのに `email_verified=true` を返す」状態を一瞬でも作ってしまう。
+
+1. **データ修復**: migration `0024` で有効化された既存ユーザーと、Phase 10 中に作成された
+   アカウントについて、メール所有確認を完了させる（または OIDC の対象から除外する）まで、
+   `email_verified` を `true` に戻さない。§4 の不可逆点を先に手当てする。
+2. **実装の復元**: `src/lib/oidc/provider.ts` の claims callback を、固定値ではなく
+   **ユーザーごとに永続化された確認状態**（`users.email_verified`）を返す形に戻す。
+   Phase 10 では `claims.email_verified = false;` に固定していた。
+3. **表示・テストの更新**: 同意画面（`scripts/server.ts` の `claimLabels.email`）の文言と、
+   `oidc-flow` / `oidc-interop-go` / `client-console` の期待値を更新する。
 
 > D-40-06 は「メールを復旧したら所有確認を戻すこと」を明記している（計画 §決定事項）。
+> 手順 1（データ修復）が済むまでは `email_verified` を `true` に戻さないこと。
 
 ---
 
@@ -75,8 +83,9 @@ git revert 3972268        # Phase 10 本体（D-40-01〜05）だけを巻き戻�
 画面だけ戻したい / 登録だけ戻したい場合は、削除前のファイルを git から取り出して当てる。
 
 ```bash
-# 削除した画面を取り出す（1 ファイルずつ）
-git show 3972268^:src/app/forgot-password/page.tsx > src/app/forgot-password/page.tsx
+# 削除した画面を取り出す（1 ファイルずつ）。git restore は親ディレクトリも作るので、
+# 削除済みのパスへでも `>` リダイレクトのように失敗しない。
+git restore --source=3972268^ -- src/app/forgot-password/page.tsx
 # ディレクトリごと戻す場合
 git checkout 3972268^ -- src/app/forgot-password src/app/reset-password \
   src/app/verify-email src/app/email-change/confirm src/app/account/delete/confirm \
