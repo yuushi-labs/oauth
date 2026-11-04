@@ -162,9 +162,17 @@ function statementHash(sql: string): string {
  */
 function downStatementsFor(file: string, sql: string): string[] {
   const statements: string[] = [];
+  // Data migrations carry explanatory `--` comments. drizzle-kit applies them fine, but the
+  // classifier below matches on the leading keyword, so strip comment-only lines first.
+  const stripComments = (part: string): string =>
+    part
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('--'))
+      .join('\n')
+      .trim();
   const statementsInOrder = sql
     .split('--> statement-breakpoint')
-    .map((part) => part.trim())
+    .map(stripComments)
     .filter(Boolean);
 
   for (const statement of statementsInOrder) {

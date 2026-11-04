@@ -4,6 +4,7 @@ import { AuthForm } from '@/app/auth-form';
 import { LoginButtons } from '@/components/auth/login-buttons';
 import { m, type UiMessagePath } from '@/messages/ja';
 import { turnstileSiteKey } from '@/lib/auth/captcha-config';
+import { SUPPORT_DISCORD } from '@/config/app';
 
 export const metadata: Metadata = { title: m('auth.loginTitle') };
 
@@ -16,9 +17,9 @@ const OAUTH_ERROR_PATHS: readonly UiMessagePath[] = [
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ returnTo?: string; error?: string }>;
+  searchParams: Promise<{ returnTo?: string; error?: string; registered?: string }>;
 }) {
-  const { returnTo, error } = await searchParams;
+  const { returnTo, error, registered } = await searchParams;
   const oauthError = OAUTH_ERROR_PATHS.includes(error as UiMessagePath)
     ? m(error as UiMessagePath)
     : undefined;
@@ -38,6 +39,8 @@ export default async function LoginPage({
       socialSlot={<LoginButtons returnTo={returnTo} />}
       captchaSiteKey={captchaSiteKey}
       captchaNonce={captchaNonce}
+      supportDiscord={SUPPORT_DISCORD}
+      registered={registered === '1'}
     />
   );
 }

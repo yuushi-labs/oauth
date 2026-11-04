@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import { AuthForm } from '@/app/auth-form';
 import { m } from '@/messages/ja';
 import { turnstileSiteKey } from '@/lib/auth/captcha-config';
+import { SUPPORT_DISCORD } from '@/config/app';
 
 export const metadata: Metadata = { title: m('auth.registerTitle') };
 
@@ -11,6 +12,11 @@ export default async function RegisterPage() {
   const captchaSiteKey = turnstileSiteKey();
   const captchaNonce = (await headers()).get('x-nonce') ?? undefined;
   return (
-    <AuthForm mode="register" captchaSiteKey={captchaSiteKey} captchaNonce={captchaNonce} />
+    <AuthForm
+      mode="register"
+      captchaSiteKey={captchaSiteKey}
+      captchaNonce={captchaNonce}
+      supportDiscord={SUPPORT_DISCORD}
+    />
   );
 }

@@ -1,9 +1,7 @@
 import Link from 'next/link';
-import { CircleCheck, ShieldAlert } from 'lucide-react';
 import { BadgeCheck, KeyRound, Link2, MonitorSmartphone, Plug } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TwoFactorPanel } from '@/components/settings/two-factor-panel';
-import { EmailChangePanel } from '@/components/settings/email-change-panel';
 import { PasskeyPanel, type PasskeyRow } from '@/components/settings/passkey-panel';
 import { formatLocalDateTime } from '@/lib/util/datetime';
 import type { SessionRow } from '@/components/settings/session-list';
@@ -15,24 +13,8 @@ import { messages } from '@/messages/ja';
 
 const EVENT_LABELS: Record<string, string> = messages.ui.security.eventLabels;
 
-/** 状態の提示は「色＋アイコン＋テキスト」。未実装領域は如实表示して導線を出すな（D-30-16）。 */
-function StateBadge({ enabled }: { enabled: boolean }) {
-  return enabled ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-0.5 text-xs font-semibold text-fg">
-      <CircleCheck aria-hidden className="size-3.5 text-success" />
-      {m('security.emailVerified')}
-    </span>
-  ) : (
-    <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-semibold text-fg">
-      <ShieldAlert aria-hidden className="size-3.5 text-warning" />
-      {m('security.emailUnverified')}
-    </span>
-  );
-}
-
 export function SecurityOverview({
   email,
-  emailVerified,
   passwordChangedAt,
   sessions,
   events,
@@ -45,7 +27,6 @@ export function SecurityOverview({
   passwordSet,
 }: {
   email: string;
-  emailVerified: boolean;
   passwordChangedAt: string;
   sessions: SessionRow[];
   events: EventRow[];
@@ -81,7 +62,7 @@ export function SecurityOverview({
         </CardContent>
       </Card>
 
-      {/* 2. メールアドレス（表示＋変更フォーム）*/}
+      {/* 2. メールアドレス（表示のみ。メール確認・変更は廃止・D-40-04）*/}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
@@ -89,12 +70,8 @@ export function SecurityOverview({
             {m('security.email')}
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3 pt-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm">{email}</p>
-            <StateBadge enabled={emailVerified} />
-          </div>
-          <EmailChangePanel currentEmail={email} />
+        <CardContent className="pt-0">
+          <p className="text-sm">{email}</p>
         </CardContent>
       </Card>
 

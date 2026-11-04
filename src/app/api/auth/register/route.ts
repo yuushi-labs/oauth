@@ -3,14 +3,11 @@ import { withAuthPipeline, failResponse, handleSuccess, rateLimitResponse } from
 import { hashPassword } from '@/lib/auth/password';
 import { strongPasswordSchema } from '@/lib/auth/strength';
 import { checkBreached } from '@/lib/auth/breached';
-import { generateToken } from '@/lib/auth/tokens/generate';
-import { insertEmailVerificationToken } from '@/lib/db/queries/tokens';
 import { createUser } from '@/lib/db/queries/users';
 import { isUniqueViolation } from '@/lib/db/sql-state';
 import { recordSecurityEvent } from '@/lib/auth/security-events';
 import { rateLimiter } from '@/lib/auth/rate-limit';
 import { RATE_LIMITS } from '@/config/rate-limits';
-import { sendVerificationEmail } from '@/lib/auth/email/templates';
 import { newId } from '@/lib/util/id';
 import { z } from 'zod';
 import { emailSchema } from '@/lib/validate/email';
@@ -19,7 +16,7 @@ import { rateLimitKeys } from '@/lib/auth/rate-limit-keys';
 import { getRequestClientIp } from '@/lib/auth/session';
 import { verifyCaptchaIfRequired } from '@/lib/auth/captcha';
 import { ApiError } from '@/lib/errors';
-import { deliverEmailSafely } from '@/lib/auth/email/deliver';
+import { m } from '@/messages/ja';
 
 const registerSchema = z.object({
   email: emailSchema,
@@ -27,6 +24,14 @@ const registerSchema = z.object({
   password: strongPasswordSchema,
   captchaToken: z.string().optional(),
 });
+
+/**
+ * メール送受信による認証を廃止したため、登録は**確認メールを送らずに即時有効化**する
+ * （D-40-01）。`email_verified` は true・`status` は `active` で作る。確認メール送信・
+ * トークン発行の内部実装（`sendVerificationEmail` / `insertEmailVerificationToken` 等）は
+ * 復旧用に残置している（`/api/auth/verify-email` も同様）。
+ */
+const REGISTERED_MESSAGE = m('auth.registerDone');
 
 export async function POST(request: NextRequest) {
   return withAuthPipeline(
@@ -65,42 +70,21 @@ export async function POST(request: NextRequest) {
           email,
           username,
           passwordHash,
-          status: 'pending_email',
-          emailVerified: false,
+          status: 'active',
+          emailVerified: true,
           roleId: 'role_user',
         });
       } catch (e: unknown) {
         if (isUniqueViolation(e)) {
           // 列挙攻撃対策: 成功時と同じメッセージを返す
-          return handleSuccess({ message: '確認メールを送信しました' });
+          return handleSuccess({ message: REGISTERED_MESSAGE });
         }
         throw e;
       }
 
-      const { raw, hash, id } = generateToken();
-      const tokenTTL = 30 * 60 * 1000;
-      await insertEmailVerificationToken({
-        id,
-        userId,
-        tokenHash: hash,
-        purpose: 'email_verification',
-        expiresAt: new Date(Date.now() + tokenTTL),
-      });
-
-      const url = `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/auth/verify-email?token=${raw}`;
-      // Best-effort: a mail failure must not turn this into a 500, and the response message
-      // must stay identical to the success path so account enumeration stays impossible (§46).
-      await deliverEmailSafely({
-        kind: 'register_verification',
-        userId,
-        ip,
-        userAgent: request.headers.get('user-agent') ?? '',
-        send: () => sendVerificationEmail(email, url),
-      });
-
       await recordSecurityEvent('register', userId, ip, request.headers.get('user-agent') ?? '');
 
-      return handleSuccess({ message: '確認メールを送信しました' });
+      return handleSuccess({ message: REGISTERED_MESSAGE });
     },
   );
 }

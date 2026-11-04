@@ -87,12 +87,11 @@ describe('Security - authentication (§48)', () => {
     expect((await response.json()).error.code).toBe('INVALID_CREDENTIALS');
   });
 
-  it('email 未確認は 403 EMAIL_NOT_VERIFIED で止まる', async () => {
+  it('email 確認は必須ではない（D-40-02）', async () => {
     const unverified = await makeFixtureUser({ kind: 'unverified' });
     userIds.push(unverified.id);
     const response = await login(loginRequest(unverified.email, STRONG_PASSWORD));
-    expect(response.status).toBe(403);
-    expect((await response.json()).error.code).toBe('EMAIL_NOT_VERIFIED');
+    expect(response.status).toBe(200);
   });
 
   it('停止中アカウントは 403 で止まる', async () => {

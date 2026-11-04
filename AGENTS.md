@@ -32,8 +32,8 @@ Tailwind v4。自作サービス向け OIDC Provider も同梱（`oidc-provider`
   変更時は `src/test/security/*` の SessionData フィクスチャ（7 ファイル）を確認する。
 - `src/lib/auth/rate-limit.ts` — PostgreSQL が唯一の正本（D-05）。`src/config/rate-limits.ts` に値、
   `src/lib/auth/rate-limit-keys.ts` にキー生成を集約（コード散在禁止）。
-- `src/lib/db/schema.ts` — 全テーブル。migration は `drizzle/`（up のみ）。最新は `0023`。
-  データ修復 migration も許容する（例: `0020` タイムゾーン既定、`0023` 旧 role id 統合）。
+- `src/lib/db/schema.ts` — 全テーブル。migration は `drizzle/`（up のみ）。最新は `0024`。
+  データ修復 migration も許容する（例: `0020` タイムゾーン既定、`0023` 旧 role id 統合、`0024` メール認証廃止に伴う `pending_email` の有効化）。
 - `src/lib/db/client.ts` + `src/lib/db/ssl.ts` — DB 接続。TLS は `DATABASE_SSL_MODE`
   （`disable` 既定 / `require` / `verify-full`）で決める。**`NODE_ENV` では切り替えない**
   （本番で localhost の自己署名 DB に繋げなくなる・BUG-21）。`DATABASE_URL` の `sslmode` が優先。
@@ -141,10 +141,31 @@ PR を作ったら**マージまでが 1 単位**。次の順で進める。
   唯一の切替で、既定 false。`EmailParams.html` は任意。復旧は環境変数を `true` にするだけ（テンプレートは
   `messages.emails` に残置）。新しいメール種別は `text` を「一文 ＋ リンク」で書く（BUG-23）。
 
-## 現在の到達点（2026-10-29 時点）
+## 現在の到達点（2026-11-03 時点）
 
-M0〜M9 完了（Phase 0 / 1 / 2 / 2.5 / 2.6 / 3 / 4 / 4-B / 5 / 6 / 7 / 7.5 / 7.6 / 8 / **9**）。**M8 の残件（運用デプロイ）まで完了**。
+M0〜M9 完了（Phase 0 / 1 / 2 / 2.5 / 2.6 / 3 / 4 / 4-B / 5 / 6 / 7 / 7.5 / 7.6 / 8 / 9）に加え、
+**Phase 10（メール送受信による認証の廃止）**まで完了。**M8 の残件（運用デプロイ）まで完了**。
 Phase 9 の計画は `docs/phase9-運用デプロイ-実装計画.md`（D-39-01〜D-39-08）、実行タスクは `docs/phase9-実行Todo.md`。
+Phase 10 の計画は `docs/phase10-メール認証廃止-実装計画.md`（D-40-01〜D-40-05）。
+
+Phase 10 の要点（メール送受信による認証の廃止）:
+- **メールによる認証はサイトから廃止**（D-40-04）。`/forgot-password`・`/reset-password`・`/verify-email`・
+  `/email-change/confirm`・`/account/delete/confirm` の**画面は削除**（404）。`/settings/security` のメール変更カード、
+  `/settings/account` の「メール確認による退会」も削除。**本人確認はパスワード入力 / 2FA / Passkey に限定**する。
+- **登録は即時有効化**（D-40-01）。`register` は確認メールを送らず `email_verified=true` / `status='active'` で作る。
+  `login` の 403 `EMAIL_NOT_VERIFIED` 分岐、`2fa/setup`・`passkey/register/options`・`passkey/login/verify`・
+  `password/set` の `email_verified` ゲートを削除（D-40-02）。**OAuth の「検証済み email が無ければ登録しない」
+  （§11.2 / D-31-08）は維持**する（provider 側の保証は使う）。
+- **パスワード忘れは Discord 連絡モーダル**（D-40-03）。`auth-form.tsx` の導線を `SUPPORT_DISCORD`
+  （`NEXT_PUBLIC_SUPPORT_DISCORD`・既定 `@yuushi_2024`・`src/config/app.ts`）で表示する。site key 同様、
+  **サーバ側で解決して props で渡す**（クライアントで `process.env` を読むと hydration mismatch・BUG-11）。
+- **内部実装は残置**（D-40-05）。`verify-email`・`email/change/confirm`・`account/delete/confirm`・
+  `password/forgot`・`password/reset`・`resend-verification`・メール送信テンプレートは残す。ただし
+  **画面へ 303 転送する GET は撤去**し、POST のトークン消費ロジックのみ保持する（UI からの導線は無い）。
+- **データ修復 migration `0024_email_auth_removal.sql`**: 既存の `pending_email` ユーザーを一度だけ有効化する
+  （新規 DB では対象 0 件）。`scripts/verify-migrations.ts` の down 判定は **SQL コメント行を無視**するよう修正した
+  （コメント付きのデータ migration を up のときだけ成功させ、down で誤検知しないため）。
+- メールが復旧したら、廃止した画面の再作成と `email_verified` ゲートの再有効化で戻せる（Phase 10 差分を戻す）。
 
 Phase 9 の要点（運用デプロイ）:
 - **CAPTCHA（Turnstile）実接続**: サーバ側 `src/lib/auth/captcha.ts` の `TurnstileCaptchaProvider` が
@@ -240,8 +261,9 @@ Phase 5 で得た知見（次フェーズでも効くもの）:
   `challenge/verify` / `logout` / `logout-all` / `csrf` / `me` の 5 経路だけで、`2fa-static-checks.test.ts` が固定する。
 - 無効化・再生成は「強い再認証（パスワード＋コード）」。判定順は**再認証 → コード**で、失敗時にコードを消費しない。
   検証器は `src/lib/auth/strong-reauth.ts` の配列に足す（Phase 6 の Passkey は 1 件足すだけ）。
-- 未確認 email は 403 `EMAIL_NOT_VERIFIED` でログインさせない（D-33-21）。再送は未認証の
-  `POST /api/auth/resend-verification`（`requireAuth: false`・応答は常に同一・D-33-22）。
+- ~~未確認 email は 403 `EMAIL_NOT_VERIFIED` でログインさせない（D-33-21）~~ → **Phase 10 で廃止**（D-40-02）。
+  登録は即時有効化されるため `email_verified` ではログインを止めない。再送用の
+  `POST /api/auth/resend-verification`（`requireAuth: false`・応答は常に同一・D-33-22）は内部実装として残置（D-40-05）。
 - 2FA 系のレート制限キーは `rateLimitKeys.twoFactorUser`、値は `RATE_LIMITS.twoFactor`（10/5 分）。
 - **Drizzle は driver エラーを `DrizzleQueryError` で包む**ので SQLSTATE は `err.cause.code` にある。
   `err.code` だけを見ると `23505`（一意制約違反）を取り逃し、重複登録が 500 になる。

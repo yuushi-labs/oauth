@@ -380,7 +380,7 @@ async function interaction(
     const claimLabels: Record<string, string> = {
       openid: 'このサービスだけが使用できる不透明なID (sub)',
       profile: '表示名 (name)・ユーザー名 (preferred_username)・HTTPSのプロフィール画像 (picture)',
-      email: '確認済みメールアドレス (email)・確認済みである与否 (email_verified)',
+      email: 'メールアドレス (email)。メール所有の確認は行っていないため email_verified は常に false',
     };
     const scopeList = scopes
       .map(

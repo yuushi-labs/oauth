@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { withAuthPipeline, failResponse, handleSuccess } from '@/lib/api/utils';
 import { hashToken } from '@/lib/auth/tokens/generate';
 import { verifyAndConsumeToken } from '@/lib/auth/tokens/verify';
@@ -11,15 +11,10 @@ const verifySchema = z.object({
   token: z.string().min(1),
 });
 
-// Email clients and security scanners open links with GET. Keep that request
-// non-mutating and let the user confirm on the application page.
-export async function GET(request: NextRequest) {
-  const token = request.nextUrl.searchParams.get('token');
-  const destination = new URL('/verify-email', request.url);
-  if (token) destination.searchParams.set('token', token);
-  return NextResponse.redirect(destination, 303);
-}
-
+/**
+ * メール確認の内部実装（残置・D-40-05）。メール送受信の廃止に伴い画面と GET 転送は撤去したが、
+ * 将来メールを復旧したときのためにトークン消費のロジックは残す。現在は UI からの導線が無い。
+ */
 export async function POST(request: NextRequest) {
   return withAuthPipeline(
     request,

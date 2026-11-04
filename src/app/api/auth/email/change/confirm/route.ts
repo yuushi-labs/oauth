@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { withAuthPipeline, failResponse, handleSuccess } from '@/lib/api/utils';
 import { hashToken } from '@/lib/auth/tokens/generate';
 import { verifyAndConsumeToken } from '@/lib/auth/tokens/verify';
@@ -18,18 +18,10 @@ const confirmSchema = z.object({
 });
 
 /**
- * BUG-2: the confirmation mail points at this endpoint, and mail clients open links with
- * GET. Previously only POST existed, so every confirmation link returned 405. This GET
- * stays non-mutating (§25) and forwards the user to the screen that performs the POST,
- * exactly like /api/auth/verify-email does.
+ * メールアドレス変更の確定（内部実装・残置・D-40-05）。メール送受信の廃止に伴い画面と
+ * GET 転送は撤去したが、トークン消費・衝突検査・通知のロジックは将来の復旧用に残す。
+ * 現在は UI からの導線が無い。
  */
-export async function GET(request: NextRequest) {
-  const token = request.nextUrl.searchParams.get('token');
-  const destination = new URL('/email-change/confirm', request.url);
-  if (token) destination.searchParams.set('token', token);
-  return NextResponse.redirect(destination, 303);
-}
-
 export async function POST(request: NextRequest) {
   return withAuthPipeline(
     request,

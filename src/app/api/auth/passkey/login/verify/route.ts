@@ -56,8 +56,9 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. user の状態を再確認する（停止・削除は同じ 403 にまとめ、どちらの事実か教えない）。
+    // メール確認は要求しない（D-40-02。登録時に即時有効化されるため）。
     const user = await findUserById(stored.userId);
-    if (!user || user.status !== 'active' || !user.emailVerified || user.deletedAt) {
+    if (!user || user.status !== 'active' || user.deletedAt) {
       await recordSecurityEvent('login_failed', stored.userId, ip, userAgent, { scope: 'passkey' });
       return failResponse('ACCOUNT_SUSPENDED', 'このアカウントは利用できません', 403);
     }

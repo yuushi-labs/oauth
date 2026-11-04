@@ -231,7 +231,8 @@ describe('E2E - interoperability with coreos/go-oidc3 (Go relying party)', () =>
     const userinfo = claims.userinfo as Record<string, unknown>;
     expect(userinfo.sub).toBe(claims.sub);
     expect(userinfo.email).toBe(email);
-    expect(userinfo.email_verified).toBe(true);
+    // メール所有確認を廃止したため email_verified は常に false（D-40-06）。
+    expect(userinfo.email_verified).toBe(false);
     expect(userinfo.preferred_username).toBe(username);
     expect(userinfo.name).toBe(username);
   }, 90_000);

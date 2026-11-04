@@ -154,14 +154,13 @@ afterEach(async () => {
 afterAll(() => undefined);
 
 describe('2fa setup (spec 48 / D-33-06 / D-33-16)', () => {
-  it('未確認 email では setup できない（403 EMAIL_NOT_VERIFIED）', async () => {
+  it('email 未確認でも setup できる（D-40-02）', async () => {
     const user = await makeUser({ emailVerified: false });
     const session = sessionFor(user.id);
     await persistSession(session);
 
     const response = await setup2fa(authedRequest('/api/auth/2fa/setup', session, 'POST'));
-    expect(response.status).toBe(403);
-    expect((await response.json()).error.code).toBe('EMAIL_NOT_VERIFIED');
+    expect(response.status).toBe(200);
   });
 
   it('setup 成功で secret / otpauth_uri / qr_svg が返る（secret を返すのはこの 1 回だけ）', async () => {

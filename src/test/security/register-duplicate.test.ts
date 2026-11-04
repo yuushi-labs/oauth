@@ -123,7 +123,7 @@ afterAll(async () => {
 });
 
 describe('Security - register duplicate handling (D-04 / §46)', () => {
-  it('新規登録は 200 で確認メール送信メッセージを返す', async () => {
+  it('新規登録は 200 で登録完了メッセージを返す', async () => {
     const response = await register(
       registerRequest({
         email: `${uniq('m')}@example.com`,
@@ -132,7 +132,7 @@ describe('Security - register duplicate handling (D-04 / §46)', () => {
       }),
     );
     expect(response.status).toBe(200);
-    expect((await response.json()).data).toEqual({ message: '確認メールを送信しました' });
+    expect((await response.json()).data).toEqual({ message: 'アカウントを登録しました' });
   });
 
   it('重複 email は 500 ではなく、成功時と同一の 200 を返す', async () => {
@@ -143,7 +143,7 @@ describe('Security - register duplicate handling (D-04 / §46)', () => {
       registerRequest({ email, username: uniq('u'), password: 'Strong-Password-2026!' }),
     );
     expect(response.status).toBe(200);
-    expect((await response.json()).data).toEqual({ message: '確認メールを送信しました' });
+    expect((await response.json()).data).toEqual({ message: 'アカウントを登録しました' });
   });
 
   it('重複 username は 500 ではなく、成功時と同一の 200 を返す', async () => {
@@ -158,7 +158,7 @@ describe('Security - register duplicate handling (D-04 / §46)', () => {
       }),
     );
     expect(response.status).toBe(200);
-    expect((await response.json()).data).toEqual({ message: '確認メールを送信しました' });
+    expect((await response.json()).data).toEqual({ message: 'アカウントを登録しました' });
   });
 });
 
