@@ -52,5 +52,5 @@
 
 ## 補足
 
-- メール送信の内部実装（`src/lib/auth/email/*`）とトークン系 API は残置している。復旧する場合は、画面の再作成と `email_verified` ゲートの再有効化が必要（本計画の差分を戻す）。
+- メール送信の内部実装（`src/lib/auth/email/*`）とトークン系 API は残置している。復旧する場合は、画面の再作成と `email_verified` ゲートの再有効化が必要（本計画の差分を戻す）。**具体的な戻し方は `docs/phase10-メール認証復旧手順.md` にまとめた**（PR #48 の revert で概ね戻る。migration `0024` のデータ変更だけは不可逆）。
 - `security_events` の `email_verified` / `email_changed` / `account_deletion_requested` などのイベント種別は変更しない（残置実装が記録しうるため）。
