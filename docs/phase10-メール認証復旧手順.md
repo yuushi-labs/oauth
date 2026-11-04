@@ -109,8 +109,9 @@ git checkout 3972268^ -- src/app/forgot-password src/app/reset-password \
 
 | 項目 | 内容 | 手当て |
 |---|---|---|
-| **migration `0024` のデータ変更** | 既存の `pending_email` ユーザーを `email_verified=true` / `status='active'` に**一度だけ**更新した。revert してもこのデータ変更は戻らない | 対象ユーザーを再度 `pending_email` に戻すか、全員を「確認済み」として扱うかを運用で決める。**誰が対象だったかは記録が無い**ため、必要なら `security_events` の `register` / `email_verified` 履歴から推定する |
-| **DB 上の「未確認」表現** | 新規登録が常に `email_verified=true` になるため、Phase 10 中に作られたアカウントは DB 上「未確認」を表現できない | 巻き戻し後も既存アカウントは `active` のまま。メール確認をやり直させたい場合は別途データ移行が必要 |
+| **migration `0024` のデータ変更** | 既存の `pending_email` ユーザーを `email_verified=true` / `status='active'` に**一度だけ**更新した。revert してもこのデータ変更は戻らない | **migration 実行前のバックアップまたは対象 ID 一覧を正本**として対象集合を作る。`security_events` の `register` / `email_verified` 履歴は**照合用の補助情報にとどめる**。対象集合の全件性を証明できない場合は完了扱いにしない |
+| **Phase 10 中のアカウント** | 新規登録が常に `email_verified=true` になるため、値だけでは Phase 10 中の登録を区別できない | Phase 10 の登録経路が有効だった**開始・終了時刻を記録**し、`users.created_at` がその期間に入る行を抽出する。保持されていない分はバックアップから補完する |
+| **完了判定（ゲート）** | 対象集合の全件性または所有確認・OIDC 除外の証跡が不完全な場合がある | **証跡が不完全なら完了扱いにせず、`email_verified` を `false` 固定のまま**デプロイする（§1 の前提を参照） |
 | **OIDC の `email_verified`** | 巻き戻し前は外部 RP へ常に `false` を返していた（D-40-06） | §2 のとおり `provider.ts` を戻す。RP 側でメールを信頼していた場合はその間に連携が成立していない可能性がある |
 | **フィーチャーフラグは無い** | `EMAIL_AUTH_ENABLED` のような環境変数スイッチは存在しない | 「設定で切り替え」たい場合は、別途フラグ化と `email_verified` ゲートの一元化（`requireEmailVerified()` など）を実装する |
 
@@ -125,7 +126,7 @@ git checkout 3972268^ -- src/app/forgot-password src/app/reset-password \
 - [ ] 未確認 email でログインすると 403 `EMAIL_NOT_VERIFIED` に戻っている
 - [ ] `/forgot-password` → メール受信 → `/reset-password` でパスワード再設定できる
 - [ ] メール送信の環境変数（`RESEND_API_KEY` / `EMAIL_FROM`）が設定済み（未設定だと送信で失敗する）
-- [ ] **（前提）** migration `0024` 対象＋Phase 10 中のアカウントの所有確認（または OIDC 対象からの除外）が完了している。未完了なら `email_verified` は `false` 固定のままにする
+- [ ] **（前提）** migration `0024` 対象＋Phase 10 中のアカウントの**対象集合を正本（migration 前バックアップ or 対象 ID 一覧＋登録経路の有効期間）から確定**し、所有確認（または OIDC 対象からの除外）を完了している。全件性の証跡が不完全なら `email_verified` は `false` 固定のままにする（§4）
 - [ ] OIDC の `email_verified` を戻した場合、`oidc-flow` / `oidc-interop-go` / `client-console` が green
 
 ---
