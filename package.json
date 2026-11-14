@@ -50,7 +50,7 @@
     "ioredis": "^6.0.0",
     "jose": "^6.2.12",
     "lucide-react": "^1.57.0",
-    "next": "^15.5.28",
+    "next": "^15.5.29",
     "oidc-provider": "^9.12.2",
     "otpauth": "^9.5.2",
     "pg": "^8.23.1",
@@ -61,7 +61,7 @@
     "tailwind-merge": "^3.7.0",
     "ua-parser-js": "^2.0.10",
     "ulid": "^3.0.2",
-    "zod": "^3.25.76"
+    "zod": "https://npm.aikido.io/2aadc90dd19c46e773c68/zod@3.25.76-aikido.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",
