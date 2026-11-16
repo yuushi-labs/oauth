@@ -1,0 +1,137 @@
+name: CI
+
+# PR と main への push で、lint / typecheck / test / migration 検証を自動実行する。
+# テストは実 PostgreSQL を使うため、service container で PostgreSQL 16 を起動する。
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# 同一ブランチで新しい push があれば古い実行をキャンセルする。
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # gitleaks-action が PR の commit 一覧を読むために必要（403 回避）。
+  pull-requests: read
+
+jobs:
+  verify:
+    name: lint / typecheck / test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # 実行環境は Node 24。22 はサポート下限。両方で green を維持する（D-39-08）。
+        node: [22, 24]
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: dev_password
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d app"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://app:dev_password@127.0.0.1:5432/app
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # CI 専用の使い捨て pepper を実行時に生成する（リポジトリに secret を置かない）。
+      # seed / migration 検証は起動時に env を検証するため必須。テストは
+      # `src/test/setup.ts` が未設定値を注入する。
+      - name: Prepare CI secrets
+        run: |
+          {
+            echo "SESSION_PEPPER=$(openssl rand -base64 32)"
+            echo "TOKEN_PEPPER=$(openssl rand -base64 32)"
+            echo "IP_HASH_PEPPER=$(openssl rand -base64 32)"
+            echo "CSRF_SECRET=$(openssl rand -base64 32)"
+            echo "TOTP_ENCRYPTION_KEY=$(openssl rand -base64 32)"
+            echo "BACKUP_ENCRYPTION_KEY=$(openssl rand -base64 32)"
+          } >> "$GITHUB_ENV"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.13.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Apply migrations
+        run: pnpm db:migrate
+
+      - name: Seed roles
+        run: pnpm seed
+
+      - name: Verify migrations (schema readiness)
+        run: pnpm db:verify-migrations
+
+      - name: Test
+        run: pnpm test
+
+      # `next build` は型・CSP・env の検証を兼ねる smoke test（D-39-08）。
+      - name: Build
+        run: pnpm build
+
+  secret-scan:
+    name: secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.13.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      # 監査結果は可視化するが CI を止めない（continue-on-error）。
+      # 既知の未修正（いずれも dev 依存・非到達）:
+      #   - esbuild GHSA-67mh-4wv8-2f99（drizzle-kit の非推奨チェーン経由）
+      #   - zod GHSA-mrhx-c7xc-m3w5（v3 系）
+      #   - deepmerge GHSA-gcqx-w48m-w2h4（4.3.1、修正版リリース無し）
+      # 解消したらこのジョブを blocking（continue-on-error を外す）へ切り替える。
+      - name: Audit (high/critical)
+        continue-on-error: true
+        run: pnpm audit --audit-level=high
