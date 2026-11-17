@@ -15,8 +15,9 @@
 import 'dotenv/config';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile, readdir, rm } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { readFile, readdir, rm, mkdtemp } from 'node:fs/promises';
+import { resolve, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { randomBytes, createHash } from 'node:crypto';
 import pg from 'pg';
 
@@ -369,24 +370,78 @@ async function main(): Promise<void> {
   }
 }
 
-/** Restores a dump of `source` into `target`, preferring host pg_dump and falling back to the container. */
+/**
+ * Restores a dump of `source` into `target`.
+ *
+ * **pg_dump はサーバーと同じメージのものを使う**。クライアントのメジャーがサーバーより新しいと、
+ * サーバーに存在しない GUC（`transaction_timeout` 等）を `SET` してしまい dump が失敗する。
+ * GitHub Actions の ubuntu ランナーには新しい pg_dump が入っており、サービスコンテナは
+ * PostgreSQL 16 なので、この組み合わせで必ず落ちていた（main でも同じ失敗）。
+ *
+ * 優先順位:
+ *   1. ホストの pg_dump（サーバーとメジャーが一致するときだけ）
+ *   2. docker compose の db コンテナ（サーバーと同じメージ・ローカル開発）
+ *   3. サーバーと同じメージの一時コンテナ（compose が無い CI 向け）
+ */
 async function dumpAndRestore(source: string, target: string): Promise<{ usedTool: string }> {
-  const hostDump = `/tmp/${source}.dump`;
-  try {
-    await exec('pg_dump', ['-d', databaseUrl(source), '--format=custom', '--file', hostDump], { maxBuffer: 128 * 1024 * 1024 });
-    await exec('pg_restore', ['-d', databaseUrl(target), '--clean', '--if-exists', hostDump], { maxBuffer: 128 * 1024 * 1024 });
-    await rm(hostDump, { force: true });
-    return { usedTool: 'host pg_dump/pg_restore' };
-  } catch {
-    await rm(hostDump, { force: true });
+  const serverMajor = await serverMajorVersion();
+  const hostMajor = await hostDumpMajorVersion();
+
+  if (hostMajor !== null && hostMajor === serverMajor) {
+    const hostDump = join(tmpdir(), `${source}.dump`);
+    try {
+      await exec('pg_dump', ['-d', databaseUrl(source), '--format=custom', '--file', hostDump], { maxBuffer: 128 * 1024 * 1024 });
+      await exec('pg_restore', ['-d', databaseUrl(target), '--clean', '--if-exists', hostDump], { maxBuffer: 128 * 1024 * 1024 });
+      return { usedTool: `host pg_dump/pg_restore (${hostMajor})` };
+    } catch {
+      // 使えなければ次の手段へ。
+    } finally {
+      await rm(hostDump, { force: true });
+    }
   }
 
-  const containerFile = `/tmp/${source}.dump`;
   const user = process.env.POSTGRES_USER ?? 'app';
-  await exec('docker', ['compose', 'exec', '-T', 'db', 'pg_dump', '-U', user, '-d', source, '-Fc', '-f', containerFile], { cwd: resolve(process.cwd()) });
-  await exec('docker', ['compose', 'exec', '-T', 'db', 'pg_restore', '-U', user, '-d', target, '--clean', '--if-exists', containerFile], { cwd: resolve(process.cwd()) });
-  await exec('docker', ['compose', 'exec', '-T', 'db', 'rm', '-f', containerFile], { cwd: resolve(process.cwd()) }).catch(() => undefined);
-  return { usedTool: 'container pg_dump/pg_restore' };
+  const containerFile = `/tmp/${source}.dump`;
+  try {
+    await exec('docker', ['compose', 'exec', '-T', 'db', 'pg_dump', '-U', user, '-d', source, '-Fc', '-f', containerFile], { cwd: resolve(process.cwd()) });
+    await exec('docker', ['compose', 'exec', '-T', 'db', 'pg_restore', '-U', user, '-d', target, '--clean', '--if-exists', containerFile], { cwd: resolve(process.cwd()) });
+    await exec('docker', ['compose', 'exec', '-T', 'db', 'rm', '-f', containerFile], { cwd: resolve(process.cwd()) }).catch(() => undefined);
+    return { usedTool: 'container pg_dump/pg_restore (compose)' };
+  } catch {
+    // compose が無い環境（CI）は次の手段へ。
+  }
+
+  // CI のサービスコンテナと同じメージを --network host で一時的に立て、その中の pg_dump を使う。
+  const image = `postgres:${serverMajor}-alpine`;
+  const dir = await mkdtemp(join(tmpdir(), 'pg-restore-check-'));
+  try {
+    const dump = join(dir, 'db.dump');
+    await exec('docker', ['run', '--rm', '--network', 'host', '-v', `${dir}:/dump`, image, 'pg_dump', '-d', databaseUrl(source), '-Fc', '-f', '/dump/db.dump'], { maxBuffer: 128 * 1024 * 1024 });
+    await exec('docker', ['run', '--rm', '--network', 'host', '-v', `${dir}:/dump`, image, 'pg_restore', '-d', databaseUrl(target), '--clean', '--if-exists', '/dump/db.dump'], { maxBuffer: 128 * 1024 * 1024 });
+    await rm(dump, { force: true });
+    return { usedTool: `container pg_dump/pg_restore (docker run ${image})` };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+/** サーバーのメジャーバージョン。pg_dump のクライアントを合わせるために使う。 */
+async function serverMajorVersion(): Promise<number> {
+  return withAdmin(async (client) => {
+    const { rows } = await client.query<{ server_version_num: string }>('SHOW server_version_num');
+    return Math.floor(Number(rows[0]!.server_version_num) / 10000);
+  });
+}
+
+/** ホストにインストールされている pg_dump のメジャーバージョン（無ければ null）。 */
+async function hostDumpMajorVersion(): Promise<number | null> {
+  try {
+    const { stdout } = await exec('pg_dump', ['--version']);
+    const match = /(\d+)/.exec(stdout);
+    return match ? Number(match[1]) : null;
+  } catch {
+    return null;
+  }
 }
 
 function diffSnapshots(before: SchemaSnapshot, after: SchemaSnapshot): string[] {
