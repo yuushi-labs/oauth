@@ -63,6 +63,18 @@ vi.mock('@/lib/auth/oauth/registry', () => ({
   getProvider: (id: string) => (id === 'google' ? provider : null),
 }));
 
+// セッション/匿名 Cookie の書き込みは `next/headers` のリクエストスコープを要求する。
+// ここではハンドラを直接呼ぶため、書き込みだけを no-op にする（Cookie の組み立て自体は
+// cookie.test.ts の責務）。ログイン成功時の遷移先だけを確かめる。
+vi.mock('@/lib/auth/cookie', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/auth/cookie')>();
+  return {
+    ...actual,
+    setSessionCookie: async () => undefined,
+    setAnonCookie: async () => undefined,
+  };
+});
+
 const { GET } = await import('@/app/api/auth/oauth/[provider]/callback/route');
 
 const createdUserIds: string[] = [];
