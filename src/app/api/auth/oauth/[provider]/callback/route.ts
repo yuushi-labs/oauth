@@ -22,6 +22,7 @@ import { redirectUriFor } from '@/lib/auth/oauth/redirect-uri';
 import { sessionMaxAgeSecondsForRole } from '@/lib/auth/admin-policy';
 import { ProviderError } from '@/lib/auth/oauth/provider-error';
 import { consumeOAuthState } from '@/lib/auth/oauth/state';
+import { safeRedirectPath } from '@/lib/auth/oauth/safe-redirect';
 import { issueSocialClaim } from '@/lib/auth/oauth/social-claim';
 import { completeLogin } from '@/lib/auth/oauth/complete-login';
 import { completeLink } from '@/lib/auth/oauth/complete-link';
@@ -337,7 +338,9 @@ async function completeLinkCallback(
 
 function redirectToPath(path: string, headers: Record<string, string> = {}): NextResponse {
   const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, '') ?? 'http://localhost:3000';
-  return NextResponse.redirect(new URL(path, base), {
+  // 戻り元（`redirect_to`）は利用者が指定できる値。DB を経由してくるので、保存時の
+  // 正規化に加えて**ここでも**同一オリジンの相対パスだけを通す（open redirect 対策）。
+  return NextResponse.redirect(new URL(safeRedirectPath(path), base), {
     status: 303,
     headers: { 'Cache-Control': 'no-store', ...headers },
   });

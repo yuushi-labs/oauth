@@ -5,7 +5,7 @@ import {
   redirectUriAllowedForLoopback,
   validateRedirectUri,
 } from '@/lib/oidc/client-validation';
-import { normalizeRedirectTo } from '@/lib/auth/oauth/state';
+import { normalizeRedirectTo, safeRedirectPath, isSafeRedirectPath } from '@/lib/auth/oauth/state';
 import { redirectUriFor } from '@/lib/auth/oauth/redirect-uri';
 
 /**
@@ -66,5 +66,56 @@ describe('Security - redirect_to normalization (open redirect §48)', () => {
     expect(normalizeRedirectTo('settings')).toBeNull();
     expect(normalizeRedirectTo('')).toBeNull();
     expect(normalizeRedirectTo(null)).toBeNull();
+  });
+});
+
+/**
+ * Aikido Issue #2: リダイレクト直前の最終防衛線。
+ *
+ * 戻り先は DB を経由するため、保存時の正規化だけに依存せず、`NextResponse.redirect` へ
+ * 渡す直前にも同じ判定を通す（`safeRedirectPath`）。ここではその振る舞いを固定する。
+ */
+describe('Security - safeRedirectPath (redirect sink guard / Issue #2)', () => {
+  it('同一オリジンの相対パスはそのまま返す', () => {
+    expect(safeRedirectPath('/settings/sessions')).toBe('/settings/sessions');
+    // クエリ付きの既存の戻り先も壊さない
+    expect(safeRedirectPath('/login?error=cancelled')).toBe('/login?error=cancelled');
+    expect(isSafeRedirectPath('/settings/sessions')).toBe(true);
+  });
+
+  it('外部オリジンへ飛ぶ値は fallback の / に落とす', () => {
+    for (const value of [
+      'https://evil.example/steal',
+      'http://evil.example',
+      '//evil.example/steal',
+      '/\\evil.example/steal',
+      'javascript:alert(1)',
+      'https:evil.example',
+      'settings',
+      ' /settings',
+      '',
+      null,
+      undefined,
+    ]) {
+      expect(safeRedirectPath(value)).toBe('/');
+      expect(isSafeRedirectPath(value)).toBe(false);
+    }
+  });
+
+  it('制御文字（改行・NUL・DEL）を含む値は拒否する', () => {
+    for (const value of ['/a\u0000b', '/a\nb', '/a\rb', '/a\u007fb', '/a\tb']) {
+      expect(safeRedirectPath(value)).toBe('/');
+    }
+  });
+
+  it('fallback を指定すればそちらに落ちる', () => {
+    expect(safeRedirectPath('https://evil.example/', '/login')).toBe('/login');
+    expect(safeRedirectPath(undefined, '/settings')).toBe('/settings');
+  });
+
+  it('長すぎる値は 200 文字に切りつめ、相対パスのまま保つ', () => {
+    const normalized = safeRedirectPath(`/${'a'.repeat(300)}`);
+    expect(normalized).toHaveLength(200);
+    expect(normalized.startsWith('/')).toBe(true);
   });
 });
