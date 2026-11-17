@@ -11,6 +11,7 @@ import { verifyPassword } from '@/lib/auth/password';
 import { findUserByEmailOrUsername } from '@/lib/db/queries/users';
 import { ApiError } from '@/lib/errors';
 import { consumeSocialClaim, peekSocialClaim } from '@/lib/auth/oauth/social-claim';
+import { safeRedirectPath } from '@/lib/auth/oauth/safe-redirect';
 import { createSocialUser } from '@/lib/auth/oauth/complete-login';
 import { createAccount, findAccountByProviderAccountId, touchAccountLastUsed } from '@/lib/auth/oauth/accounts';
 import { notifyAccountChange, isFirstSessionFromDevice, notifyNewDeviceLogin } from '@/lib/auth/notifications';
@@ -279,7 +280,8 @@ async function issueSession(
 
 function redirectToPath(path: string, clearClaim = false): NextResponse {
   const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, '') ?? 'http://localhost:3000';
-  return NextResponse.redirect(new URL(path, base), {
+  // callback の戻り先と同じく、リダイレクト直前に同一オリジンの相対パスだけを通す。
+  return NextResponse.redirect(new URL(safeRedirectPath(path), base), {
     status: 303,
     headers: {
       'Cache-Control': 'no-store',

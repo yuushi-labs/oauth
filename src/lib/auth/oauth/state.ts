@@ -3,7 +3,11 @@ import { getDb } from '@/lib/db/client';
 import { oauthStates } from '@/lib/db/schema';
 import { randomToken, sha256Hex } from '@/lib/util/crypto';
 import { redirectUriFor } from './redirect-uri';
+import { normalizeRedirectTo } from './safe-redirect';
 import type { OAuthIntent, OAuthProviderId } from './types';
+
+// 既存の import 元（テスト含む）を壊さないよう、従来どおりここからも公開する。
+export { isSafeRedirectPath, normalizeRedirectTo, safeRedirectPath } from './safe-redirect';
 
 /**
  * OAuth 認可リクエストの状態（§12.2 / D-31-05）。
@@ -37,20 +41,6 @@ export type ConsumedState = {
   userId: string | null;
   redirectTo: string | null;
 };
-
-/**
- * 同一オリジンの**相対パス**だけを受理する（open redirect 対策）。
- * 絶対 URL・`//host`・`/\host`・制御文字はすべて null に落とす。
- * 「落ちた場合は `/` へ戻る」なので、失敗を握っても安全性は維持される。
- */
-export function normalizeRedirectTo(value: string | null | undefined): string | null {
-  if (!value) return null;
-  if (!value.startsWith('/')) return null;
-  if (value.startsWith('//') || value.startsWith('/\\')) return null;
-  // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u001F\u007F]/.test(value)) return null;
-  return value.slice(0, 200);
-}
 
 export async function issueOAuthState(args: {
   provider: OAuthProviderId;
@@ -110,7 +100,9 @@ export async function consumeOAuthState(
     codeVerifier: row.codeVerifier,
     intent: row.intent as OAuthIntent,
     userId: row.userId ?? null,
-    redirectTo: row.redirectTo ?? null,
+    // 保存時に正規化済みだが、正規化が入る前に書かれた行や手動更新に備えて読み出しでも通す
+    // （open redirect 対策を 1 か所の判断に依存させない）。
+    redirectTo: normalizeRedirectTo(row.redirectTo),
   };
 }
 
